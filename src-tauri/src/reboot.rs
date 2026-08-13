@@ -7,7 +7,8 @@ use crate::{
     error::{ApiError, BackendError, BackendResult, CommandResult},
 };
 
-const REBOOT_ARGUMENTS: [&str; 4] = ["/r", "/fw", "/t", "0"];
+const FIRMWARE_REBOOT_ARGUMENTS: [&str; 4] = ["/r", "/fw", "/t", "0"];
+const CONFIGURATION_REBOOT_ARGUMENTS: [&str; 3] = ["/r", "/t", "0"];
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -37,6 +38,35 @@ pub struct FirmwareSetupRebootAccepted {
     pub accepted: bool,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfigurationRebootPreview {
+    pub profile_id: String,
+    pub plan_revision: u32,
+    pub confirmation_token: String,
+    pub command: String,
+    pub arguments: Vec<String>,
+    pub immediate: bool,
+    pub force_close_applications: bool,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfigurationRebootRequest {
+    pub profile_id: String,
+    pub confirmation_token: String,
+    pub unsaved_work_confirmed: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfigurationRebootAccepted {
+    pub profile_id: String,
+    pub accepted: bool,
+    pub plan_advanced: bool,
+}
+
 #[tauri::command]
 pub fn preview_firmware_setup_reboot(
     app: AppHandle,
@@ -63,6 +93,32 @@ pub async fn reboot_to_firmware_setup(
         .map_err(ApiError::from)
 }
 
+#[tauri::command]
+pub fn preview_configuration_reboot(
+    app: AppHandle,
+    profile_id: String,
+) -> CommandResult<ConfigurationRebootPreview> {
+    let exact = load_exact_deployment(&app, &profile_id, "configuration reboot preview")
+        .map_err(ApiError::from)?;
+    ensure_configuration_reboot_available().map_err(ApiError::from)?;
+    build_configuration_preview(&exact.profile.profile_id, &exact.plan).map_err(ApiError::from)
+}
+
+#[tauri::command]
+pub async fn reboot_after_configuration(
+    app: AppHandle,
+    request: ConfigurationRebootRequest,
+) -> CommandResult<ConfigurationRebootAccepted> {
+    tauri::async_runtime::spawn_blocking(move || configuration_reboot_command(&app, request))
+        .await
+        .map_err(|error| {
+            ApiError::from(BackendError::Deployment(format!(
+                "configuration reboot worker failed: {error}"
+            )))
+        })?
+        .map_err(ApiError::from)
+}
+
 fn reboot_command(
     app: &AppHandle,
     request: FirmwareSetupRebootRequest,
@@ -74,10 +130,29 @@ fn reboot_command(
         &request.confirmation_token,
         request.unsaved_work_confirmed,
     )?;
-    execute_reboot()?;
+    execute_reboot(&FIRMWARE_REBOOT_ARGUMENTS, "firmware setup")?;
     Ok(FirmwareSetupRebootAccepted {
         profile_id: exact.profile.profile_id,
         accepted: true,
+    })
+}
+
+fn configuration_reboot_command(
+    app: &AppHandle,
+    request: ConfigurationRebootRequest,
+) -> BackendResult<ConfigurationRebootAccepted> {
+    let exact = load_exact_deployment(app, &request.profile_id, "configuration reboot")?;
+    let preview = build_configuration_preview(&exact.profile.profile_id, &exact.plan)?;
+    validate_configuration_confirmation(
+        &preview,
+        &request.confirmation_token,
+        request.unsaved_work_confirmed,
+    )?;
+    execute_reboot(&CONFIGURATION_REBOOT_ARGUMENTS, "configuration")?;
+    Ok(ConfigurationRebootAccepted {
+        profile_id: exact.profile.profile_id,
+        accepted: true,
+        plan_advanced: false,
     })
 }
 
@@ -106,13 +181,48 @@ fn build_preview(
         active_step,
         confirmation_token: format!("REBOOT-TO-FIRMWARE-{}", suffix.to_ascii_uppercase()),
         command: "Windows shutdown.exe".into(),
-        arguments: REBOOT_ARGUMENTS.iter().map(ToString::to_string).collect(),
+        arguments: FIRMWARE_REBOOT_ARGUMENTS
+            .iter()
+            .map(ToString::to_string)
+            .collect(),
         immediate: true,
         force_close_applications: false,
         warnings: vec![
             "Save and close all work before confirming; Windows will restart immediately.".into(),
             "This only opens the firmware user interface. It does not flash firmware or change setup values.".into(),
             "The command deliberately omits /f so applications are not explicitly force-closed.".into(),
+        ],
+    })
+}
+
+fn build_configuration_preview(
+    profile_id: &str,
+    plan: &DeploymentPlan,
+) -> BackendResult<ConfigurationRebootPreview> {
+    plan.require_active(StepId::RebootAfterConfiguration)
+        .map_err(BackendError::from)?;
+    let suffix = profile_id
+        .strip_prefix("nvstraps-")
+        .ok_or_else(|| BackendError::Deployment("deployment profile ID is malformed".into()))?;
+    Ok(ConfigurationRebootPreview {
+        profile_id: profile_id.to_owned(),
+        plan_revision: plan.revision,
+        confirmation_token: format!(
+            "REBOOT-AFTER-CONFIGURATION-{}-R{}",
+            suffix.to_ascii_uppercase(),
+            plan.revision
+        ),
+        command: "Windows shutdown.exe".into(),
+        arguments: CONFIGURATION_REBOOT_ARGUMENTS
+            .iter()
+            .map(ToString::to_string)
+            .collect(),
+        immediate: true,
+        force_close_applications: false,
+        warnings: vec![
+            "Save and close all work before confirming; Windows will restart immediately.".into(),
+            "The command deliberately omits /f so applications are not explicitly force-closed.".into(),
+            "Accepting the reboot request does not complete the plan; the next app session must prove a later Windows boot.".into(),
         ],
     })
 }
@@ -135,14 +245,33 @@ fn validate_confirmation(
     Ok(())
 }
 
+fn validate_configuration_confirmation(
+    preview: &ConfigurationRebootPreview,
+    confirmation_token: &str,
+    unsaved_work_confirmed: bool,
+) -> BackendResult<()> {
+    if !unsaved_work_confirmed {
+        return Err(BackendError::Deployment(
+            "configuration reboot requires explicit confirmation that work is saved".into(),
+        ));
+    }
+    if confirmation_token != preview.confirmation_token {
+        return Err(BackendError::Deployment(
+            "configuration reboot confirmation token does not match this profile and plan revision"
+                .into(),
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(windows)]
-fn execute_reboot() -> BackendResult<()> {
+fn execute_reboot(arguments: &[&str], description: &str) -> BackendResult<()> {
     use std::os::windows::process::CommandExt;
 
-    let executable = ensure_firmware_reboot_available()?;
+    let executable = shutdown_executable()?;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     let status = std::process::Command::new(&executable)
-        .args(REBOOT_ARGUMENTS)
+        .args(arguments)
         .creation_flags(CREATE_NO_WINDOW)
         .status()
         .map_err(|error| {
@@ -153,7 +282,7 @@ fn execute_reboot() -> BackendResult<()> {
         })?;
     if !status.success() {
         return Err(BackendError::Deployment(format!(
-            "Windows refused the firmware setup reboot with exit code {}",
+            "Windows refused the {description} reboot with exit code {}",
             status
                 .code()
                 .map_or_else(|| "unknown".into(), |code| code.to_string())
@@ -164,11 +293,7 @@ fn execute_reboot() -> BackendResult<()> {
 
 #[cfg(windows)]
 fn ensure_firmware_reboot_available() -> BackendResult<std::path::PathBuf> {
-    use std::{ffi::OsString, os::windows::ffi::OsStringExt};
-
-    use windows_sys::Win32::System::SystemInformation::{
-        FirmwareTypeUefi, GetFirmwareType, GetSystemDirectoryW,
-    };
+    use windows_sys::Win32::System::SystemInformation::{FirmwareTypeUefi, GetFirmwareType};
 
     let mut firmware_type = 0;
     // SAFETY: firmware_type points to writable storage for the duration of the call.
@@ -180,6 +305,20 @@ fn ensure_firmware_reboot_available() -> BackendResult<std::path::PathBuf> {
             "Windows reports legacy BIOS boot; a firmware UI reboot is unavailable".into(),
         ));
     }
+
+    shutdown_executable()
+}
+
+#[cfg(windows)]
+fn ensure_configuration_reboot_available() -> BackendResult<std::path::PathBuf> {
+    shutdown_executable()
+}
+
+#[cfg(windows)]
+fn shutdown_executable() -> BackendResult<std::path::PathBuf> {
+    use std::{ffi::OsString, os::windows::ffi::OsStringExt};
+
+    use windows_sys::Win32::System::SystemInformation::GetSystemDirectoryW;
 
     let mut system_directory = [0_u16; 32_768];
     // SAFETY: the buffer is writable and its capacity is passed exactly.
@@ -207,12 +346,17 @@ fn ensure_firmware_reboot_available() -> BackendResult<std::path::PathBuf> {
 }
 
 #[cfg(not(windows))]
-fn execute_reboot() -> BackendResult<()> {
+fn execute_reboot(_arguments: &[&str], _description: &str) -> BackendResult<()> {
     Err(BackendError::UnsupportedPlatform)
 }
 
 #[cfg(not(windows))]
 fn ensure_firmware_reboot_available() -> BackendResult<std::path::PathBuf> {
+    Err(BackendError::UnsupportedPlatform)
+}
+
+#[cfg(not(windows))]
+fn ensure_configuration_reboot_available() -> BackendResult<std::path::PathBuf> {
     Err(BackendError::UnsupportedPlatform)
 }
 
@@ -343,5 +487,56 @@ mod tests {
         assert!(validate_confirmation(&preview, &preview.confirmation_token, false).is_err());
         assert!(validate_confirmation(&preview, "REBOOT-TO-FIRMWARE-WRONG", true).is_err());
         validate_confirmation(&preview, &preview.confirmation_token, true).unwrap();
+    }
+
+    #[test]
+    fn configuration_reboot_is_exactly_scoped_and_never_advances_the_plan() {
+        let (profile, mut plan) = profile_and_plan();
+        advance_to_flash(&profile, &mut plan);
+        for (step, kind) in [
+            (
+                StepId::FlashWithVendorRoute,
+                nvstraps_deploy::EvidenceKind::VendorFlashReceipt,
+            ),
+            (
+                StepId::ConfigureFirmwareSetup,
+                nvstraps_deploy::EvidenceKind::FirmwareSettingsConfirmed,
+            ),
+            (
+                StepId::RebootAfterFirmware,
+                nvstraps_deploy::EvidenceKind::BootObserved,
+            ),
+            (
+                StepId::VerifyDriverLoaded,
+                nvstraps_deploy::EvidenceKind::DriverStatus,
+            ),
+            (
+                StepId::WriteNvstrapsConfiguration,
+                nvstraps_deploy::EvidenceKind::ConfigurationReadback,
+            ),
+        ] {
+            plan.complete(step, StepEvidence::new(kind, "proof").unwrap())
+                .unwrap();
+        }
+
+        let preview = build_configuration_preview(&profile.profile_id, &plan).unwrap();
+        assert_eq!(preview.arguments, ["/r", "/t", "0"]);
+        assert!(!preview.force_close_applications);
+        assert!(!preview.arguments.iter().any(|argument| argument == "/f"));
+        assert!(
+            preview
+                .confirmation_token
+                .ends_with(&format!("-R{}", plan.revision))
+        );
+        assert!(
+            validate_configuration_confirmation(&preview, &preview.confirmation_token, false)
+                .is_err()
+        );
+        assert!(validate_configuration_confirmation(&preview, "REBOOT-WRONG", true).is_err());
+        validate_configuration_confirmation(&preview, &preview.confirmation_token, true).unwrap();
+        assert_eq!(
+            plan.active_step().map(|step| step.id),
+            Some(StepId::RebootAfterConfiguration)
+        );
     }
 }

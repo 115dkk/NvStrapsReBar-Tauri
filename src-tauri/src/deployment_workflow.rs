@@ -48,6 +48,14 @@ pub struct DriverVerificationReceipt {
     pub status: DriverStatus,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfigurationRebootVerificationReceipt {
+    pub plan: DeploymentPlan,
+    pub configuration_saved_at_unix_ms: String,
+    pub booted_at_unix_ms: String,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SaveDeploymentConfigRequest {
@@ -86,6 +94,14 @@ pub fn verify_deployment_driver(
     profile_id: String,
 ) -> CommandResult<DriverVerificationReceipt> {
     verify_deployment_driver_command(&app, &profile_id).map_err(ApiError::from)
+}
+
+#[tauri::command]
+pub fn verify_configuration_reboot(
+    app: AppHandle,
+    profile_id: String,
+) -> CommandResult<ConfigurationRebootVerificationReceipt> {
+    verify_configuration_reboot_command(&app, &profile_id).map_err(ApiError::from)
 }
 
 #[tauri::command]
@@ -191,6 +207,74 @@ fn verify_deployment_driver_command(
         plan: workflow.into_plan(),
         status,
     })
+}
+
+fn verify_configuration_reboot_command(
+    app: &AppHandle,
+    profile_id: &str,
+) -> BackendResult<ConfigurationRebootVerificationReceipt> {
+    let exact = load_exact_deployment(app, profile_id, "configuration reboot verification")?;
+    exact
+        .plan
+        .require_active(StepId::RebootAfterConfiguration)
+        .map_err(BackendError::from)?;
+    let configuration_saved_at = configuration_saved_at_unix_ms(&exact.plan)?;
+    let booted_at = current_boot_time_unix_ms()?;
+    if !boot_proves_configuration_reboot(configuration_saved_at, booted_at) {
+        return Err(BackendError::Deployment(format!(
+            "the current Windows boot ({booted_at}) is not later than the configuration readback ({configuration_saved_at})"
+        )));
+    }
+
+    let mut workflow = DeploymentWorkflow::from_plan(&exact.store, &exact.profile, exact.plan)
+        .map_err(BackendError::from)?;
+    workflow
+        .record_step(StepId::RebootAfterConfiguration, booted_at.to_string())
+        .map_err(BackendError::from)?;
+    Ok(ConfigurationRebootVerificationReceipt {
+        plan: workflow.into_plan(),
+        configuration_saved_at_unix_ms: configuration_saved_at.to_string(),
+        booted_at_unix_ms: booted_at.to_string(),
+    })
+}
+
+fn configuration_saved_at_unix_ms(plan: &DeploymentPlan) -> BackendResult<u64> {
+    plan.completed_evidence(StepId::WriteNvstrapsConfiguration)
+        .map_err(BackendError::from)?
+        .value
+        .parse::<u64>()
+        .map_err(|_| {
+            BackendError::Deployment(
+                "configuration readback evidence does not contain a Unix millisecond timestamp"
+                    .into(),
+            )
+        })
+}
+
+fn boot_proves_configuration_reboot(configuration_saved_at: u64, booted_at: u64) -> bool {
+    booted_at > configuration_saved_at
+}
+
+#[cfg(windows)]
+fn current_boot_time_unix_ms() -> BackendResult<u64> {
+    use windows_sys::Win32::System::SystemInformation::GetTickCount64;
+
+    let now: u64 = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| BackendError::Deployment("the Windows clock predates the Unix epoch".into()))?
+        .as_millis()
+        .try_into()
+        .map_err(|_| BackendError::Deployment("the Windows clock value is too large".into()))?;
+    // SAFETY: GetTickCount64 has no preconditions and returns milliseconds since system start.
+    let uptime = unsafe { GetTickCount64() };
+    now.checked_sub(uptime).ok_or_else(|| {
+        BackendError::Deployment("Windows uptime exceeds the current wall-clock value".into())
+    })
+}
+
+#[cfg(not(windows))]
+fn current_boot_time_unix_ms() -> BackendResult<u64> {
+    Err(BackendError::UnsupportedPlatform)
 }
 
 fn read_driver_status_raw() -> BackendResult<u64> {
@@ -418,5 +502,12 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn only_a_boot_after_the_configuration_readback_satisfies_the_gate() {
+        assert!(!boot_proves_configuration_reboot(1_000, 999));
+        assert!(!boot_proves_configuration_reboot(1_000, 1_000));
+        assert!(boot_proves_configuration_reboot(1_000, 1_001));
     }
 }
