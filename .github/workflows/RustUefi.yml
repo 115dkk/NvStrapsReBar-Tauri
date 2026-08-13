@@ -1,0 +1,47 @@
+name: Rust UEFI port validation (not deployable yet)
+
+on:
+  push:
+    branches: ["master"]
+  pull_request:
+    branches: ["master"]
+
+permissions:
+  contents: read
+
+jobs:
+  validate-rust-uefi:
+    name: Validate non-deployable Rust DXE port (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-uefi
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+
+      - name: Test the FFS encoder and independent decoder
+        run: cargo test -p nvstraps-ffs
+
+      - name: Build, validate, and wrap the Rust boot-service driver
+        run: npm run build:firmware
+
+      - name: Reject warnings in host-side firmware tooling
+        run: cargo clippy -p nvstraps-ffs -p nvstraps-uefi --all-targets -- -D warnings
+
+      - name: Reject warnings in the UEFI target
+        run: cargo clippy -p nvstraps-uefi --release --target x86_64-unknown-uefi -- -D warnings
+
+      # Intentionally no artifact upload: the Rust image is only a packaging
+      # and ABI skeleton until the protocol hook and hardware behavior land.
