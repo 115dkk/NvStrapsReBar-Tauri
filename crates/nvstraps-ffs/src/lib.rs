@@ -5,8 +5,8 @@ mod legacy_patch;
 
 pub use firmware::{
     FirmwareInjection, InjectionError, LegacyFirmwarePatch, LegacyFirmwarePatchApplication,
-    LegacyFirmwarePatchChange, LegacyFirmwarePatchError, LegacyPatchSelection, inject_ffs,
-    patch_legacy_firmware,
+    LegacyFirmwarePatchChange, LegacyFirmwarePatchError, LegacyFirmwarePatchPath,
+    LegacyPatchSelection, inject_ffs, patch_legacy_firmware,
 };
 pub use legacy_patch::{
     LegacyPatchApplication, LegacyPatchCatalog, LegacyPatchChange, LegacyPatchError,
