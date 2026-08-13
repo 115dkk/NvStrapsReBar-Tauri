@@ -547,6 +547,121 @@ aside hr {
         list-style: none;
         background: #32383e;
 }
+.active-workflow {
+        margin-bottom: 18px;
+        border: 1px solid #5c6267;
+        background: #15191c;
+}
+.active-workflow-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 18px;
+        padding: 17px 18px;
+        border-left: 3px solid var(--accent);
+}
+.active-workflow-head h4 {
+        margin: 5px 0;
+        font-size: 17px;
+}
+.active-workflow-head p,
+.policy-step p,
+.guarded-config p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.5;
+}
+.active-workflow-head > strong {
+        color: var(--ok);
+        font: 700 15px ui-monospace, Consolas, monospace;
+}
+.active-workflow-action {
+        display: flex;
+        justify-content: flex-end;
+        padding: 15px 18px;
+        border-top: 1px solid #363d43;
+        background: #1b2024;
+}
+.workflow-actions,
+.policy-step,
+.guarded-config {
+        display: grid;
+        width: 100%;
+        gap: 10px;
+}
+.workflow-actions {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+}
+.policy-step .tool-actions {
+        justify-content: flex-start;
+}
+.guarded-config code {
+        display: block;
+        margin: 7px 0;
+        padding: 10px;
+        overflow-wrap: anywhere;
+        color: #efc1a6;
+        background: #111417;
+        font-size: 11px;
+        line-height: 1.5;
+}
+.recommendation-facts {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1px;
+        margin: 10px 0;
+        background: var(--line);
+}
+.recommendation-facts > div {
+        padding: 10px;
+        background: #20252a;
+}
+.recommendation-facts dt {
+        margin: 0;
+}
+.recommendation-facts dd {
+        color: var(--ok);
+        font: 700 16px ui-monospace, Consolas, monospace;
+}
+.recommendation-rules {
+        display: grid;
+        gap: 5px;
+        margin: 8px 0;
+        padding: 0;
+        list-style: none;
+}
+.recommendation-rules li {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 10px;
+        padding: 9px 10px;
+        border-left: 3px solid var(--warn);
+        background: #27221c;
+        font-size: 11px;
+}
+.recommendation-rules span {
+        color: #c5b9a9;
+        overflow-wrap: anywhere;
+}
+.workflow-receipt,
+.workflow-complete {
+        display: grid;
+        gap: 4px;
+        padding: 12px 18px;
+        border-top: 1px solid #3d7257;
+        background: #17251f;
+        font-size: 12px;
+}
+.workflow-receipt span,
+.workflow-complete span {
+        color: #a9bdaf;
+        line-height: 1.45;
+}
+.blocked-copy {
+        margin: 0;
+        color: var(--bad);
+}
 .plan-step {
         display: grid;
         grid-template-columns: 8px minmax(0, 1fr) auto;
@@ -757,6 +872,23 @@ aside hr {
         }
         .legacy-rule b {
                 grid-column: 2;
+        }
+        .active-workflow-head,
+        .workflow-actions {
+                grid-template-columns: 1fr;
+        }
+        .recommendation-facts,
+        .recommendation-rules li {
+                grid-template-columns: 1fr;
+        }
+        .active-workflow-head {
+                flex-direction: column;
+        }
+        .active-workflow-action > button,
+        .workflow-actions button,
+        .guarded-config > button,
+        .policy-step > button {
+                width: 100%;
         }
 }
 dl {

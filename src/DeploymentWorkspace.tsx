@@ -4,12 +4,15 @@ import type {
         BoardPath,
         DeploymentPackageReceipt,
         DeploymentPlan,
+        DeploymentConfigRecommendation,
+        ConfigurationRebootPreview,
         FirmwareFingerprint,
         FirmwareInstallMethod,
         FirmwarePreparation,
         FirmwareSetupRebootPreview,
         LegacyFirmwareAnalysis,
         LegacyPatchRisk,
+        ManualDeploymentStepPreview,
         MachineProfile,
         NvidiaProfileBackupReceipt,
         NvidiaSmiEvidence,
@@ -71,6 +74,148 @@ const validAcknowledgementNote = (note: string, fingerprintPrefix: string) => {
                         .toLowerCase()
                         .includes(fingerprintPrefix.toLowerCase())
         );
+};
+const assertPlanAdvance = (
+        before: DeploymentPlan,
+        after: DeploymentPlan,
+        completedStepIds: DeploymentPlan["steps"][number]["id"][],
+) => {
+        if (
+                after.profileId !== before.profileId ||
+                after.schemaVersion !== before.schemaVersion ||
+                after.originalFirmwareSha256 !== before.originalFirmwareSha256 ||
+                after.recoveryMethod !== before.recoveryMethod
+        )
+                throw new Error(
+                        "The backend returned a deployment receipt for a different profile contract.",
+                );
+        if (after.revision !== before.revision + completedStepIds.length)
+                throw new Error(
+                        "The backend returned an unexpected deployment plan revision.",
+                );
+        if (
+                after.steps.length !== before.steps.length ||
+                after.steps.some(
+                        (step, index) => step.id !== before.steps[index]?.id,
+                )
+        )
+                throw new Error(
+                        "The backend returned a malformed deployment step sequence.",
+                );
+        const readyBefore = before.steps
+                .map((step, index) => ({ step, index }))
+                .filter(({ step }) => step.state === "ready");
+        if (readyBefore.length !== 1)
+                throw new Error(
+                        "The current deployment plan does not have exactly one active step.",
+                );
+        const activeIndex = readyBefore[0]!.index;
+        const expectedCompleted = before.steps.slice(
+                activeIndex,
+                activeIndex + completedStepIds.length,
+        );
+        if (
+                expectedCompleted.length !== completedStepIds.length ||
+                expectedCompleted.some(
+                        (step, index) =>
+                                step.id !== completedStepIds[index] ||
+                                (index === 0
+                                        ? step.state !== "ready"
+                                        : step.state !== "pending"),
+                ) ||
+                completedStepIds.some((_, index) => {
+                        const step = after.steps[activeIndex + index];
+                        return step?.state !== "completed" || !step.evidence;
+                }) ||
+                after.steps.some(
+                        (step, index) =>
+                                (index < activeIndex ||
+                                        index >
+                                                activeIndex +
+                                                        completedStepIds.length) &&
+                                (step.state !== before.steps[index]?.state ||
+                                        JSON.stringify(step.evidence) !==
+                                                JSON.stringify(
+                                                        before.steps[index]?.evidence,
+                                                )),
+                )
+        )
+                throw new Error(
+                        "The backend receipt advanced unexpected deployment steps.",
+                );
+        const nextIndex = activeIndex + completedStepIds.length;
+        const next = after.steps[nextIndex];
+        if (
+                (next &&
+                        (next.state !== "ready" ||
+                                before.steps[nextIndex]?.state !== "pending" ||
+                                JSON.stringify(next.evidence) !==
+                                        JSON.stringify(
+                                                before.steps[nextIndex]?.evidence,
+                                        ))) ||
+                (!next && after.steps.some((step) => step.state === "ready"))
+        )
+                throw new Error(
+                        "The backend receipt did not activate exactly the next deployment step.",
+                );
+        const ready = after.steps.filter((step) => step.state === "ready");
+        if (ready.length !== (next ? 1 : 0))
+                throw new Error(
+                        "The backend returned an invalid active deployment step count.",
+                );
+        return after;
+};
+const assertRecommendation = (value: DeploymentConfigRecommendation) => {
+        const ruleIdentities = value.draft.rules.map((rule) =>
+                [
+                        rule.deviceId,
+                        rule.subsystemVendorId,
+                        rule.subsystemDeviceId,
+                        rule.bus,
+                        rule.device,
+                        rule.function,
+                ].join(":"),
+        );
+        if (
+                value.draft.globalMode !== 1 ||
+                value.draft.targetPciBarSize !== 0 ||
+                value.draft.skipS3Resume !== false ||
+                value.draft.overrideBarSizeMask !== false ||
+                value.draft.guardSetupChanges !== true ||
+                value.turingGpuCount <= 0 ||
+                value.registryManagedGpuCount < 0 ||
+                value.exactFallbackRuleCount < 0 ||
+                value.registryManagedGpuCount + value.exactFallbackRuleCount !==
+                        value.turingGpuCount ||
+                value.exactFallbackRuleCount !== value.draft.rules.length ||
+                new Set(ruleIdentities).size !== ruleIdentities.length ||
+                value.draft.rules.some(
+                        (rule) =>
+                                rule.matchScope !== "location" ||
+                                rule.barSizeSelector !== 5 ||
+                                rule.overrideBarSizeMask !== null,
+                )
+        )
+                throw new Error(
+                        "The backend returned an inconsistent deployment configuration recommendation.",
+                );
+        return value;
+};
+const assertFreshProfilePlan = (
+        profile: MachineProfile,
+        nextPlan: DeploymentPlan,
+) => {
+        if (
+                nextPlan.profileId !== profile.profileId ||
+                nextPlan.originalFirmwareSha256 !==
+                        profile.originalFirmware.sha256 ||
+                nextPlan.steps.filter((step) => step.state === "ready").length !==
+                        1
+        )
+                throw new Error(
+                        "The backend returned a malformed deployment plan for the new profile.",
+                );
+        return nextPlan;
 };
 
 type Props = { snapshot: SystemSnapshot };
@@ -146,6 +291,29 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                         useState<FirmwareSetupRebootPreview | null>(null),
                 [showReboot, setShowReboot] = useState(false),
                 [savedWork, setSavedWork] = useState(false),
+                [manualPreview, setManualPreview] =
+                        useState<ManualDeploymentStepPreview | null>(null),
+                [showManual, setShowManual] = useState(false),
+                [manualConfirmed, setManualConfirmed] = useState(false),
+                [configurationRebootPreview, setConfigurationRebootPreview] =
+                        useState<ConfigurationRebootPreview | null>(null),
+                [showConfigurationReboot, setShowConfigurationReboot] =
+                        useState(false),
+                [guardedConfigConfirmed, setGuardedConfigConfirmed] =
+                        useState(false),
+                [configRecommendation, setConfigRecommendation] = useState<{
+                        profileId: string;
+                        planRevision: number;
+                        value: DeploymentConfigRecommendation;
+                } | null>(null),
+                [recommendationStatus, setRecommendationStatus] = useState<
+                        "idle" | "pending" | "ready" | "error"
+                >("idle"),
+                [recommendationError, setRecommendationError] = useState(""),
+                [workflowReceipt, setWorkflowReceipt] = useState<{
+                        title: string;
+                        detail: string;
+                } | null>(null),
                 [barEvidence, setBarEvidence] =
                         useState<NvidiaSmiEvidence | null>(null),
                 [installation, setInstallation] =
@@ -159,6 +327,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
         const sequence = useRef(0),
                 busyActionRef = useRef(""),
                 legacyAnalysisRequest = useRef(0),
+                recommendationRequest = useRef(0),
                 rebootDialog = useRef<HTMLDivElement>(null),
                 rebootButton = useRef<HTMLButtonElement>(null);
 
@@ -234,6 +403,9 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                 return "Legacy selections are pinned to this firmware fingerprint and ready for profile creation.";
         })();
         const activeStep = plan?.steps.find((step) => step.state === "ready");
+        const stepCompleted = (stepId: DeploymentPlan["steps"][number]["id"]) =>
+                plan?.steps.find((step) => step.id === stepId)?.state ===
+                "completed";
         const invalidateLegacyAnalysis = () => {
                 legacyAnalysisRequest.current += 1;
                 setLegacyAnalysis(null);
@@ -260,11 +432,13 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                 setActivity(null);
                 try {
                         const value = await work();
-                        if (current !== sequence.current) return;
+                        if (current !== sequence.current)
+                                throw new Error(
+                                        "A stale operation response was rejected because the selected profile or deployment plan changed.",
+                                );
                         apply(value);
                         setActivity({ tone: "success", text: success });
                 } catch (error) {
-                        if (current !== sequence.current) return;
                         setActivity({
                                 tone: "error",
                                 text: operationError(error),
@@ -325,11 +499,54 @@ export function DeploymentWorkspace({ snapshot }: Props) {
         }, [selectedProfileId]);
 
         useEffect(() => {
-                if (!showReboot) return;
+                const request = ++recommendationRequest.current;
+                setGuardedConfigConfirmed(false);
+                setConfigRecommendation(null);
+                setRecommendationError("");
+                if (
+                        !plan ||
+                        activeStep?.id !== "writeNvstrapsConfiguration"
+                ) {
+                        setRecommendationStatus("idle");
+                        return;
+                }
+                const profileId = plan.profileId;
+                const planRevision = plan.revision;
+                setRecommendationStatus("pending");
+                void bridge
+                        .getRecommendedDeploymentConfig(profileId)
+                        .then((value) => {
+                                if (request !== recommendationRequest.current)
+                                        throw new Error(
+                                                "A stale deployment configuration recommendation was discarded.",
+                                        );
+                                const recommendation =
+                                        assertRecommendation(value);
+                                setConfigRecommendation({
+                                        profileId,
+                                        planRevision,
+                                        value: recommendation,
+                                });
+                                setRecommendationStatus("ready");
+                        })
+                        .catch((error) => {
+                                if (request !== recommendationRequest.current)
+                                        return;
+                                const message = operationError(error);
+                                setRecommendationStatus("error");
+                                setRecommendationError(message);
+                                setActivity({ tone: "error", text: message });
+                        });
+        }, [activeStep?.id, plan?.profileId, plan?.revision]);
+
+        useEffect(() => {
+                if (!(showReboot || showManual || showConfigurationReboot)) return;
                 const previous = document.activeElement as HTMLElement | null;
                 const keydown = (event: KeyboardEvent) => {
                         if (event.key === "Escape") {
                                 setShowReboot(false);
+                                setShowManual(false);
+                                setShowConfigurationReboot(false);
                                 return;
                         }
                         if (event.key !== "Tab" || !rebootDialog.current)
@@ -362,7 +579,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                         removeEventListener("keydown", keydown);
                         (rebootButton.current ?? previous)?.focus();
                 };
-        }, [showReboot]);
+        }, [showReboot, showManual, showConfigurationReboot]);
 
         const chooseFirmware = () =>
                 void run(
@@ -551,6 +768,10 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         : undefined,
                                 }),
                         (bundle) => {
+                                assertFreshProfilePlan(
+                                        bundle.profile,
+                                        bundle.plan,
+                                );
                                 setProfiles((current) => [
                                         bundle.profile,
                                         ...current.filter(
@@ -575,14 +796,30 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                 bridge.compareMachineProfile(
                                         selectedProfileId,
                                 ),
-                        (comparison) =>
-                                setPreflightExact(
+                        (comparison) => {
+                                const exact =
                                         comparison.result.differences.length ===
-                                                0,
-                                ),
+                                        0;
+                                setPreflightExact(exact);
+                                if (!exact)
+                                        throw new Error(
+                                                `Pinned machine preflight found ${comparison.result.differences.length} difference${comparison.result.differences.length === 1 ? "" : "s"}; deployment remains blocked until the selected profile matches.`,
+                                        );
+                        },
                         "Current machine, GPU topology, BIOS, and preserved source match the profile.",
                 );
-        const prepare = () =>
+        const prepare = () => {
+                if (!plan || !activeStep) return;
+                const before = plan;
+                const start = before.steps.findIndex(
+                        (step) => step.id === activeStep.id,
+                );
+                const end = before.steps.findIndex(
+                        (step) => step.id === "verifyPatchedArtifact",
+                );
+                const expected = before.steps
+                        .slice(start, end + 1)
+                        .map((step) => step.id);
                 void run(
                         "prepare",
                         () =>
@@ -590,11 +827,17 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                         selectedProfileId,
                                 ),
                         (result) => {
+                                assertPlanAdvance(
+                                        before,
+                                        result.plan,
+                                        expected,
+                                );
                                 setPreparation(result);
                                 setPlan(result.plan);
                         },
                         "Rust driver injected and the patched artifact verified. Nothing was flashed.",
                 );
+        };
         const chooseDestination = () =>
                 void run(
                         "destination",
@@ -645,20 +888,255 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                         rebootPreview,
                                         savedWork,
                                 ),
-                        () => {},
+                        (receipt) => {
+                                if (
+                                        receipt.profileId !==
+                                                rebootPreview.profileId ||
+                                        receipt.accepted !== true
+                                )
+                                        throw new Error(
+                                                "The firmware restart request returned an invalid acceptance receipt.",
+                                        );
+                        },
                         "Windows accepted the restart request. This only opens firmware setup.",
                 );
         };
-        const collectBar = () =>
+        const openManualConfirmation = () => {
+                if (!plan || !activeStep) return;
+                const expectedProfile = plan.profileId;
+                const expectedRevision = plan.revision;
+                const expectedStep = activeStep.id;
+                void run(
+                        "manual-preview",
+                        async () => {
+                                const preview =
+                                        await bridge.previewManualDeploymentStep(
+                                                selectedProfileId,
+                                        );
+                                if (
+                                        preview.profileId !== expectedProfile ||
+                                        preview.planRevision !== expectedRevision ||
+                                        preview.stepId !== expectedStep
+                                )
+                                        throw new Error(
+                                                "The deployment plan changed while the consequence preview was loading. Review the current step again.",
+                                        );
+                                return preview;
+                        },
+                        (preview) => {
+                                setManualPreview(preview);
+                                setManualConfirmed(false);
+                                setShowManual(true);
+                        },
+                        "Current manual consequence preview loaded; nothing was completed.",
+                );
+        };
+        const confirmManual = () => {
+                if (!manualPreview || !manualConfirmed || !plan) return;
+                const expectedRevision = manualPreview.planRevision;
+                const expectedStep = manualPreview.stepId;
+                const before = plan;
+                setShowManual(false);
+                void run(
+                        "manual-confirm",
+                        () => bridge.confirmManualDeploymentStep(manualPreview),
+                        (receipt) => {
+                                if (
+                                        receipt.plan.profileId !== before.profileId ||
+                                        before.revision !== expectedRevision ||
+                                        receipt.stepId !== expectedStep
+                                )
+                                        throw new Error(
+                                                "The backend returned a stale manual-step receipt.",
+                                        );
+                                assertPlanAdvance(before, receipt.plan, [
+                                        expectedStep,
+                                ]);
+                                setPlan(receipt.plan);
+                                setWorkflowReceipt({
+                                        title: `${manualPreview.title} recorded`,
+                                        detail: `Operator attestation persisted at ${receipt.recordedAtUnixMs}.`,
+                                });
+                        },
+                        "Manual gate recorded in the durable deployment plan.",
+                );
+        };
+        const verifyDriver = () => {
+                if (!plan || !activeStep) return;
+                const before = plan;
+                const expected =
+                        activeStep.id === "rebootAfterFirmware"
+                                ? ([
+                                          "rebootAfterFirmware",
+                                          "verifyDriverLoaded",
+                                  ] as const)
+                                : (["verifyDriverLoaded"] as const);
+                void run(
+                        "driver-verify",
+                        () => bridge.verifyDeploymentDriver(selectedProfileId),
+                        (receipt) => {
+                                assertPlanAdvance(before, receipt.plan, [
+                                        ...expected,
+                                ]);
+                                setPlan(receipt.plan);
+                                setWorkflowReceipt({
+                                        title: "Current boot and Rust DXE verified",
+                                        detail: `${receipt.status.label} · ${receipt.status.raw}. The volatile status proved this boot and advanced both boot and driver gates.`,
+                                });
+                        },
+                        "Current Windows boot and Rust DXE status were durably verified.",
+                );
+        };
+        const saveGuardedConfig = () => {
+                if (
+                        !guardedConfigConfirmed ||
+                        !plan ||
+                        !configRecommendation ||
+                        configRecommendation.profileId !== plan.profileId ||
+                        configRecommendation.planRevision !== plan.revision
+                )
+                        return;
+                const before = plan;
+                const submittedDraft = structuredClone(
+                        configRecommendation.value.draft,
+                );
+                void run(
+                        "deployment-config",
+                        () =>
+                                bridge.saveDeploymentConfig(
+                                        selectedProfileId,
+                                        submittedDraft,
+                                ),
+                        (receipt) => {
+                                assertPlanAdvance(before, receipt.plan, [
+                                        "writeNvstrapsConfiguration",
+                                ]);
+                                if (
+                                        JSON.stringify(receipt.save.draft) !==
+                                        JSON.stringify(submittedDraft)
+                                )
+                                        throw new Error(
+                                                "The configuration read-back receipt does not match the recommended draft that was submitted.",
+                                        );
+                                setPlan(receipt.plan);
+                                setWorkflowReceipt({
+                                        title: "Configuration write verified by read-back",
+                                        detail: `${receipt.save.bytesWritten} bytes · saved ${receipt.save.savedAtUnixMs}. A Windows restart is still required.`,
+                                });
+                                setGuardedConfigConfirmed(false);
+                        },
+                        "Guarded deployment configuration was written and verified by read-back.",
+                );
+        };
+        const openConfigurationReboot = () => {
+                if (!plan) return;
+                const expectedProfile = plan.profileId;
+                const expectedRevision = plan.revision;
+                void run(
+                        "configuration-reboot-preview",
+                        async () => {
+                                const preview =
+                                        await bridge.previewConfigurationReboot(
+                                                selectedProfileId,
+                                        );
+                                if (
+                                        preview.profileId !== expectedProfile ||
+                                        preview.planRevision !== expectedRevision
+                                )
+                                        throw new Error(
+                                                "The deployment plan changed while the restart preview was loading.",
+                                        );
+                                return preview;
+                        },
+                        (preview) => {
+                                setConfigurationRebootPreview(preview);
+                                setSavedWork(false);
+                                setShowConfigurationReboot(true);
+                        },
+                        "Configuration restart previewed; the plan did not advance.",
+                );
+        };
+        const requestConfigurationReboot = () => {
+                if (!configurationRebootPreview) return;
+                setShowConfigurationReboot(false);
+                void run(
+                        "configuration-reboot",
+                        () =>
+                                bridge.rebootAfterConfiguration(
+                                        configurationRebootPreview,
+                                        savedWork,
+                                ),
+                        (receipt) => {
+                                if (
+                                        receipt.profileId !== selectedProfileId ||
+                                        receipt.accepted !== true ||
+                                        receipt.planAdvanced !== false
+                                )
+                                        throw new Error(
+                                                "The restart request returned an invalid plan-advancement receipt.",
+                                        );
+                                setWorkflowReceipt({
+                                        title: "Configuration restart request accepted",
+                                        detail: "Plan advanced: false. Return after Windows boots, then verify the later boot separately.",
+                                });
+                        },
+                        "Windows accepted the restart request; this did not complete the reboot gate.",
+                );
+        };
+        const verifyConfigurationBoot = () => {
+                if (!plan) return;
+                const before = plan;
+                void run(
+                        "configuration-boot-verify",
+                        () =>
+                                bridge.verifyConfigurationReboot(
+                                        selectedProfileId,
+                                ),
+                        (receipt) => {
+                                assertPlanAdvance(before, receipt.plan, [
+                                        "rebootAfterConfiguration",
+                                ]);
+                                setPlan(receipt.plan);
+                                setWorkflowReceipt({
+                                        title: "Returned Windows boot verified",
+                                        detail: `Boot ${receipt.bootedAtUnixMs} is later than configuration read-back ${receipt.configurationSavedAtUnixMs}.`,
+                                });
+                        },
+                        "A Windows boot after the configuration read-back was durably verified.",
+                );
+        };
+        const collectBar = () => {
+                if (!plan) return;
+                const before = plan;
                 void run(
                         "bar1",
                         () =>
                                 bridge.collectNvidiaSmiEvidence(
                                         selectedProfileId,
                                 ),
-                        setBarEvidence,
+                        (receipt) => {
+                                if (
+                                        receipt.evidence.profileId !==
+                                                selectedProfileId ||
+                                        receipt.evidence.allProfileGpusObserved !==
+                                                true
+                                )
+                                        throw new Error(
+                                                "NVIDIA telemetry did not prove every GPU in the selected profile.",
+                                        );
+                                assertPlanAdvance(before, receipt.plan, [
+                                        "verifyResizableBar",
+                                ]);
+                                setPlan(receipt.plan);
+                                setBarEvidence(receipt.evidence);
+                                setWorkflowReceipt({
+                                        title: "Resizable BAR independently verified",
+                                        detail: `All profile GPUs observed · XML ${shortHash(receipt.evidence.rawXmlSha256)}.`,
+                                });
+                        },
                         "NVIDIA BAR1 evidence captured and matched to this profile.",
                 );
+        };
         const installInspector = () =>
                 void run(
                         "install-inspector",
@@ -687,6 +1165,210 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                         "Profile Inspector launched after an automatic profile backup. Policy changes remain manual.",
                 );
 
+        const activeAction = () => {
+                if (!activeStep)
+                        return (
+                                <div className="workflow-complete" role="status">
+                                        <strong>Deployment plan complete</strong>
+                                        <span>Every durable gate has a persisted receipt.</span>
+                                </div>
+                        );
+                switch (activeStep.id) {
+                        case "prepareRustDriver":
+                        case "applyLegacyBoardPatches":
+                        case "verifyPatchedArtifact":
+                                return (
+                                        <button
+                                                className="primary"
+                                                onClick={prepare}
+                                                disabled={Boolean(busyAction)}
+                                        >
+                                                Prepare and verify firmware artifact
+                                        </button>
+                                );
+                        case "flashWithVendorRoute":
+                        case "configureFirmwareSetup":
+                                return (
+                                        <div className="workflow-actions">
+                                                <button
+                                                        ref={rebootButton}
+                                                        className="quiet"
+                                                        onClick={previewReboot}
+                                                        disabled={Boolean(busyAction)}
+                                                >
+                                                        Review restart to firmware UI
+                                                </button>
+                                                <button
+                                                        className="primary danger-button"
+                                                        onClick={openManualConfirmation}
+                                                        disabled={Boolean(busyAction)}
+                                                >
+                                                        Review & confirm completed step
+                                                </button>
+                                        </div>
+                                );
+                        case "rebootAfterFirmware":
+                        case "verifyDriverLoaded":
+                                return (
+                                        <button
+                                                className="primary"
+                                                onClick={verifyDriver}
+                                                disabled={Boolean(busyAction)}
+                                        >
+                                                Verify current boot + Rust DXE
+                                        </button>
+                                );
+                        case "writeNvstrapsConfiguration":
+                                return (
+                                        <div className="guarded-config">
+                                                {recommendationStatus === "pending" && (
+                                                        <p role="status">Loading the backend-owned recommendation for this exact profile…</p>
+                                                )}
+                                                {recommendationStatus === "error" && (
+                                                        <p className="blocked-copy" role="alert">
+                                                                {recommendationError} Use Configure or retry after reloading the exact profile.
+                                                        </p>
+                                                )}
+                                                {configRecommendation && recommendationStatus === "ready" && (
+                                                        <div className="recommended-config">
+                                                                <strong>Backend-recommended deployment configuration</strong>
+                                                                <dl className="recommendation-facts">
+                                                                        <div><dt>Turing GPUs</dt><dd>{configRecommendation.value.turingGpuCount}</dd></div>
+                                                                        <div><dt>Registry managed</dt><dd>{configRecommendation.value.registryManagedGpuCount}</dd></div>
+                                                                        <div><dt>Exact fallback rules</dt><dd>{configRecommendation.value.exactFallbackRuleCount}</dd></div>
+                                                                </dl>
+                                                                <code>
+                                                                        global mode {configRecommendation.value.draft.globalMode} · target selector {configRecommendation.value.draft.targetPciBarSize} · skip S3 {String(configRecommendation.value.draft.skipS3Resume)} · mask override {String(configRecommendation.value.draft.overrideBarSizeMask)} · setup guard {String(configRecommendation.value.draft.guardSetupChanges)}
+                                                                </code>
+                                                                {configRecommendation.value.draft.rules.length > 0 ? (
+                                                                        <ul className="recommendation-rules" aria-label="Exact fallback rules">
+                                                                                {configRecommendation.value.draft.rules.map((rule) => (
+                                                                                        <li key={`${rule.bus}-${rule.device}-${rule.function}`}>
+                                                                                                <strong>{rule.bus.toString(16).padStart(2, "0")}:{rule.device.toString(16).padStart(2, "0")}.{rule.function}</strong>
+                                                                                                <span>device {rule.deviceId.toString(16).padStart(4, "0")} · BAR selector {rule.barSizeSelector} · exact location only</span>
+                                                                                        </li>
+                                                                                ))}
+                                                                        </ul>
+                                                                ) : (
+                                                                        <p>Every detected Turing GPU is covered by the built-in registry; no fallback rule is added.</p>
+                                                                )}
+                                                                <p>
+                                                                        This draft was generated and prevalidated by the backend for the current topology. To choose another policy or size, switch to Configure instead of confirming here.
+                                                                </p>
+                                                        </div>
+                                                )}
+                                                <label className="consequence-check compact-check">
+                                                        <input
+                                                                type="checkbox"
+                                                                checked={guardedConfigConfirmed}
+                                                                disabled={recommendationStatus !== "ready"}
+                                                                onChange={(event) =>
+                                                                        setGuardedConfigConfirmed(
+                                                                                event.target.checked,
+                                                                        )
+                                                                }
+                                                        />
+                                                        <span>
+                                                                <strong>
+                                                                        I reviewed this exact backend recommendation for the selected profile.
+                                                                </strong>
+                                                        </span>
+                                                </label>
+                                                <button
+                                                        className="primary"
+                                                        onClick={saveGuardedConfig}
+                                                        disabled={
+                                                                Boolean(busyAction) ||
+                                                                !guardedConfigConfirmed ||
+                                                                recommendationStatus !== "ready" ||
+                                                                !configRecommendation
+                                                        }
+                                                >
+                                                        Write and verify guarded configuration
+                                                </button>
+                                        </div>
+                                );
+                        case "rebootAfterConfiguration":
+                                return (
+                                        <div className="workflow-actions">
+                                                <button
+                                                        className="quiet"
+                                                        onClick={openConfigurationReboot}
+                                                        disabled={Boolean(busyAction)}
+                                                >
+                                                        Review restart after configuration
+                                                </button>
+                                                <button
+                                                        className="primary"
+                                                        onClick={verifyConfigurationBoot}
+                                                        disabled={Boolean(busyAction)}
+                                                >
+                                                        Verify returned Windows boot
+                                                </button>
+                                        </div>
+                                );
+                        case "verifyResizableBar":
+                                return (
+                                        <button
+                                                className="primary"
+                                                onClick={collectBar}
+                                                disabled={Boolean(busyAction)}
+                                        >
+                                                Collect and verify BAR1 evidence
+                                        </button>
+                                );
+                        case "configureNvidiaApplications":
+                                return (
+                                        <div className="policy-step">
+                                                <div className="tool-actions">
+                                                        {!installation ? (
+                                                                <button
+                                                                        className="quiet"
+                                                                        onClick={installInspector}
+                                                                        disabled={Boolean(busyAction)}
+                                                                >
+                                                                        Install verified Profile Inspector
+                                                                </button>
+                                                        ) : (
+                                                                <>
+                                                                        <button
+                                                                                className="quiet"
+                                                                                onClick={backupProfiles}
+                                                                                disabled={Boolean(busyAction)}
+                                                                        >
+                                                                                Back up profiles
+                                                                        </button>
+                                                                        <button
+                                                                                className="quiet"
+                                                                                onClick={launchInspector}
+                                                                                disabled={Boolean(busyAction)}
+                                                                        >
+                                                                                Back up & launch editor
+                                                                        </button>
+                                                                </>
+                                                        )}
+                                                </div>
+                                                <p>
+                                                        Installing, backing up, or launching the editor does not complete policy application.
+                                                </p>
+                                                <button
+                                                        className="primary danger-button"
+                                                        onClick={openManualConfirmation}
+                                                        disabled={Boolean(busyAction)}
+                                                >
+                                                        Review & confirm applied NVIDIA policy
+                                                </button>
+                                        </div>
+                                );
+                        default:
+                                return (
+                                        <p className="blocked-copy" role="alert">
+                                                This durable step has no frontend action. Reload the plan or use Configure for configuration changes.
+                                        </p>
+                                );
+                }
+        };
+
         return (
                 <div className="deployment-shell">
                         <aside className="deployment-rail" aria-label="Deployment status">
@@ -697,19 +1379,18 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 <StatusLine
                                                         label="Machine preflight"
                                                         state={
-                                                                preflightExact ===
-                                                                true
-                                                                        ? "ok"
-                                                                        : preflightExact ===
-                                                                            false
-                                                                          ? "bad"
+                                                                preflightExact === false
+                                                                        ? "bad"
+                                                                        : stepCompleted("verifyProfile") ||
+                                                                            preflightExact === true
+                                                                          ? "ok"
                                                                           : "idle"
                                                         }
                                                 />
                                                 <StatusLine
                                                         label="Artifact prepared"
                                                         state={
-                                                                preparation
+                                                                stepCompleted("verifyPatchedArtifact")
                                                                         ? "ok"
                                                                         : "idle"
                                                         }
@@ -725,7 +1406,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 <StatusLine
                                                         label="BAR1 observed"
                                                         state={
-                                                                barEvidence
+                                                                stepCompleted("verifyResizableBar")
                                                                         ? "ok"
                                                                         : "idle"
                                                         }
@@ -844,7 +1525,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                 <input
                                                                         value={firmwarePath}
                                                                         placeholder="Choose a vendor BIOS image or enter an absolute path"
-                                                                        onChange={(event) => {
+                                                onChange={(event) => {
                                                                                 invalidateLegacyAnalysis();
                                                                                 setFirmwarePath(
                                                                                         event.target.value,
@@ -1269,13 +1950,23 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 <span>Machine profile</span>
                                                 <select
                                                         value={selectedProfileId}
+                                                        disabled={Boolean(busyAction)}
                                                         onChange={(event) => {
+                                                                if (busyActionRef.current)
+                                                                        return;
+                                                                sequence.current += 1;
+                                                                setShowManual(false);
+                                                                setShowReboot(false);
+                                                                setShowConfigurationReboot(false);
                                                                 setSelectedProfileId(
                                                                         event.target.value,
                                                                 );
                                                                 setPreflightExact(null);
                                                                 setPreparation(null);
                                                                 setPackageReceipt(null);
+                                                                setWorkflowReceipt(null);
+                                                                setBarEvidence(null);
+                                                                setGuardedConfigConfirmed(false);
                                                         }}
                                                 >
                                                         {!profiles.length && (
@@ -1291,6 +1982,59 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         ))}
                                                 </select>
                                         </label>
+                                        {plan && (
+                                                <div className="active-workflow" aria-live="polite">
+                                                        <div className="active-workflow-head">
+                                                                <div>
+                                                                        <span className="step">ACTIVE STEP · REVISION {plan.revision}</span>
+                                                                        <h4>
+                                                                                {activeStep?.title ?? "Deployment complete"}
+                                                                        </h4>
+                                                                        <p>
+                                                                                {activeStep
+                                                                                        ? "Only this step can advance the durable plan. Completed receipts survive reload."
+                                                                                        : "No remaining step is ready; every gate has durable evidence."}
+                                                                        </p>
+                                                                </div>
+                                                                <strong>
+                                                                        {plan.steps.filter((step) => step.state === "completed").length}/{plan.steps.length}
+                                                                </strong>
+                                                        </div>
+                                                        <div className="active-workflow-action">
+                                                                {activeAction()}
+                                                        </div>
+                                                        {workflowReceipt && (
+                                                                <div className="workflow-receipt" role="status">
+                                                                        <strong>{workflowReceipt.title}</strong>
+                                                                        <span>{workflowReceipt.detail}</span>
+                                                                </div>
+                                                        )}
+                                                        {barEvidence && (
+                                                                <div className="workflow-receipt" role="status">
+                                                                        <strong>{barEvidence.gpus[0]?.productName}</strong>
+                                                                        <span>
+                                                                                BAR1 {barEvidence.gpus[0]?.bar1TotalBytes ? `${Math.round(Number(barEvidence.gpus[0].bar1TotalBytes) / 1073741824)} GiB` : "unavailable"} · Driver {barEvidence.driverVersion}
+                                                                        </span>
+                                                                </div>
+                                                        )}
+                                                        {installation && activeStep?.id === "configureNvidiaApplications" && (
+                                                                <div className="workflow-receipt">
+                                                                        <strong>Profile Inspector {installation.manifest.version} verified</strong>
+                                                                        <span>Tool launch is a handoff only; policy remains incomplete until manual confirmation.</span>
+                                                                </div>
+                                                        )}
+                                                        {backup && activeStep?.id === "configureNvidiaApplications" && (
+                                                                <small className="verified-line mono-wrap">
+                                                                        Backup preserved: {backup.backupPath}
+                                                                </small>
+                                                        )}
+                                                        {launch && activeStep?.id === "configureNvidiaApplications" && (
+                                                                <small className="verified-line">
+                                                                        Editor process {launch.processId} launched; the plan did not advance.
+                                                                </small>
+                                                        )}
+                                                </div>
+                                        )}
                                         {plan && (
                                                 <ol className="plan-list" aria-label="Deployment plan">
                                                         {plan.steps.map((step) => (
@@ -1325,18 +2069,6 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 >
                                                         Run exact-machine preflight
                                                 </button>
-                                                <button
-                                                        className="primary"
-                                                        onClick={prepare}
-                                                        disabled={
-                                                                Boolean(busyAction) ||
-                                                                !selectedProfileId ||
-                                                                preflightExact !== true ||
-                                                                Boolean(preparation)
-                                                        }
-                                                >
-                                                        Prepare verified artifact
-                                                </button>
                                         </div>
                                         {preparation?.patchedFirmware && (
                                                 <div className="artifact-receipt" role="status">
@@ -1368,7 +2100,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         onClick={exportPackage}
                                                         disabled={
                                                                 Boolean(busyAction) ||
-                                                                !preparation ||
+                                                                plan?.steps.find((step) => step.id === "verifyPatchedArtifact")?.state !== "completed" ||
                                                                 !destination
                                                         }
                                                 >
@@ -1389,9 +2121,9 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                 <section className="journey-panel" aria-labelledby="firmware-title">
                                         <JourneyHeading
                                                 number="03"
-                                                title="Enter firmware setup"
+                                                title="Manual boundaries remain explicit"
                                                 id="firmware-title"
-                                                copy="Restart directly to the firmware UI when the plan reaches a valid manual gate."
+                                                copy="Vendor flash, setup values, returned boot, and NVIDIA policy are never inferred from a local click."
                                         />
                                         <div className="manual-gates">
                                                 <div>
@@ -1408,94 +2140,6 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         <span>MANUAL</span>
                                                         <strong>UEFI values</strong>
                                                         <p>Confirm Above 4G Decoding and Resizable BAR in firmware. The app does not change them.</p>
-                                                </div>
-                                        </div>
-                                        <button
-                                                ref={rebootButton}
-                                                className="danger-button"
-                                                disabled={Boolean(busyAction) || !selectedProfileId || !preparation}
-                                                onClick={previewReboot}
-                                        >
-                                                Review restart to firmware UI
-                                        </button>
-                                </section>
-
-                                <section className="journey-panel" aria-labelledby="verify-title">
-                                        <JourneyHeading
-                                                number="04"
-                                                title="Observe & hand off policy"
-                                                id="verify-title"
-                                                copy="Collect read-only BAR1 evidence, then use a pinned external editor with an automatic backup."
-                                        />
-                                        <div className="verification-grid">
-                                                <div className="tool-card">
-                                                        <span className="step">BAR1</span>
-                                                        <h4>NVIDIA telemetry</h4>
-                                                        <p>Runs the system NVIDIA tool read-only and matches PCI locations to this profile.</p>
-                                                        <button
-                                                                onClick={collectBar}
-                                                                disabled={Boolean(busyAction) || !selectedProfileId}
-                                                        >
-                                                                Collect BAR1 evidence
-                                                        </button>
-                                                        {barEvidence && (
-                                                                <div className="tool-result" role="status">
-                                                                        <strong>{barEvidence.gpus[0]?.productName}</strong>
-                                                                        <span>BAR1 {barEvidence.gpus[0]?.bar1TotalBytes ? `${Math.round(Number(barEvidence.gpus[0].bar1TotalBytes) / 1073741824)} GiB` : "unavailable"}</span>
-                                                                        <small>Driver {barEvidence.driverVersion} · topology {barEvidence.allProfileGpusObserved ? "matched" : "incomplete"}</small>
-                                                                </div>
-                                                        )}
-                                                </div>
-                                                <div className="tool-card">
-                                                        <span className="step">NPI</span>
-                                                        <h4>NVIDIA Profile Inspector</h4>
-                                                        <p>Downloads only the pinned release, verifies every installed file, and backs up customized profiles before launch.</p>
-                                                        <div className="tool-actions">
-                                                                {!installation ? (
-                                                                        <button
-                                                                                onClick={installInspector}
-                                                                                disabled={Boolean(busyAction)}
-                                                                        >
-                                                                                Install verified tool
-                                                                        </button>
-                                                                ) : (
-                                                                        <>
-                                                                                <button
-                                                                                        className="quiet"
-                                                                                        onClick={backupProfiles}
-                                                                                        disabled={Boolean(busyAction) || !selectedProfileId}
-                                                                                >
-                                                                                        Back up profiles
-                                                                                </button>
-                                                                                <button
-                                                                                        className="primary"
-                                                                                        onClick={launchInspector}
-                                                                                        disabled={Boolean(busyAction) || !selectedProfileId}
-                                                                                >
-                                                                                        Back up & launch
-                                                                                </button>
-                                                                        </>
-                                                                )}
-                                                        </div>
-                                                        {installation && (
-                                                                <div className="tool-result">
-                                                                        <strong>Verified {installation.manifest.version}</strong>
-                                                                        <span>Manifest {shortHash(installation.manifestSha256)}</span>
-                                                                        <small>Application profile changes remain manual.</small>
-                                                                </div>
-                                                        )}
-                                                        {backup && (
-                                                                <div className="tool-result" role="status">
-                                                                        <strong>Backup preserved</strong>
-                                                                        <span>{backup.manifest.profileCount} profiles · {backup.manifest.settingCount} settings</span>
-                                                                        <small className="mono-wrap">{backup.backupPath}</small>
-                                                                </div>
-                                                        )}
-                                                        {launch && (
-                                                                <small className="verified-line">
-                                                                        Process {launch.processId} launched elevated; no policy was imported automatically.
-                                                                </small>
-                                                        )}
                                                 </div>
                                         </div>
                                 </section>
@@ -1542,6 +2186,102 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                 onClick={reboot}
                                                         >
                                                                 Restart to firmware UI
+                                                        </button>
+                                                </div>
+                                        </div>
+                                </div>
+                        )}
+                        {showManual && manualPreview && (
+                                <div className="modal-backdrop" role="presentation">
+                                        <div
+                                                ref={rebootDialog}
+                                                className="modal reboot-modal"
+                                                role="dialog"
+                                                aria-modal="true"
+                                                aria-labelledby="manual-confirm-title"
+                                        >
+                                                <span className="kicker">OPERATOR ATTESTATION · REVISION {manualPreview.planRevision}</span>
+                                                <h2 id="manual-confirm-title">{manualPreview.title}</h2>
+                                                <p>
+                                                        This records a durable attestation for only <code>{manualPreview.stepId}</code>. It cannot prove the external operation automatically.
+                                                </p>
+                                                <div className="warning-box">
+                                                        {manualPreview.warnings.map((warning) => (
+                                                                <span key={warning}>{warning}</span>
+                                                        ))}
+                                                </div>
+                                                <label className="consequence-check">
+                                                        <input
+                                                                autoFocus
+                                                                type="checkbox"
+                                                                checked={manualConfirmed}
+                                                                onChange={(event) =>
+                                                                        setManualConfirmed(
+                                                                                event.target.checked,
+                                                                        )
+                                                                }
+                                                        />
+                                                        <span>
+                                                                <strong>I completed and independently reviewed this exact step.</strong>
+                                                                <small>The token is bound to this profile, active step, and plan revision.</small>
+                                                        </span>
+                                                </label>
+                                                <div className="modal-actions">
+                                                        <button className="quiet" onClick={() => setShowManual(false)}>
+                                                                Cancel
+                                                        </button>
+                                                        <button
+                                                                className="primary danger-button"
+                                                                disabled={!manualConfirmed || Boolean(busyAction)}
+                                                                onClick={confirmManual}
+                                                        >
+                                                                Record completed step
+                                                        </button>
+                                                </div>
+                                        </div>
+                                </div>
+                        )}
+                        {showConfigurationReboot && configurationRebootPreview && (
+                                <div className="modal-backdrop" role="presentation">
+                                        <div
+                                                ref={rebootDialog}
+                                                className="modal reboot-modal"
+                                                role="dialog"
+                                                aria-modal="true"
+                                                aria-labelledby="configuration-reboot-title"
+                                        >
+                                                <span className="kicker">RESTART REQUEST · PLAN DOES NOT ADVANCE</span>
+                                                <h2 id="configuration-reboot-title">Restart Windows after configuration?</h2>
+                                                <p>
+                                                        This sends <code>{configurationRebootPreview.command} {configurationRebootPreview.arguments.join(" ")}</code>. A later Windows boot must be verified separately.
+                                                </p>
+                                                <div className="warning-box">
+                                                        {configurationRebootPreview.warnings.map((warning) => (
+                                                                <span key={warning}>{warning}</span>
+                                                        ))}
+                                                </div>
+                                                <label className="consequence-check">
+                                                        <input
+                                                                autoFocus
+                                                                type="checkbox"
+                                                                checked={savedWork}
+                                                                onChange={(event) => setSavedWork(event.target.checked)}
+                                                        />
+                                                        <span>
+                                                                <strong>I saved and closed my work.</strong>
+                                                                <small>The command omits /f and the restart request itself does not complete this step.</small>
+                                                        </span>
+                                                </label>
+                                                <div className="modal-actions">
+                                                        <button className="quiet" onClick={() => setShowConfigurationReboot(false)}>
+                                                                Cancel
+                                                        </button>
+                                                        <button
+                                                                className="primary danger-button"
+                                                                disabled={!savedWork || Boolean(busyAction)}
+                                                                onClick={requestConfigurationReboot}
+                                                        >
+                                                                Request restart
                                                         </button>
                                                 </div>
                                         </div>
