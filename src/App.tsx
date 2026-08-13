@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { bridge, previewMode } from "./bridge";
+import { DeploymentWorkspace } from "./DeploymentWorkspace";
 import {
         DEFAULT_DRAFT,
         type ConfigDraft,
@@ -76,7 +77,10 @@ export function App() {
                 [error, setError] = useState(""),
                 [busy, setBusy] = useState(true),
                 [showConfirm, setShowConfirm] = useState(false),
-                [receipt, setReceipt] = useState<SaveReceipt | null>(null);
+                [receipt, setReceipt] = useState<SaveReceipt | null>(null),
+                [surface, setSurface] = useState<"configure" | "deploy">(
+                        "configure",
+                );
         const validationSequence = useRef(0),
                 reviewButton = useRef<HTMLButtonElement>(null),
                 dialog = useRef<HTMLDivElement>(null);
@@ -279,20 +283,61 @@ export function App() {
                                         <span className="product">
                                                 NVSTRAPS / REBAR
                                         </span>
-                                        <h1>Firmware configuration</h1>
+                                        <h1>
+                                                {surface === "configure"
+                                                        ? "Firmware configuration"
+                                                        : "Deployment workspace"}
+                                        </h1>
                                 </div>
                                 <div className="header-actions">
-                                        <span
-                                                className={
-                                                        dirty
-                                                                ? "dirty"
-                                                                : "saved"
-                                                }
+                                        <nav
+                                                className="surface-nav"
+                                                aria-label="Application workspace"
                                         >
-                                                {dirty
-                                                        ? "UNSAVED EDITS"
-                                                        : "IN SYNC"}
-                                        </span>
+                                                <button
+                                                        aria-current={
+                                                                surface ===
+                                                                        "configure"
+                                                                        ? "page"
+                                                                        : undefined
+                                                        }
+                                                        onClick={() =>
+                                                                setSurface(
+                                                                        "configure",
+                                                                )
+                                                        }
+                                                >
+                                                        Configure
+                                                </button>
+                                                <button
+                                                        aria-current={
+                                                                surface ===
+                                                                        "deploy"
+                                                                        ? "page"
+                                                                        : undefined
+                                                        }
+                                                        onClick={() =>
+                                                                setSurface(
+                                                                        "deploy",
+                                                                )
+                                                        }
+                                                >
+                                                        Deploy
+                                                </button>
+                                        </nav>
+                                        {surface === "configure" && (
+                                                <span
+                                                        className={
+                                                                dirty
+                                                                        ? "dirty"
+                                                                        : "saved"
+                                                        }
+                                                >
+                                                        {dirty
+                                                                ? "UNSAVED EDITS"
+                                                                : "IN SYNC"}
+                                                </span>
+                                        )}
                                         <button
                                                 className="quiet"
                                                 onClick={() => void load(true)}
@@ -302,6 +347,9 @@ export function App() {
                                         </button>
                                 </div>
                         </header>
+                        {surface === "deploy" ? (
+                                <DeploymentWorkspace snapshot={snap} />
+                        ) : (
                         <div className="workspace">
                                 <aside aria-label="System status">
                                         <h2>System gate</h2>
@@ -1399,6 +1447,7 @@ export function App() {
                                         )}
                                 </main>
                         </div>
+                        )}
                         {showConfirm && (
                                 <div
                                         className="modal-backdrop"
