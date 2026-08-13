@@ -72,6 +72,12 @@ pub struct FirmwarePreparation {
     pub injection: Option<InjectionReceipt>,
 }
 
+pub(crate) struct ExactDeployment {
+    pub store: DeploymentStore,
+    pub profile: MachineProfile,
+    pub plan: DeploymentPlan,
+}
+
 #[derive(Clone, Copy, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InjectionReceipt {
@@ -310,48 +316,15 @@ fn export_package_command(
     app: &AppHandle,
     request: ExportDeploymentPackageRequest,
 ) -> BackendResult<DeploymentPackageReceipt> {
-    let store = store(app)?;
-    let profile = store
-        .load_profile(&request.profile_id)
-        .map_err(BackendError::from)?;
-    let plan = store.load_plan(&profile).map_err(BackendError::from)?;
-    let devices = enumerate_gpus()?;
-    let current_identity = collect_machine_identity(&devices)?;
-    let original_path = store
-        .original_firmware_path(&request.profile_id)
-        .map_err(BackendError::from)?;
-    let original_fingerprint = FirmwareFingerprint::inspect(&original_path)?;
-    let comparison = profile.compare(&current_identity, Some(&original_fingerprint));
-    if !comparison.is_exact() {
-        let differences = serde_json::to_string(&comparison.differences)
-            .unwrap_or_else(|_| "machine profile mismatch".into());
-        return Err(BackendError::Deployment(format!(
-            "machine profile changed; deployment package export was refused: {differences}"
-        )));
-    }
-    store
-        .export_deployment_package(&profile, &plan, request.destination_root)
+    let exact = load_exact_deployment(app, &request.profile_id, "deployment package export")?;
+    exact
+        .store
+        .export_deployment_package(&exact.profile, &exact.plan, request.destination_root)
         .map_err(BackendError::from)
 }
 
 fn prepare_command(app: &AppHandle, profile_id: &str) -> BackendResult<FirmwarePreparation> {
-    let store = store(app)?;
-    let profile = store.load_profile(profile_id).map_err(BackendError::from)?;
-    let plan = store.load_plan(&profile).map_err(BackendError::from)?;
-    let devices = enumerate_gpus()?;
-    let current_identity = collect_machine_identity(&devices)?;
-    let original_path = store
-        .original_firmware_path(profile_id)
-        .map_err(BackendError::from)?;
-    let original_fingerprint = FirmwareFingerprint::inspect(&original_path)?;
-    let comparison = profile.compare(&current_identity, Some(&original_fingerprint));
-    if !comparison.is_exact() {
-        let differences = serde_json::to_string(&comparison.differences)
-            .unwrap_or_else(|_| "machine profile mismatch".into());
-        return Err(BackendError::Deployment(format!(
-            "machine profile changed; firmware preparation was refused: {differences}"
-        )));
-    }
+    let exact = load_exact_deployment(app, profile_id, "firmware preparation")?;
 
     let driver_path = app
         .path()
@@ -365,7 +338,37 @@ fn prepare_command(app: &AppHandle, profile_id: &str) -> BackendResult<FirmwareP
             driver_path.display()
         ))
     })?;
-    prepare_from_bytes(&store, &profile, plan, &driver_ffs)
+    prepare_from_bytes(&exact.store, &exact.profile, exact.plan, &driver_ffs)
+}
+
+pub(crate) fn load_exact_deployment(
+    app: &AppHandle,
+    profile_id: &str,
+    operation: &'static str,
+) -> BackendResult<ExactDeployment> {
+    let store = store(app)?;
+    let profile = store.load_profile(profile_id).map_err(BackendError::from)?;
+    validate_builtin_legacy_profile(&profile)?;
+    let plan = store.load_plan(&profile).map_err(BackendError::from)?;
+    let devices = enumerate_gpus()?;
+    let current_identity = collect_machine_identity(&devices)?;
+    let original_path = store
+        .original_firmware_path(profile_id)
+        .map_err(BackendError::from)?;
+    let original_fingerprint = FirmwareFingerprint::inspect(&original_path)?;
+    let comparison = profile.compare(&current_identity, Some(&original_fingerprint));
+    if !comparison.is_exact() {
+        let differences = serde_json::to_string(&comparison.differences)
+            .unwrap_or_else(|_| "machine profile mismatch".into());
+        return Err(BackendError::Deployment(format!(
+            "machine profile changed; {operation} was refused: {differences}"
+        )));
+    }
+    Ok(ExactDeployment {
+        store,
+        profile,
+        plan,
+    })
 }
 
 fn prepare_from_bytes(
