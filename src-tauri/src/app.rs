@@ -183,6 +183,14 @@ pub(crate) fn save_config_inner(
     // Re-enumerate immediately before a consequential write so a draft validated against stale
     // GPU or bridge topology cannot be persisted after a hardware change.
     let current_devices = enumerate_gpus()?;
+    save_config_for_devices_inner(draft, state, current_devices)
+}
+
+pub(crate) fn save_config_for_devices_inner(
+    draft: ConfigDraft,
+    state: &AppState,
+    current_devices: Vec<GpuDevice>,
+) -> BackendResult<SaveReceipt> {
     let mut guard = state
         .inner
         .lock()

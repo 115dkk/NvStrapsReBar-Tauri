@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
 
 use crate::{
-    app::{AppState, SaveReceipt, save_config_inner},
+    app::{AppState, SaveReceipt, save_config_for_devices_inner},
     config::{
         ConfigDraft, DeploymentConfigRecommendation, recommend_deployment_config,
         require_recommended_deployment_config,
@@ -150,9 +150,10 @@ fn save_deployment_config_command(
         .map_err(BackendError::from)?;
     require_recommended_deployment_config(&request.draft, &exact.devices)?;
 
-    // The existing writer re-enumerates topology, validates, writes the EFI variable, and performs
-    // an exact byte-for-byte readback. Only that successful receipt may advance the durable plan.
-    let save = save_config_inner(request.draft, state)?;
+    // `load_exact_deployment` obtained this inventory while revalidating the complete machine.
+    // Use that same inventory for the recommendation, wire model, write, and state update so a
+    // second enumeration cannot create a split identity/configuration snapshot.
+    let save = save_config_for_devices_inner(request.draft, state, exact.devices)?;
     let mut workflow = DeploymentWorkflow::from_plan(&exact.store, &exact.profile, exact.plan)
         .map_err(BackendError::from)?;
     workflow
