@@ -10,6 +10,7 @@ import {
         type FirmwareFingerprint,
         type FirmwarePreparation,
         type FirmwareSetupRebootPreview,
+        type LegacyFirmwareAnalysis,
         type LegacyPatchCatalogView,
         type MachineIdentity,
         type MachineProfile,
@@ -32,6 +33,7 @@ export interface Bridge {
         selectFirmwareImage(): Promise<string | null>;
         selectDestinationDirectory(): Promise<string | null>;
         inspectFirmwareImage(path: string): Promise<FirmwareFingerprint>;
+        analyzeLegacyFirmware(path: string): Promise<LegacyFirmwareAnalysis>;
         listLegacyPatchCatalogs(): Promise<LegacyPatchCatalogView[]>;
         createMachineProfile(
                 request: CreateProfileRequest,
@@ -138,6 +140,21 @@ const previewFirmware: FirmwareFingerprint = {
         byteLength: 33554432,
         sha256: "71".repeat(32),
 };
+const previewFirmwareForPath = (path: string): FirmwareFingerprint =>
+        path.toLowerCase().includes("changed-fingerprint")
+                ? {
+                          fileName: "changed-fingerprint.bin",
+                          byteLength: previewFirmware.byteLength,
+                          sha256: "93".repeat(32),
+                  }
+                : previewFirmware;
+const sameFirmware = (
+        left: FirmwareFingerprint,
+        right: FirmwareFingerprint,
+) =>
+        left.fileName === right.fileName &&
+        left.byteLength === right.byteLength &&
+        left.sha256 === right.sha256;
 const previewCatalogs: LegacyPatchCatalogView[] = [
         {
                 catalog: "general",
@@ -153,6 +170,58 @@ const previewCatalogs: LegacyPatchCatalogView[] = [
                 ],
         },
 ];
+const previewLegacyAnalysis: LegacyFirmwareAnalysis = {
+        firmware: structuredClone(previewFirmware),
+        upstreamCommit: "9c80fdb2cd3db94bdd19c58bd00d5ecf822f6430",
+        catalogs: [
+                {
+                        catalog: "general",
+                        sourceSha256: "8a".repeat(32),
+                        rules: [
+                                {
+                                        ruleId: "4b".repeat(32),
+                                        description: "Pinned Above 4G decoding compatibility rule",
+                                        sectionType: 16,
+                                        requiredRisks: [],
+                                        status: "applicable",
+                                        expectedMatches: 1,
+                                        blockedReason: null,
+                                        recommended: true,
+                                },
+                                {
+                                        ruleId: "5c".repeat(32),
+                                        description: "DSDT resource-window compatibility patch",
+                                        sectionType: 16,
+                                        requiredRisks: ["dsdtModification"],
+                                        status: "applicable",
+                                        expectedMatches: 1,
+                                        blockedReason: null,
+                                        recommended: false,
+                                },
+                                {
+                                        ruleId: "6d".repeat(32),
+                                        description: "Already absent compatibility pattern",
+                                        sectionType: 16,
+                                        requiredRisks: [],
+                                        status: "absent",
+                                        expectedMatches: null,
+                                        blockedReason: null,
+                                        recommended: false,
+                                },
+                                {
+                                        ruleId: "7e".repeat(32),
+                                        description: "Compressed vendor-specific compatibility patch",
+                                        sectionType: 16,
+                                        requiredRisks: [],
+                                        status: "blocked",
+                                        expectedMatches: null,
+                                        blockedReason: "The compressed section cannot be proven safe by this build.",
+                                        recommended: false,
+                                },
+                        ],
+                },
+        ],
+};
 let previewProfiles: MachineProfile[] = [];
 let previewPlans = new Map<string, DeploymentPlan>();
 let inspectorInstallation: ProfileInspectorInstallation | null = null;
@@ -273,10 +342,21 @@ const preview: Bridge = {
         elevate: async () => {},
         selectFirmwareImage: async () => "C:\\Firmware\\E7D25IMS.1N0",
         selectDestinationDirectory: async () => "C:\\NVSTRAPS-USB",
-        inspectFirmwareImage: async () => structuredClone(previewFirmware),
+        inspectFirmwareImage: async (path) =>
+                structuredClone(previewFirmwareForPath(path)),
+        analyzeLegacyFirmware: async () => {
+                await new Promise((resolve) => setTimeout(resolve, 40));
+                return structuredClone(previewLegacyAnalysis);
+        },
         listLegacyPatchCatalogs: async () => structuredClone(previewCatalogs),
         createMachineProfile: async (request) => {
-                const profileId = `nvstraps-${previewFirmware.sha256.slice(0, 16)}`;
+                const actualFirmware = previewFirmwareForPath(request.firmwarePath);
+                if (!sameFirmware(request.expectedFirmware, actualFirmware)) {
+                        throw new Error(
+                                "The source firmware changed after inspection; inspect the exact image again.",
+                        );
+                }
+                const profileId = `nvstraps-${actualFirmware.sha256.slice(0, 16)}`;
                 const profile: MachineProfile = {
                         schemaVersion: 3,
                         profileId,
@@ -284,7 +364,7 @@ const preview: Bridge = {
                         boardPath: request.boardPath,
                         legacyPatches: request.legacyPatches ?? null,
                         identity: structuredClone(identity),
-                        originalFirmware: structuredClone(previewFirmware),
+                        originalFirmware: structuredClone(actualFirmware),
                         recovery: structuredClone(request.recovery),
                         firmwareInstall: structuredClone(request.firmwareInstall),
                 };
@@ -478,6 +558,8 @@ const nativeBridge: Bridge = {
                 return typeof selection === "string" ? selection : null;
         },
         inspectFirmwareImage: (path) => invoke("inspect_firmware_image", { path }),
+        analyzeLegacyFirmware: (path) =>
+                invoke("analyze_legacy_firmware", { path }),
         listLegacyPatchCatalogs: () => invoke("list_legacy_patch_catalogs"),
         createMachineProfile: (request) => invoke("create_machine_profile", { request }),
         listMachineProfiles: () => invoke("list_machine_profiles"),

@@ -8,7 +8,8 @@ import type {
         FirmwareInstallMethod,
         FirmwarePreparation,
         FirmwareSetupRebootPreview,
-        LegacyPatchCatalogView,
+        LegacyFirmwareAnalysis,
+        LegacyPatchRisk,
         MachineProfile,
         NvidiaProfileBackupReceipt,
         NvidiaSmiEvidence,
@@ -35,6 +36,42 @@ const shortHash = (value?: string) =>
 const fileName = (path: string) => path.split(/[\\/]/).at(-1) || "firmware.bin";
 const operationError = (error: unknown) =>
         (error as { message?: string }).message || String(error);
+const sameFirmware = (
+        left: FirmwareFingerprint | null,
+        right: FirmwareFingerprint | null,
+) =>
+        Boolean(
+                left &&
+                        right &&
+                        left.fileName === right.fileName &&
+                        left.byteLength === right.byteLength &&
+                        left.sha256 === right.sha256,
+        );
+const legacyRuleKey = (catalog: string, ruleId: string) =>
+        `${catalog}:${ruleId}`;
+const catalogLabels = {
+        general: "General",
+        haswellAbove4g: "Haswell Above 4G",
+        ivyBridgeUsb3: "Ivy Bridge USB 3",
+        haswellUsb3: "Haswell USB 3",
+        broadwellUsb3: "Broadwell USB 3",
+} as const;
+const riskLabels: Record<LegacyPatchRisk, string> = {
+        dsdtModification: "DSDT modification",
+        nvramWhitelist: "NVRAM whitelist change",
+        usbControllerBlacklist: "USB controller blacklist",
+        experimentalX79: "Experimental X79 patch",
+};
+const validAcknowledgementNote = (note: string, fingerprintPrefix: string) => {
+        const normalized = note.trim();
+        return (
+                normalized.length >= 40 &&
+                normalized.split(/\s+/).length >= 8 &&
+                normalized
+                        .toLowerCase()
+                        .includes(fingerprintPrefix.toLowerCase())
+        );
+};
 
 type Props = { snapshot: SystemSnapshot };
 type Activity = { tone: "success" | "warning" | "error"; text: string } | null;
@@ -75,7 +112,25 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                 : "",
                 ),
                 [routeConfirmed, setRouteConfirmed] = useState(false),
-                [catalogs, setCatalogs] = useState<LegacyPatchCatalogView[]>([]),
+                [legacyAnalysis, setLegacyAnalysis] = useState<{
+                        path: string;
+                        value: LegacyFirmwareAnalysis;
+                } | null>(null),
+                [legacyAnalysisStatus, setLegacyAnalysisStatus] = useState<
+                        "idle" | "pending" | "ready" | "error"
+                >("idle"),
+                [legacyAnalysisError, setLegacyAnalysisError] = useState(""),
+                [selectedLegacyRules, setSelectedLegacyRules] = useState<
+                        string[]
+                >([]),
+                [legacyAcknowledgements, setLegacyAcknowledgements] = useState<
+                        Partial<
+                                Record<
+                                        LegacyPatchRisk,
+                                        { note: string; confirmed: boolean }
+                                >
+                        >
+                >({}),
                 [profiles, setProfiles] = useState<MachineProfile[]>([]),
                 [selectedProfileId, setSelectedProfileId] = useState(""),
                 [plan, setPlan] = useState<DeploymentPlan | null>(null),
@@ -102,6 +157,8 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                 [busyAction, setBusyAction] = useState(""),
                 [activity, setActivity] = useState<Activity>(null);
         const sequence = useRef(0),
+                busyActionRef = useRef(""),
+                legacyAnalysisRequest = useRef(0),
                 rebootDialog = useRef<HTMLDivElement>(null),
                 rebootButton = useRef<HTMLButtonElement>(null);
 
@@ -113,15 +170,92 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                         ) ?? null,
                 [profiles, selectedProfileId],
         );
+        const legacyAnalysisValid = Boolean(
+                legacyAnalysis &&
+                        legacyAnalysis.path === firmwarePath &&
+                        sameFirmware(legacyAnalysis.value.firmware, firmware),
+        );
+        const selectedLegacyEntries = useMemo(() => {
+                if (!legacyAnalysis || !legacyAnalysisValid) return [];
+                return legacyAnalysis.value.catalogs.flatMap((catalog) =>
+                        catalog.rules
+                                .filter(
+                                        (rule) =>
+                                                rule.status === "applicable" &&
+                                                selectedLegacyRules.includes(
+                                                        legacyRuleKey(
+                                                                catalog.catalog,
+                                                                rule.ruleId,
+                                                        ),
+                                                ),
+                                )
+                                .map((rule) => ({ catalog, rule })),
+                );
+        }, [legacyAnalysis, legacyAnalysisValid, selectedLegacyRules]);
+        const selectedLegacyRisks = useMemo(
+                () => [
+                        ...new Set(
+                                selectedLegacyEntries.flatMap(
+                                        ({ rule }) => rule.requiredRisks,
+                                ),
+                        ),
+                ],
+                [selectedLegacyEntries],
+        );
+        const acknowledgementHash = firmware?.sha256.slice(0, 8) ?? "";
+        const missingLegacyRisk = selectedLegacyRisks.find((risk) => {
+                const acknowledgement = legacyAcknowledgements[risk];
+                const note = acknowledgement?.note.trim() ?? "";
+                return !(
+                        acknowledgement?.confirmed &&
+                        validAcknowledgementNote(note, acknowledgementHash)
+                );
+        });
+        const legacyReady =
+                boardPath !== "legacyAbove4g" ||
+                (legacyAnalysisStatus === "ready" &&
+                        legacyAnalysisValid &&
+                        selectedLegacyEntries.length > 0 &&
+                        !missingLegacyRisk);
+        const legacyNextAction = (() => {
+                if (boardPath !== "legacyAbove4g") return "";
+                if (!firmware)
+                        return "Choose and inspect the exact firmware image first.";
+                if (legacyAnalysisStatus === "pending")
+                        return "Wait for the exact-image analysis to finish.";
+                if (legacyAnalysisStatus === "error")
+                        return `Analysis failed: ${legacyAnalysisError} Retry the exact image.`;
+                if (!legacyAnalysis || !legacyAnalysisValid)
+                        return "Analyze this exact firmware image before selecting legacy rules.";
+                if (!selectedLegacyEntries.length)
+                        return "Select at least one applicable rule. Only proven matches can be selected.";
+                if (missingLegacyRisk)
+                        return `Add an image-specific note and confirmation for ${riskLabels[missingLegacyRisk]}.`;
+                return "Legacy selections are pinned to this firmware fingerprint and ready for profile creation.";
+        })();
         const activeStep = plan?.steps.find((step) => step.state === "ready");
+        const invalidateLegacyAnalysis = () => {
+                legacyAnalysisRequest.current += 1;
+                setLegacyAnalysis(null);
+                setLegacyAnalysisStatus("idle");
+                setLegacyAnalysisError("");
+                setSelectedLegacyRules([]);
+                setLegacyAcknowledgements({});
+                if (busyActionRef.current === "legacy-analysis")
+                        busyActionRef.current = "";
+                setBusyAction((current) =>
+                        current === "legacy-analysis" ? "" : current,
+                );
+        };
         const run = async <T,>(
                 action: string,
                 work: () => Promise<T>,
                 apply: (value: T) => void,
                 success: string,
         ) => {
-                if (busyAction) return;
+                if (busyActionRef.current) return;
                 const current = ++sequence.current;
+                busyActionRef.current = action;
                 setBusyAction(action);
                 setActivity(null);
                 try {
@@ -136,7 +270,10 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                 text: operationError(error),
                         });
                 } finally {
-                        if (current === sequence.current) setBusyAction("");
+                        if (busyActionRef.current === action) {
+                                busyActionRef.current = "";
+                                setBusyAction("");
+                        }
                 }
         };
 
@@ -144,13 +281,11 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                 let live = true;
                 void Promise.all([
                         bridge.listMachineProfiles(),
-                        bridge.listLegacyPatchCatalogs(),
                         bridge.getNvidiaProfileInspectorInstallation(),
                 ])
-                        .then(([nextProfiles, nextCatalogs, nextInstallation]) => {
+                        .then(([nextProfiles, nextInstallation]) => {
                                 if (!live) return;
                                 setProfiles(nextProfiles);
-                                setCatalogs(nextCatalogs);
                                 setInstallation(nextInstallation);
                                 if (nextProfiles.length)
                                         setSelectedProfileId(
@@ -239,6 +374,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                 return { path, inspected };
                         },
                         ({ path, inspected }) => {
+                                invalidateLegacyAnalysis();
                                 setFirmwarePath(path);
                                 setFirmware(inspected);
                         },
@@ -248,10 +384,98 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                 void run(
                         "firmware",
                         () => bridge.inspectFirmwareImage(firmwarePath),
-                        setFirmware,
+                        (inspected) => {
+                                invalidateLegacyAnalysis();
+                                setFirmware(inspected);
+                        },
                         "Source firmware read and hashed. No firmware was modified.",
                 );
-        const createProfile = () =>
+        const analyzeLegacy = async () => {
+                if (busyActionRef.current || !firmware || !firmwarePath) return;
+                const request = ++legacyAnalysisRequest.current;
+                const requestedPath = firmwarePath;
+                const requestedFirmware = structuredClone(firmware);
+                busyActionRef.current = "legacy-analysis";
+                setBusyAction("legacy-analysis");
+                setLegacyAnalysisStatus("pending");
+                setLegacyAnalysisError("");
+                setLegacyAnalysis(null);
+                setSelectedLegacyRules([]);
+                setLegacyAcknowledgements({});
+                setActivity(null);
+                try {
+                        const value = await bridge.analyzeLegacyFirmware(requestedPath);
+                        if (request !== legacyAnalysisRequest.current) return;
+                        if (!sameFirmware(value.firmware, requestedFirmware)) {
+                                throw new Error(
+                                        "The firmware fingerprint changed between inspection and analysis.",
+                                );
+                        }
+                        setLegacyAnalysis({ path: requestedPath, value });
+                        setSelectedLegacyRules(
+                                value.catalogs.flatMap((catalog) =>
+                                        catalog.rules
+                                                .filter(
+                                                        (rule) =>
+                                                                rule.status ===
+                                                                        "applicable" &&
+                                                                rule.recommended,
+                                                )
+                                                .map((rule) =>
+                                                        legacyRuleKey(
+                                                                catalog.catalog,
+                                                                rule.ruleId,
+                                                        ),
+                                                ),
+                                ),
+                        );
+                        setLegacyAnalysisStatus("ready");
+                        setActivity({
+                                tone: "success",
+                                text: "Exact-image legacy analysis completed read-only. No firmware was modified.",
+                        });
+                } catch (error) {
+                        if (request !== legacyAnalysisRequest.current) return;
+                        const message = operationError(error);
+                        setLegacyAnalysisStatus("error");
+                        setLegacyAnalysisError(message);
+                        setActivity({ tone: "error", text: message });
+                } finally {
+                        if (request === legacyAnalysisRequest.current) {
+                                if (busyActionRef.current === "legacy-analysis")
+                                        busyActionRef.current = "";
+                                setBusyAction("");
+                        }
+                }
+        };
+        const toggleLegacyRule = (key: string, checked: boolean) =>
+                setSelectedLegacyRules((current) =>
+                        checked
+                                ? [...new Set([...current, key])]
+                                : current.filter((value) => value !== key),
+                );
+        const setLegacyRiskNote = (risk: LegacyPatchRisk, note: string) =>
+                setLegacyAcknowledgements((current) => ({
+                        ...current,
+                        [risk]: {
+                                note,
+                                confirmed: current[risk]?.confirmed ?? false,
+                        },
+                }));
+        const setLegacyRiskConfirmed = (
+                risk: LegacyPatchRisk,
+                confirmed: boolean,
+        ) =>
+                setLegacyAcknowledgements((current) => ({
+                        ...current,
+                        [risk]: {
+                                note: current[risk]?.note ?? "",
+                                confirmed,
+                        },
+                }));
+        const createProfile = () => {
+                if (!firmware) return;
+                const expectedFirmware = structuredClone(firmware);
                 void run(
                         "profile",
                         () =>
@@ -259,7 +483,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                         displayName,
                                         boardPath,
                                         firmwarePath,
-                                        expectedFirmware: structuredClone(firmware!),
+                                        expectedFirmware,
                                         recovery: {
                                                 method: recoveryMethod,
                                                 testedOrDocumented:
@@ -277,6 +501,54 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         instructionsUrl,
                                                 note: installNote,
                                         },
+                                        legacyPatches:
+                                                boardPath === "legacyAbove4g" &&
+                                                legacyAnalysis &&
+                                                legacyAnalysisValid
+                                                        ? {
+                                                                  upstreamCommit:
+                                                                          legacyAnalysis
+                                                                                  .value
+                                                                                  .upstreamCommit,
+                                                                  catalogs:
+                                                                          legacyAnalysis.value.catalogs
+                                                                                  .filter(
+                                                                                          (catalog) =>
+                                                                                                  selectedLegacyEntries.some(
+                                                                                                          (entry) =>
+                                                                                                                  entry.catalog.catalog ===
+                                                                                                                  catalog.catalog,
+                                                                                                  ),
+                                                                                  )
+                                                                                  .map(
+                                                                                          (catalog) => ({
+                                                                                                  catalog: catalog.catalog,
+                                                                                                  sourceSha256:
+                                                                                                          catalog.sourceSha256,
+                                                                                          }),
+                                                                                  ),
+                                                                  selections:
+                                                                          selectedLegacyEntries.map(
+                                                                                  ({ catalog, rule }) => ({
+                                                                                          catalog: catalog.catalog,
+                                                                                          ruleId: rule.ruleId,
+                                                                                          expectedMatches:
+                                                                                                  rule.expectedMatches!,
+                                                                                          requiredRisks:
+                                                                                                  rule.requiredRisks,
+                                                                                  }),
+                                                                          ),
+                                                                  acknowledgements:
+                                                                          selectedLegacyRisks.map(
+                                                                                  (risk) => ({
+                                                                                          risk,
+                                                                                          note: legacyAcknowledgements[
+                                                                                                  risk
+                                                                                          ]!.note.trim(),
+                                                                                  }),
+                                                                          ),
+                                                          }
+                                                        : undefined,
                                 }),
                         (bundle) => {
                                 setProfiles((current) => [
@@ -291,8 +563,11 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                 setPlan(bundle.plan);
                                 setPreflightExact(true);
                         },
-                        "Machine-bound profile created; the exact source image was preserved.",
+                        boardPath === "legacyAbove4g"
+                                ? `Machine-bound legacy profile created with ${selectedLegacyEntries.length} authoritative rule ${selectedLegacyEntries.length === 1 ? "selection" : "selections"}; no firmware was modified or flashed.`
+                                : "Machine-bound profile created; the exact source image was preserved.",
                 );
+        };
         const compare = () =>
                 void run(
                         "preflight",
@@ -570,6 +845,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                         value={firmwarePath}
                                                                         placeholder="Choose a vendor BIOS image or enter an absolute path"
                                                                         onChange={(event) => {
+                                                                                invalidateLegacyAnalysis();
                                                                                 setFirmwarePath(
                                                                                         event.target.value,
                                                                                 );
@@ -610,11 +886,12 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         <span>Board path</span>
                                                         <select
                                                                 value={boardPath}
-                                                                onChange={(event) =>
+                                                                onChange={(event) => {
+                                                                        invalidateLegacyAnalysis();
                                                                         setBoardPath(
                                                                                 event.target.value as BoardPath,
-                                                                        )
-                                                                }
+                                                                        );
+                                                                }}
                                                         >
                                                                 <option value="nativeResizableBar">
                                                                         Native Resizable BAR
@@ -701,10 +978,241 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 </label>
                                         </div>
                                         {boardPath === "legacyAbove4g" && (
-                                                <div className="notice warning compact-notice">
-                                                        <span>
-                                                                {catalogs.length} pinned legacy catalogs are available, but this screen cannot safely infer rule match counts. Legacy profile creation remains unavailable until exact selections are supplied by an authoritative workflow.
-                                                        </span>
+                                                <div
+                                                        className="legacy-analysis"
+                                                        aria-labelledby="legacy-analysis-title"
+                                                >
+                                                        <div className="legacy-analysis-head">
+                                                                <div>
+                                                                        <span className="step">READ-ONLY</span>
+                                                                        <h4 id="legacy-analysis-title">
+                                                                                Exact legacy patch analysis
+                                                                        </h4>
+                                                                        <p>
+                                                                                Match counts come only from the pinned Rust analyzer. Analysis does not mutate or flash the image.
+                                                                        </p>
+                                                                </div>
+                                                                <button
+                                                                        type="button"
+                                                                        onClick={() => void analyzeLegacy()}
+                                                                        disabled={
+                                                                                Boolean(busyAction) ||
+                                                                                !firmware
+                                                                        }
+                                                                >
+                                                                        {legacyAnalysisStatus ===
+                                                                        "pending"
+                                                                                ? "Analyzing exact image…"
+                                                                                : legacyAnalysisValid
+                                                                                  ? "Analyze again"
+                                                                                  : "Analyze exact image"}
+                                                                </button>
+                                                        </div>
+                                                        <p
+                                                                className={`legacy-next-action ${legacyReady ? "ready" : "blocked"}`}
+                                                                role="status"
+                                                                aria-live="polite"
+                                                        >
+                                                                {legacyNextAction}
+                                                        </p>
+                                                        {legacyAnalysis &&
+                                                                legacyAnalysisValid && (
+                                                                        <div className="legacy-results">
+                                                                                <div className="legacy-fingerprint">
+                                                                                        <span>Analyzed source</span>
+                                                                                        <strong>
+                                                                                                {legacyAnalysis.value.firmware.fileName} · {Math.round(legacyAnalysis.value.firmware.byteLength / 1048576)} MiB
+                                                                                        </strong>
+                                                                                        <small className="mono-wrap">
+                                                                                                SHA-256 {legacyAnalysis.value.firmware.sha256}
+                                                                                        </small>
+                                                                                </div>
+                                                                                {legacyAnalysis.value.catalogs.map(
+                                                                                        (catalog) => {
+                                                                                                const applicable =
+                                                                                                        catalog.rules.filter(
+                                                                                                                (rule) =>
+                                                                                                                        rule.status ===
+                                                                                                                        "applicable",
+                                                                                                        );
+                                                                                                const absent =
+                                                                                                        catalog.rules.filter(
+                                                                                                                (rule) =>
+                                                                                                                        rule.status ===
+                                                                                                                        "absent",
+                                                                                                        );
+                                                                                                const blocked =
+                                                                                                        catalog.rules.filter(
+                                                                                                                (rule) =>
+                                                                                                                        rule.status ===
+                                                                                                                        "blocked",
+                                                                                                        );
+                                                                                                return (
+                                                                                                        <section
+                                                                                                                className="legacy-catalog"
+                                                                                                                key={catalog.catalog}
+                                                                                                                aria-labelledby={`catalog-${catalog.catalog}`}
+                                                                                                        >
+                                                                                                                <div className="legacy-catalog-head">
+                                                                                                                        <div>
+                                                                                                                                <h5 id={`catalog-${catalog.catalog}`}>
+                                                                                                                                        {catalogLabels[catalog.catalog]}
+                                                                                                                                </h5>
+                                                                                                                                <small>
+                                                                                                                                        {applicable.length} applicable · {absent.length} absent · {blocked.length} blocked
+                                                                                                                                </small>
+                                                                                                                        </div>
+                                                                                                                        <span className="mono-wrap">
+                                                                                                                                source {shortHash(catalog.sourceSha256)}
+                                                                                                                        </span>
+                                                                                                                </div>
+                                                                                                                {applicable.length >
+                                                                                                                0 ? (
+                                                                                                                        <div className="legacy-rule-list">
+                                                                                                                                {applicable.map(
+                                                                                                                                        (rule) => {
+                                                                                                                                                const key =
+                                                                                                                                                        legacyRuleKey(
+                                                                                                                                                                catalog.catalog,
+                                                                                                                                                                rule.ruleId,
+                                                                                                                                                        );
+                                                                                                                                                return (
+                                                                                                                                                        <label
+                                                                                                                                                                className="legacy-rule"
+                                                                                                                                                                key={rule.ruleId}
+                                                                                                                                                        >
+                                                                                                                                                                <input
+                                                                                                                                                                        type="checkbox"
+                                                                                                                                                                        checked={selectedLegacyRules.includes(
+                                                                                                                                                                                key,
+                                                                                                                                                                        )}
+                                                                                                                                                                        onChange={(event) =>
+                                                                                                                                                                                toggleLegacyRule(
+                                                                                                                                                                                        key,
+                                                                                                                                                                                        event.target.checked,
+                                                                                                                                                                                )
+                                                                                                                                                                        }
+                                                                                                                                                                />
+                                                                                                                                                                <span>
+                                                                                                                                                                        <strong>
+                                                                                                                                                                                {rule.description ??
+                                                                                                                                                                                        "Pinned compatibility rule"}
+                                                                                                                                                                        </strong>
+                                                                                                                                                                        <small>
+                                                                                                                                                                                {rule.expectedMatches} exact {rule.expectedMatches === 1 ? "match" : "matches"} · section 0x{rule.sectionType.toString(16).padStart(2, "0")}
+                                                                                                                                                                        </small>
+                                                                                                                                                                        {rule.requiredRisks.length >
+                                                                                                                                                                                0 && (
+                                                                                                                                                                                <em>
+                                                                                                                                                                                        Requires {rule.requiredRisks.map((risk) => riskLabels[risk]).join(", ")}
+                                                                                                                                                                                </em>
+                                                                                                                                                                        )}
+                                                                                                                                                                </span>
+                                                                                                                                                                {rule.recommended && (
+                                                                                                                                                                        <b>RECOMMENDED</b>
+                                                                                                                                                                )}
+                                                                                                                                                        </label>
+                                                                                                                                                );
+                                                                                                                                        },
+                                                                                                                                )}
+                                                                                                                        </div>
+                                                                                                                ) : (
+                                                                                                                        <p className="legacy-empty">
+                                                                                                                                No applicable rules in this catalog.
+                                                                                                                        </p>
+                                                                                                                )}
+                                                                                                                {absent.length > 0 && (
+                                                                                                                        <p className="legacy-absent">
+                                                                                                                                {absent.length} rule{absent.length === 1 ? " is" : "s are"} absent from this image and cannot be selected.
+                                                                                                                        </p>
+                                                                                                                )}
+                                                                                                                {blocked.map(
+                                                                                                                        (rule) => (
+                                                                                                                                <div
+                                                                                                                                        className="legacy-blocked-rule"
+                                                                                                                                        key={rule.ruleId}
+                                                                                                                                >
+                                                                                                                                        <strong>
+                                                                                                                                                Blocked · {rule.description ?? "Pinned compatibility rule"}
+                                                                                                                                        </strong>
+                                                                                                                                        <span>
+                                                                                                                                                {rule.blockedReason ?? "The analyzer could not prove a safe match."}
+                                                                                                                                        </span>
+                                                                                                                                </div>
+                                                                                                                        ),
+                                                                                                                )}
+                                                                                                        </section>
+                                                                                                );
+                                                                                        },
+                                                                                )}
+                                                                                {selectedLegacyRisks.length >
+                                                                                        0 && (
+                                                                                        <section
+                                                                                                className="legacy-risk-panel"
+                                                                                                aria-labelledby="legacy-risk-title"
+                                                                                        >
+                                                                                                <h5 id="legacy-risk-title">
+                                                                                                        Explicit risk acknowledgements
+                                                                                                </h5>
+                                                                                                <p>
+                                                                                                        For each selected risk, describe this exact image and include fingerprint <code>{acknowledgementHash}</code>. A generic confirmation is refused.
+                                                                                                </p>
+                                                                                                {selectedLegacyRisks.map(
+                                                                                                        (risk) => {
+                                                                                                                const acknowledgement =
+                                                                                                                        legacyAcknowledgements[
+                                                                                                                                risk
+                                                                                                                        ];
+                                                                                                                const noteId = `risk-${risk}-note`;
+                                                                                                                return (
+                                                                                                                        <div
+                                                                                                                                className="legacy-risk"
+                                                                                                                                key={risk}
+                                                                                                                        >
+                                                                                                                                <label htmlFor={noteId}>
+                                                                                                                                        <strong>
+                                                                                                                                                {riskLabels[risk]}
+                                                                                                                                        </strong>
+                                                                                                                                        <span>
+                                                                                                                                                Image-specific acknowledgement note
+                                                                                                                                        </span>
+                                                                                                                                </label>
+                                                                                                                                <textarea
+                                                                                                                                        id={noteId}
+                                                                                                                                        value={acknowledgement?.note ?? ""}
+                                                                                                                                        onChange={(event) =>
+                                                                                                                                                setLegacyRiskNote(
+                                                                                                                                                        risk,
+                                                                                                                                                        event.target.value,
+                                                                                                                                                )
+                                                                                                                                        }
+                                                                                                                                        placeholder={`Describe the consequence for image ${acknowledgementHash}`}
+                                                                                                                                />
+                                                                                                                                <label className="consequence-check compact-check">
+                                                                                                                                        <input
+                                                                                                                                                type="checkbox"
+                                                                                                                                                checked={acknowledgement?.confirmed ?? false}
+                                                                                                                                                onChange={(event) =>
+                                                                                                                                                        setLegacyRiskConfirmed(
+                                                                                                                                                                risk,
+                                                                                                                                                                event.target.checked,
+                                                                                                                                                        )
+                                                                                                                                                }
+                                                                                                                                        />
+                                                                                                                                        <span>
+                                                                                                                                                <strong>
+                                                                                                                                                        I reviewed this risk for the exact analyzed firmware.
+                                                                                                                                                </strong>
+                                                                                                                                        </span>
+                                                                                                                                </label>
+                                                                                                                        </div>
+                                                                                                                );
+                                                                                                        },
+                                                                                                )}
+                                                                                        </section>
+                                                                                )}
+                                                                        </div>
+                                                                )}
                                                 </div>
                                         )}
                                         <label className="consequence-check">
@@ -739,8 +1247,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                 !installNote.trim() ||
                                                                 !recoveryNote.trim() ||
                                                                 !routeConfirmed ||
-                                                                boardPath ===
-                                                                        "legacyAbove4g"
+                                                                !legacyReady
                                                         }
                                                         onClick={createProfile}
                                                 >

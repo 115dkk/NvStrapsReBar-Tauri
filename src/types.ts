@@ -161,6 +161,31 @@ export type LegacyPatchCatalogView = {
         sourceSha256: string;
         rules: LegacyPatchRuleView[];
 };
+export type LegacyFirmwareRuleStatus = "applicable" | "absent" | "blocked";
+export type LegacyFirmwareRuleAnalysis = {
+        ruleId: string;
+        description: string | null;
+        sectionType: number;
+        requiredRisks: LegacyPatchRisk[];
+        status: LegacyFirmwareRuleStatus;
+        expectedMatches: number | null;
+        blockedReason: string | null;
+        recommended: boolean;
+};
+export type LegacyFirmwareCatalogAnalysis = {
+        catalog: LegacyPatchCatalogFile;
+        sourceSha256: string;
+        rules: LegacyFirmwareRuleAnalysis[];
+};
+export type LegacyFirmwareAnalysis = {
+        firmware: FirmwareFingerprint;
+        upstreamCommit: string;
+        catalogs: LegacyFirmwareCatalogAnalysis[];
+};
+export type LegacyRiskAcknowledgement = {
+        risk: LegacyPatchRisk;
+        note: string;
+};
 export type LegacyPatchProfile = {
         upstreamCommit: string;
         catalogs: { catalog: LegacyPatchCatalogFile; sourceSha256: string }[];
@@ -170,7 +195,7 @@ export type LegacyPatchProfile = {
                 expectedMatches: number;
                 requiredRisks: LegacyPatchRisk[];
         }[];
-        acknowledgements: { risk: LegacyPatchRisk; note: string }[];
+        acknowledgements: LegacyRiskAcknowledgement[];
 };
 export type CreateProfileRequest = {
         displayName: string;
