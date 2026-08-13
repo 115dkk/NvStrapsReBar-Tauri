@@ -41,6 +41,59 @@ const MAX_LZMA_UNCOMPRESSED_SIZE: u64 = 256 * 1024 * 1024;
 const FFS_FILE_DATA_VALID: u8 = 0x04;
 const FFS_FILE_DELETED: u8 = 0x10;
 const FFS_FILE_HEADER_INVALID: u8 = 0x20;
+const UEFI_CAPSULE_HEADER_SIZE: usize = 28;
+const UEFI_CAPSULE_ALLOWED_FLAGS: u32 = 0x0007_0000;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum FirmwareEnvelope {
+    RawOrVendorImage,
+    UefiCapsule(UefiCapsuleHeader),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UefiCapsuleHeader {
+    pub capsule_guid: [u8; 16],
+    pub header_size: u32,
+    pub flags: u32,
+    pub capsule_image_size: u32,
+}
+
+pub fn inspect_firmware_envelope(firmware: &[u8]) -> FirmwareEnvelope {
+    if firmware.len() < UEFI_CAPSULE_HEADER_SIZE {
+        return FirmwareEnvelope::RawOrVendorImage;
+    }
+    let header_size = u32::from_le_bytes(
+        firmware[16..20]
+            .try_into()
+            .expect("capsule header slice was checked"),
+    );
+    let flags = u32::from_le_bytes(
+        firmware[20..24]
+            .try_into()
+            .expect("capsule header slice was checked"),
+    );
+    let capsule_image_size = u32::from_le_bytes(
+        firmware[24..28]
+            .try_into()
+            .expect("capsule header slice was checked"),
+    );
+    let plausible = header_size as usize >= UEFI_CAPSULE_HEADER_SIZE
+        && header_size.is_multiple_of(8)
+        && header_size as usize <= firmware.len()
+        && capsule_image_size as usize == firmware.len()
+        && flags & !UEFI_CAPSULE_ALLOWED_FLAGS == 0;
+    if !plausible {
+        return FirmwareEnvelope::RawOrVendorImage;
+    }
+    FirmwareEnvelope::UefiCapsule(UefiCapsuleHeader {
+        capsule_guid: firmware[..16]
+            .try_into()
+            .expect("capsule GUID slice was checked"),
+        header_size,
+        flags,
+        capsule_image_size,
+    })
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FirmwareInjection {
@@ -58,6 +111,7 @@ pub enum InjectionError {
     InvalidFirmware(&'static str),
     DriverAlreadyPresent,
     Compression(String),
+    UnsupportedCapsule(UefiCapsuleHeader),
     NoTopLevelDxeVolume,
     NoSpace,
 }
@@ -69,6 +123,11 @@ impl fmt::Display for InjectionError {
             Self::InvalidFirmware(reason) => write!(formatter, "invalid firmware image: {reason}"),
             Self::DriverAlreadyPresent => formatter.write_str("driver GUID is already present"),
             Self::Compression(reason) => write!(formatter, "firmware compression failed: {reason}"),
+            Self::UnsupportedCapsule(header) => write!(
+                formatter,
+                "standard UEFI capsule {:02x?} (header {}, flags {:#x}) cannot be modified without a vendor signing route",
+                header.capsule_guid, header.header_size, header.flags
+            ),
             Self::NoTopLevelDxeVolume => {
                 formatter.write_str("no writable DXE volume was found through a supported layout")
             }
@@ -212,6 +271,7 @@ pub fn inject_ffs(
     firmware: &[u8],
     driver_ffs: &[u8],
 ) -> Result<(Vec<u8>, FirmwareInjection), InjectionError> {
+    reject_uefi_capsule(firmware)?;
     inject_ffs_at_depth(firmware, driver_ffs, 0)
 }
 
@@ -220,6 +280,7 @@ pub fn patch_legacy_firmware(
     catalog: &LegacyPatchCatalog,
     selections: &[LegacyPatchSelection],
 ) -> Result<(Vec<u8>, LegacyFirmwarePatch), LegacyFirmwarePatchError> {
+    reject_uefi_capsule(firmware)?;
     if selections.is_empty() {
         return Err(LegacyFirmwarePatchError::EmptySelection);
     }
@@ -266,6 +327,13 @@ pub fn patch_legacy_firmware(
             applications,
         },
     ))
+}
+
+fn reject_uefi_capsule(firmware: &[u8]) -> Result<(), InjectionError> {
+    match inspect_firmware_envelope(firmware) {
+        FirmwareEnvelope::RawOrVendorImage => Ok(()),
+        FirmwareEnvelope::UefiCapsule(header) => Err(InjectionError::UnsupportedCapsule(header)),
+    }
 }
 
 fn patch_rule_in_firmware(
@@ -1668,6 +1736,35 @@ mod tests {
             inject_ffs(&firmware, &ffs),
             Err(InjectionError::DriverAlreadyPresent)
         ));
+    }
+
+    #[test]
+    fn detects_and_refuses_standard_uefi_capsules() {
+        let mut capsule = vec![0_u8; 64];
+        capsule[..16].copy_from_slice(&[
+            0xbd, 0x86, 0x66, 0x3b, 0x76, 0x0d, 0x30, 0x40, 0xb7, 0x0e, 0xb5, 0x51, 0x9e, 0x2f,
+            0xc5, 0xa0,
+        ]);
+        capsule[16..20].copy_from_slice(&32_u32.to_le_bytes());
+        capsule[20..24].copy_from_slice(&0x0005_0000_u32.to_le_bytes());
+        let capsule_size = capsule.len() as u32;
+        capsule[24..28].copy_from_slice(&capsule_size.to_le_bytes());
+
+        let FirmwareEnvelope::UefiCapsule(header) = inspect_firmware_envelope(&capsule) else {
+            panic!("capsule was not detected");
+        };
+        assert_eq!(header.header_size, 32);
+        assert_eq!(header.flags, 0x0005_0000);
+        assert!(matches!(
+            inject_ffs(&capsule, &build_ffs(&synthetic_driver_image()).unwrap()),
+            Err(InjectionError::UnsupportedCapsule(_))
+        ));
+
+        capsule[24..28].copy_from_slice(&63_u32.to_le_bytes());
+        assert_eq!(
+            inspect_firmware_envelope(&capsule),
+            FirmwareEnvelope::RawOrVendorImage
+        );
     }
 
     #[test]
