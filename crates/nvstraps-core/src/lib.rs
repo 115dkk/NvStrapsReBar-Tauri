@@ -3,6 +3,7 @@
 
 extern crate alloc;
 
+pub mod boot_policy;
 pub mod config;
 pub mod pci;
 pub mod registry;
