@@ -9,9 +9,9 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use thiserror::Error;
 
 use crate::{
-    BoardPath, DeploymentPlan, EvidenceKind, FirmwareFingerprint, FirmwareInstallRoute,
+    BoardPath, DeploymentPlan, DeploymentWorkflow, FirmwareFingerprint, FirmwareInstallRoute,
     MachineIdentity, MachineProfile, PlanError, ProfileError, RecoveryCapability, Sha256Digest,
-    StepEvidence, StepId, StepState,
+    StepId,
 };
 
 static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
@@ -133,7 +133,7 @@ impl DeploymentStore {
             &profile.original_firmware.sha256,
         )?;
 
-        let mut plan = match self.load_plan(profile) {
+        let plan = match self.load_plan(profile) {
             Ok(plan) => plan,
             Err(StoreError::MissingPlan(_)) => {
                 let plan = DeploymentPlan::for_profile(profile)?;
@@ -142,28 +142,23 @@ impl DeploymentStore {
             }
             Err(error) => return Err(error),
         };
-        for (step, kind, value) in [
-            (
-                StepId::VerifyProfile,
-                EvidenceKind::ExactProfileMatch,
-                profile.profile_id.as_str(),
-            ),
+        let mut workflow = DeploymentWorkflow::from_plan(self, profile, plan)?;
+        for (step, value) in [
+            (StepId::VerifyProfile, profile.profile_id.as_str()),
             (
                 StepId::ConfirmRecovery,
-                EvidenceKind::RecoveryRouteConfirmed,
                 profile.recovery.method.evidence_value(),
             ),
             (
                 StepId::PreserveOriginalFirmware,
-                EvidenceKind::OriginalFirmwareSha256,
                 profile.original_firmware.sha256.as_str(),
             ),
         ] {
-            if plan.active_step().is_some_and(|active| active.id == step) {
-                plan.complete(step, StepEvidence::new(kind, value)?)?;
-                self.save_plan(profile, &plan)?;
+            if !workflow.plan().is_step_completed(step) {
+                workflow.record_step(step, value)?;
             }
         }
+        let plan = workflow.into_plan();
 
         Ok(ProvisionedDeployment {
             profile: profile.clone(),
@@ -341,16 +336,13 @@ impl DeploymentStore {
             .ok_or(StoreError::PackageRequiresPinnedInstallRoute)?;
         let (patched_artifact, patched_bytes) =
             self.load_artifact(profile, ArtifactKind::PatchedFirmware)?;
-        let patched_evidence = plan
-            .steps
-            .iter()
-            .find(|step| step.id == StepId::VerifyPatchedArtifact)
-            .filter(|step| step.state == StepState::Completed)
-            .and_then(|step| step.evidence.as_ref());
-        if patched_evidence.is_none_or(|evidence| {
-            evidence.kind != EvidenceKind::PatchedFirmwareSha256
-                || evidence.value != patched_artifact.sha256.as_str()
-        }) {
+        if plan
+            .require_completed_value(
+                StepId::VerifyPatchedArtifact,
+                patched_artifact.sha256.as_str(),
+            )
+            .is_err()
+        {
             return Err(StoreError::PatchedArtifactNotVerified);
         }
 
@@ -375,16 +367,10 @@ impl DeploymentStore {
                     }
                     other => other,
                 })?;
-            let evidence = plan
-                .steps
-                .iter()
-                .find(|step| step.id == StepId::ApplyLegacyBoardPatches)
-                .filter(|step| step.state == StepState::Completed)
-                .and_then(|step| step.evidence.as_ref());
-            if evidence.is_none_or(|evidence| {
-                evidence.kind != EvidenceKind::LegacyPatchReceipt
-                    || evidence.value != receipt.0.sha256.as_str()
-            }) {
+            if plan
+                .require_completed_value(StepId::ApplyLegacyBoardPatches, receipt.0.sha256.as_str())
+                .is_err()
+            {
                 return Err(StoreError::LegacyPatchReceiptNotVerified);
             }
             Some(receipt)
@@ -918,9 +904,9 @@ mod tests {
     };
 
     use crate::{
-        BoardPath, FirmwareFingerprint, FirmwareInstallMethod, FirmwareInstallRoute,
+        BoardPath, EvidenceKind, FirmwareFingerprint, FirmwareInstallMethod, FirmwareInstallRoute,
         GpuFingerprint, MachineIdentity, PciLocation, RecoveryCapability, RecoveryMethod,
-        StepState,
+        StepEvidence, StepState,
     };
 
     use super::*;
