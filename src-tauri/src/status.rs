@@ -37,6 +37,13 @@ impl DriverStatus {
             efi_status: decoded.efi_status,
         }
     }
+
+    pub fn proves_driver_loaded(&self) -> bool {
+        matches!(
+            self.code,
+            20 | 30 | 40 | 50 | 60 | 70 | 80 | 90 | 100 | 110 | 120 | 130 | 135 | 140 | 150
+        )
+    }
 }
 
 fn status_description(code: u32) -> (&'static str, &'static str, &'static str) {
@@ -111,5 +118,14 @@ mod tests {
         let status = DriverStatus::from_raw(raw);
         assert_eq!(status.kind, "pci_rebar_configured");
         assert_eq!(status.pci_location.as_deref(), Some("01:01.0"));
+    }
+
+    #[test]
+    fn only_known_non_error_statuses_prove_the_driver_loaded() {
+        assert!(DriverStatus::from_raw(40).proves_driver_loaded());
+        assert!(DriverStatus::from_raw(150).proves_driver_loaded());
+        assert!(!DriverStatus::from_raw(10).proves_driver_loaded());
+        assert!(!DriverStatus::from_raw(159).proves_driver_loaded());
+        assert!(!DriverStatus::from_raw(42).proves_driver_loaded());
     }
 }
