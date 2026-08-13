@@ -66,20 +66,29 @@ application can perform these steps without an external build environment:
 1. inventory the exact board, BIOS, GPU, PCI bridge, and BAR0 topology;
 2. inspect and hash a user-selected vendor firmware image;
 3. pin the board path, recovery route, vendor install route, source image, and current topology;
-4. reject a changed board, BIOS, GPU, BAR0 range, source image, or built-in patch catalog;
+4. reject identity changes outside the plan's typed boot handoffs, plus any changed source image
+   or built-in patch catalog;
 5. apply selected legacy-board patches when the profile explicitly requires them;
 6. inject the bundled Rust FFS into a new immutable output without overwriting the source;
 7. export a verified package containing the flash artifact, original recovery image, manifests,
    receipts, operator instructions, and SHA-256 list;
-8. validate and write the NvStrapsReBar EFI configuration with byte-for-byte readback;
-9. preview and, after a saved-work acknowledgement, request either a firmware-UI restart or the
+8. derive a guarded configuration from the current Turing inventory, using registry mode `1` and
+   exact-location fallback rules only for unlisted devices;
+9. validate and write that exact NvStrapsReBar EFI configuration with byte-for-byte readback;
+10. preview and, after a saved-work acknowledgement, request either a firmware-UI restart or the
    normal restart that applies the configuration, always without forced application closure;
-10. prove the returned patched-firmware boot and Rust DXE execution from the current boot's
+11. prove the returned patched-firmware boot and Rust DXE execution from the current boot's
     volatile status variable, and prove the later configuration reboot from Windows boot time;
-11. require complete, internally consistent BAR1 telemetry for every pinned GPU and an exact match
+12. require complete, internally consistent BAR1 telemetry for every pinned GPU and an exact match
     to the independent Windows PCI resource size before advancing; and
-12. install the pinned official Profile Inspector release, back up customized profiles, and open
+13. install the pinned official Profile Inspector release, back up customized profiles, and open
     its UI without claiming that a policy was applied.
+
+An exact vendor-firmware update can legitimately change the reported BIOS version/release date and
+firmware-assigned BAR0. The plan permits only those fields before the first proven post-flash boot;
+board identity, BIOS vendor, GPU/subsystem identity, PCI location, and bridge remain exact. The
+volatile DXE proof records the complete new identity. Across the later configuration reboot only
+BAR0 may move, and the Windows boot proof records that complete identity again.
 
 Windows supports directing the next restart to the firmware UI with `shutdown /r /fw`. The adapter
 uses a zero-second timeout without `/f`: Microsoft documents that `/f` can lose unsaved data and
@@ -152,5 +161,5 @@ firmware UI -> perform and attest vendor flash/settings -> boot Windows -> verif
 status -> write/read back config -> reboot -> verify later boot and BAR1 -> open backed-up Profile
 Inspector -> attest reviewed application policy`
 
-Every mismatch is a hard stop. Manual gates stay visible in the plan until evidence from their
-actual owner exists.
+Every mismatch outside those typed, one-boot transitions is a hard stop. Manual gates stay visible
+in the plan until evidence from their actual owner exists.

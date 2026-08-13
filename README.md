@@ -28,16 +28,19 @@ The `Deploy` workspace provides one guarded, resumable journey:
 8. record vendor flash and firmware-setting completion only through profile-, step-, and
    revision-bound operator confirmations;
 9. prove the returned firmware boot and Rust DXE execution from the current boot's volatile status;
-10. validate and save the NvStrapsReBar EFI configuration with byte-for-byte readback;
+10. derive a guarded configuration from the current Turing inventory, using the canonical registry
+    plus exact-location fallback rules, then validate and save it with byte-for-byte readback;
 11. request a normal restart without `/f`, then advance only after Windows proves a later boot;
 12. accept BAR1 evidence only when every pinned GPU has complete, consistent telemetry matching
     the independent Windows PCI resource size and exceeding 256 MiB; and
 13. install a pinned official NVIDIA Profile Inspector release, preserve a profile backup, open
     the external UI, and keep policy completion manual and explicit.
 
-The application hard-stops on a changed board, BIOS, topology, BAR0 range, firmware hash, legacy
-catalog, patch match count, stale plan revision, invalid DXE status, unproven reboot, or incomplete
-BAR1 evidence. Preparation, reboot acceptance, and external-tool launch are never reported as the
+The application hard-stops on an unapproved identity change, firmware hash, legacy catalog, patch
+match count, stale plan revision, invalid DXE status, unproven reboot, or incomplete BAR1 evidence.
+Only the controlled post-flash handoff may change BIOS version/release date and BAR0, and only the
+configuration reboot may relocate BAR0; each proven boot immediately re-pins the complete current
+identity. Preparation, reboot acceptance, and external-tool launch are never reported as the
 result owned by the next system or person.
 
 ## Modern and legacy board paths
@@ -121,6 +124,12 @@ variable boundary.
 Newer boards normally use GPU-side Turing auto-configuration and system-default PCI sizing. Older
 boards may also need an explicit PCI target size, but this must follow the exact analyzed board
 profile rather than trial-and-error defaults.
+
+The `Deploy` workspace does not submit a browser constant. At the configuration step, Rust
+re-enumerates the exact machine and derives a guarded draft: registry mode `1`, system-default PCI
+sizing, setup-change protection, and exact-location 2 GiB fallback rules only for unlisted Turing
+devices. The recommendation is rederived and must match the submitted draft at the privileged
+write boundary before the wire model is built and validated again.
 
 ## NVIDIA evidence and application profiles
 

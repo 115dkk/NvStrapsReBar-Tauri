@@ -10,14 +10,24 @@ recovery, the NVIDIA driver, or per-application NVIDIA policy.
 
 ### Machine Profile
 
-An immutable record of one exact board, BIOS, GPU/bridge/BAR0 topology, source-firmware
+An immutable record of one exact initial board, BIOS, GPU/bridge/BAR0 topology, source-firmware
 fingerprint, recovery route, firmware-install route, and optional legacy patch bundle. A changed
-identity or source image is a different Machine Profile, not an update to the old one.
+identity or source image outside the plan's controlled boot handoffs is a different Machine
+Profile, not an update to the old one.
 
 ### Exact-machine preflight
 
 A fresh comparison of the current board, BIOS, PCI topology, BAR0 ranges, and preserved source
-image with a Machine Profile. Every consequential deployment action requires an exact match.
+image with the latest pinned identity. Every consequential deployment action requires an exact
+match except for a narrowly typed boot handoff: the first post-flash boot may change only BIOS
+version/release date and BAR0, while the later configuration reboot may change only BAR0.
+
+### Boot Observation
+
+Canonical evidence containing the complete current identity and observation time after a proven
+boot. The first valid volatile DXE status re-pins the post-flash BIOS revision and BAR0. The later
+Windows boot-time proof re-pins configuration-time BAR0. All following actions compare exactly to
+the newest observation.
 
 ### Deployment Plan
 
@@ -72,6 +82,8 @@ are the installed `nvidia-smi.exe` and a pinned official NVIDIA Profile Inspecto
 - Source firmware is never overwritten, flashed, or treated as interchangeable by file name.
 - A Machine Profile and Deployment Plan are bound to the same profile ID, source SHA-256, and
   recovery route.
+- Controlled boot identity transitions never permit a different board, BIOS vendor, GPU identity,
+  subsystem, PCI location, or bridge. The resulting complete identity is immediately re-pinned.
 - Deployment Plan order, evidence kind, evidence value rules, and revision transitions have one
   canonical Rust owner.
 - Every persisted artifact is read back and content-addressed; an existing different artifact is

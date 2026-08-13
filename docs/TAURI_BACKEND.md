@@ -119,6 +119,7 @@ the expected active step.
 | `preview_manual_deployment_step` | `{ profileId }` | Exact active manual gate, warnings, and a token bound to profile, step, and plan revision; no completion |
 | `confirm_manual_deployment_step` | `{ request: { profileId, stepId, confirmationToken, confirmed } }` | New plan revision only for vendor flash, firmware settings, or reviewed NVIDIA application policy |
 | `verify_deployment_driver` | `{ profileId }` | Reads exactly eight status bytes and accepts only a known non-error Rust DXE status; the volatile variable also proves the current boot and may advance both boot and driver steps |
+| `get_recommended_deployment_config` | `{ profileId }` | Re-enumerated, exact-machine guarded `ConfigDraft` plus Turing, registry-managed, and exact-fallback counts; only valid at the configuration-write step |
 | `save_deployment_config` | `{ request: { profileId, draft } }` | Re-enumeration, validation, EFI write, byte-for-byte readback, save receipt, and advanced plan |
 | `verify_configuration_reboot` | `{ profileId }` | Advances only when the current Windows boot time is later than the recorded configuration readback time |
 
@@ -127,6 +128,13 @@ Inspector is not evidence. The token becomes stale as soon as the profile, activ
 revision changes. `RebootAfterFirmware` is not operator-attested: the status variable is
 boot-service/runtime-only rather than non-volatile, so a valid current value is stronger evidence
 that the Rust driver ran during the current boot.
+
+The recommended draft uses canonical registry mode `1`, system-default PCI sizing, setup-change
+protection, and no global mask override. Each unlisted Turing GPU receives a deterministic
+exact-location fallback rule using its backend-derived selector; non-Turing inventory cannot
+produce a recommendation. Rust builds the complete wire model before returning the recommendation
+and rederives it at save time; the submitted draft must be identical before Rust rebuilds the wire
+model, so the client cannot turn a preview constant into a different privileged write.
 
 ## Restart and external-adapter commands
 
@@ -159,6 +167,9 @@ UI, and launching it never completes the final application-policy gate.
   profile and original-firmware digest.
 - Consequential commands re-enumerate the exact machine and require the active plan step rather
   than trusting stale React state.
+- Before the first proven post-flash boot, comparison permits only BIOS version/release date and
+  BAR0 to change. The resulting `BootObservation` becomes the exact identity. The later
+  configuration reboot permits only BAR0 relocation and re-pins it the same way.
 - A plan revision is written before it replaces the workflow's in-memory state. A failed revision
   write therefore cannot expose a transition that was not durably stored.
 - Legacy analysis and preparation never mutate the selected input bytes.
