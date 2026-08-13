@@ -18,7 +18,7 @@ mod store;
 
 pub use store::{ArtifactKind, DeploymentStore, ProvisionedDeployment, StoreError, StoredArtifact};
 
-pub const PROFILE_SCHEMA_VERSION: u8 = 2;
+pub const PROFILE_SCHEMA_VERSION: u8 = 3;
 pub const PLAN_SCHEMA_VERSION: u8 = 1;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
@@ -362,6 +362,54 @@ pub struct RecoveryCapability {
     pub note: String,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum FirmwareInstallMethod {
+    FirmwareSetupUtility,
+    UsbFlashback,
+    VendorWindowsUtility,
+    ExternalSpiProgrammer,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FirmwareInstallRoute {
+    pub method: FirmwareInstallMethod,
+    pub artifact_file_name: String,
+    pub tested_or_documented: bool,
+    pub official_instructions_url: String,
+    pub note: String,
+}
+
+impl FirmwareInstallRoute {
+    fn normalized(mut self) -> Result<Self, ProfileError> {
+        self.artifact_file_name = required_text(
+            "firmware install artifact file name",
+            self.artifact_file_name,
+        )?;
+        if !is_safe_windows_file_name(&self.artifact_file_name) {
+            return Err(ProfileError::InvalidInstallArtifactFileName);
+        }
+        if !self.tested_or_documented {
+            return Err(ProfileError::FirmwareInstallRouteNotEstablished);
+        }
+        self.official_instructions_url = required_text(
+            "official firmware install instructions URL",
+            self.official_instructions_url,
+        )?;
+        if !self.official_instructions_url.starts_with("https://")
+            || self
+                .official_instructions_url
+                .chars()
+                .any(char::is_whitespace)
+        {
+            return Err(ProfileError::InvalidOfficialInstructionsUrl);
+        }
+        self.note = required_text("firmware install note", self.note)?;
+        Ok(self)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MachineProfile {
@@ -374,6 +422,8 @@ pub struct MachineProfile {
     pub identity: MachineIdentity,
     pub original_firmware: FirmwareFingerprint,
     pub recovery: RecoveryCapability,
+    #[serde(default)]
+    pub firmware_install: Option<FirmwareInstallRoute>,
 }
 
 impl MachineProfile {
@@ -383,6 +433,7 @@ impl MachineProfile {
         identity: MachineIdentity,
         original_firmware: FirmwareFingerprint,
         recovery: RecoveryCapability,
+        firmware_install: FirmwareInstallRoute,
     ) -> Result<Self, ProfileError> {
         Self::create_with_legacy(
             display_name,
@@ -390,6 +441,7 @@ impl MachineProfile {
             identity,
             original_firmware,
             recovery,
+            firmware_install,
             None,
         )
     }
@@ -400,6 +452,7 @@ impl MachineProfile {
         identity: MachineIdentity,
         mut original_firmware: FirmwareFingerprint,
         mut recovery: RecoveryCapability,
+        firmware_install: FirmwareInstallRoute,
         legacy_patches: Option<LegacyPatchProfile>,
     ) -> Result<Self, ProfileError> {
         let display_name = required_text("profile display name", display_name.into())?;
@@ -413,6 +466,7 @@ impl MachineProfile {
             return Err(ProfileError::RecoveryNotEstablished);
         }
         recovery.note = required_text("recovery note", recovery.note)?;
+        let firmware_install = firmware_install.normalized()?;
         match (board_path, &legacy_patches) {
             (BoardPath::LegacyAbove4g, None) => {
                 return Err(ProfileError::LegacyPatchProfileRequired);
@@ -429,6 +483,8 @@ impl MachineProfile {
             &identity,
             &original_firmware,
             legacy_patches.as_ref(),
+            Some(recovery.method),
+            Some(&firmware_install),
         );
         let profile = Self {
             schema_version: PROFILE_SCHEMA_VERSION,
@@ -439,13 +495,14 @@ impl MachineProfile {
             identity,
             original_firmware,
             recovery,
+            firmware_install: Some(firmware_install),
         };
         profile.validate()?;
         Ok(profile)
     }
 
     pub fn validate(&self) -> Result<(), ProfileError> {
-        if !matches!(self.schema_version, 1 | PROFILE_SCHEMA_VERSION) {
+        if !matches!(self.schema_version, 1 | 2 | PROFILE_SCHEMA_VERSION) {
             return Err(ProfileError::UnsupportedSchema(self.schema_version));
         }
         required_text("profile display name", self.display_name.clone())?;
@@ -464,6 +521,19 @@ impl MachineProfile {
             return Err(ProfileError::RecoveryNotEstablished);
         }
         required_text("recovery note", self.recovery.note.clone())?;
+        match (self.schema_version, &self.firmware_install) {
+            (PROFILE_SCHEMA_VERSION, Some(route)) => {
+                if route.clone().normalized()? != *route {
+                    return Err(ProfileError::FirmwareInstallRouteNotCanonical);
+                }
+            }
+            (PROFILE_SCHEMA_VERSION, None) => {
+                return Err(ProfileError::FirmwareInstallRouteRequired);
+            }
+            (1 | 2, None) => {}
+            (1 | 2, Some(_)) => return Err(ProfileError::UnsupportedSchema(self.schema_version)),
+            _ => return Err(ProfileError::UnsupportedSchema(self.schema_version)),
+        }
         match (self.board_path, &self.legacy_patches) {
             (BoardPath::LegacyAbove4g, Some(legacy)) => legacy.validate()?,
             (BoardPath::LegacyAbove4g, None) => {
@@ -482,6 +552,8 @@ impl MachineProfile {
             &self.identity,
             &self.original_firmware,
             self.legacy_patches.as_ref(),
+            (self.schema_version == PROFILE_SCHEMA_VERSION).then_some(self.recovery.method),
+            self.firmware_install.as_ref(),
         );
         if self.profile_id != expected {
             return Err(ProfileError::ProfileIdMismatch);
@@ -955,6 +1027,16 @@ pub enum ProfileError {
     ReadFirmware(#[source] io::Error),
     #[error("a tested or documented recovery route is required before deployment")]
     RecoveryNotEstablished,
+    #[error("a tested or documented firmware install route is required before deployment")]
+    FirmwareInstallRouteNotEstablished,
+    #[error("new machine profiles require a pinned firmware install route")]
+    FirmwareInstallRouteRequired,
+    #[error("the firmware install route must be trimmed and canonical")]
+    FirmwareInstallRouteNotCanonical,
+    #[error("the firmware install artifact must be a safe Windows file name, not a path")]
+    InvalidInstallArtifactFileName,
+    #[error("official firmware install instructions must use an HTTPS URL without whitespace")]
+    InvalidOfficialInstructionsUrl,
     #[error("profile schema version {0} is not supported")]
     UnsupportedSchema(u8),
     #[error("PCI device/function values are outside the encoded range")]
@@ -1080,6 +1162,29 @@ fn required_text(field: &'static str, value: String) -> Result<String, ProfileEr
     }
 }
 
+fn is_safe_windows_file_name(value: &str) -> bool {
+    if value.len() > 255
+        || value.ends_with(['.', ' '])
+        || value.bytes().any(|byte| byte < 32)
+        || value.chars().any(|character| {
+            matches!(
+                character,
+                '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*'
+            )
+        })
+    {
+        return false;
+    }
+    let stem = value
+        .split_once('.')
+        .map_or(value, |(stem, _)| stem)
+        .to_ascii_uppercase();
+    !matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        && !(stem.len() == 4
+            && (stem.starts_with("COM") || stem.starts_with("LPT"))
+            && matches!(stem.as_bytes()[3], b'1'..=b'9'))
+}
+
 fn compare_field(
     differences: &mut Vec<ProfileDifference>,
     field: &str,
@@ -1100,6 +1205,8 @@ fn profile_id(
     identity: &MachineIdentity,
     firmware: &FirmwareFingerprint,
     legacy_patches: Option<&LegacyPatchProfile>,
+    recovery_method: Option<RecoveryMethod>,
+    firmware_install: Option<&FirmwareInstallRoute>,
 ) -> String {
     let mut hasher = Sha256::new();
     hash_field(
@@ -1153,8 +1260,36 @@ fn profile_id(
             hash_field(&mut hasher, &[legacy_risk_code(acknowledgement.risk)]);
         }
     }
+    if let Some(method) = recovery_method {
+        hash_field(&mut hasher, &[recovery_method_code(method)]);
+    }
+    if let Some(route) = firmware_install {
+        hash_field(&mut hasher, &[firmware_install_method_code(route.method)]);
+        hash_field(&mut hasher, route.artifact_file_name.as_bytes());
+        hash_field(&mut hasher, route.official_instructions_url.as_bytes());
+        hash_field(&mut hasher, route.note.as_bytes());
+    }
     let digest = hasher.finalize();
     format!("nvstraps-{}", hex(&digest[..12]))
+}
+
+const fn recovery_method_code(method: RecoveryMethod) -> u8 {
+    match method {
+        RecoveryMethod::DualBios => 1,
+        RecoveryMethod::UsbFlashback => 2,
+        RecoveryMethod::VendorRecovery => 3,
+        RecoveryMethod::ExternalSpiProgrammer => 4,
+        RecoveryMethod::None => 5,
+    }
+}
+
+const fn firmware_install_method_code(method: FirmwareInstallMethod) -> u8 {
+    match method {
+        FirmwareInstallMethod::FirmwareSetupUtility => 1,
+        FirmwareInstallMethod::UsbFlashback => 2,
+        FirmwareInstallMethod::VendorWindowsUtility => 3,
+        FirmwareInstallMethod::ExternalSpiProgrammer => 4,
+    }
 }
 
 const fn legacy_catalog_code(catalog: LegacyPatchCatalogFile) -> u8 {
@@ -1253,6 +1388,18 @@ mod tests {
         .unwrap()
     }
 
+    fn firmware_install() -> FirmwareInstallRoute {
+        FirmwareInstallRoute {
+            method: FirmwareInstallMethod::FirmwareSetupUtility,
+            artifact_file_name: "E7D25IMS.1N0".into(),
+            tested_or_documented: true,
+            official_instructions_url:
+                "https://download.msi.com/archive/mnu_exe/mb/PROZ690-AWIFIDDR4_PROZ690-ADDR4100x150.pdf"
+                    .into(),
+            note: "Select the pinned image in M-FLASH".into(),
+        }
+    }
+
     fn profile(path: BoardPath) -> MachineProfile {
         let legacy = (path == BoardPath::LegacyAbove4g).then(legacy_patch_profile);
         MachineProfile::create_with_legacy(
@@ -1265,6 +1412,7 @@ mod tests {
                 tested_or_documented: true,
                 note: "Rear-panel Flash BIOS button with a known-good USB drive".into(),
             },
+            firmware_install(),
             legacy,
         )
         .unwrap()
@@ -1293,6 +1441,7 @@ mod tests {
                 tested_or_documented: true,
                 note: "hardware selector tested".into(),
             },
+            firmware_install(),
         )
         .unwrap();
         let second = MachineProfile::create(
@@ -1305,6 +1454,7 @@ mod tests {
                 tested_or_documented: true,
                 note: "different human note".into(),
             },
+            firmware_install(),
         )
         .unwrap();
 
@@ -1324,6 +1474,7 @@ mod tests {
                 tested_or_documented: false,
                 note: String::new(),
             },
+            firmware_install(),
         )
         .unwrap_err();
         assert!(matches!(error, ProfileError::RecoveryNotEstablished));
@@ -1342,6 +1493,7 @@ mod tests {
             identity(vec![gpu(0x1e81, 1)]),
             firmware(),
             recovery.clone(),
+            firmware_install(),
         )
         .unwrap_err();
         assert!(matches!(missing, ProfileError::LegacyPatchProfileRequired));
@@ -1352,6 +1504,7 @@ mod tests {
             identity(vec![gpu(0x1e81, 1)]),
             firmware(),
             recovery.clone(),
+            firmware_install(),
             Some(legacy_patch_profile()),
         )
         .unwrap_err();
@@ -1369,6 +1522,7 @@ mod tests {
             identity(vec![gpu(0x1e81, 1)]),
             firmware(),
             recovery,
+            firmware_install(),
             Some(changed_bundle),
         )
         .unwrap();
@@ -1376,12 +1530,61 @@ mod tests {
     }
 
     #[test]
-    fn native_schema_one_profiles_remain_loadable() {
-        let mut legacy_schema = profile(BoardPath::NativeResizableBar);
-        legacy_schema.schema_version = 1;
+    fn earlier_profile_schemas_remain_loadable_without_an_install_route() {
+        for (schema_version, path) in [
+            (1, BoardPath::NativeResizableBar),
+            (2, BoardPath::LegacyAbove4g),
+        ] {
+            let mut legacy_schema = profile(path);
+            legacy_schema.schema_version = schema_version;
+            legacy_schema.firmware_install = None;
+            legacy_schema.profile_id = profile_id(
+                legacy_schema.board_path,
+                &legacy_schema.identity,
+                &legacy_schema.original_firmware,
+                legacy_schema.legacy_patches.as_ref(),
+                None,
+                None,
+            );
 
-        legacy_schema.validate().unwrap();
-        DeploymentPlan::for_profile(&legacy_schema).unwrap();
+            legacy_schema.validate().unwrap();
+            DeploymentPlan::for_profile(&legacy_schema).unwrap();
+        }
+    }
+
+    #[test]
+    fn install_route_is_safe_canonical_and_part_of_the_profile_id() {
+        let first = profile(BoardPath::NativeResizableBar);
+        let mut route = firmware_install();
+        route.method = FirmwareInstallMethod::UsbFlashback;
+        route.artifact_file_name = "MSI.ROM".into();
+        route.note = "Use only the rear Flash BIOS port".into();
+        let second = MachineProfile::create(
+            "same machine",
+            BoardPath::NativeResizableBar,
+            identity(vec![gpu(0x1e81, 1)]),
+            firmware(),
+            first.recovery.clone(),
+            route,
+        )
+        .unwrap();
+        assert_ne!(first.profile_id, second.profile_id);
+
+        let mut unsafe_route = firmware_install();
+        unsafe_route.artifact_file_name = "../MSI.ROM".into();
+        let error = MachineProfile::create(
+            "unsafe route",
+            BoardPath::NativeResizableBar,
+            identity(vec![gpu(0x1e81, 1)]),
+            firmware(),
+            first.recovery,
+            unsafe_route,
+        )
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            ProfileError::InvalidInstallArtifactFileName
+        ));
     }
 
     #[test]

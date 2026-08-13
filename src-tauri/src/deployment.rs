@@ -5,9 +5,9 @@ use std::{
 
 use nvstraps_deploy::{
     ArtifactKind, BoardPath, DeploymentPlan, DeploymentStore, EvidenceKind, FirmwareFingerprint,
-    LegacyPatchCatalogFile, LegacyPatchProfile, LegacyPatchRisk, MachineIdentity, MachineProfile,
-    ProfileMatch, RecoveryCapability, Sha256Digest, StepEvidence, StepId, StepState,
-    StoredArtifact,
+    FirmwareInstallRoute, LegacyPatchCatalogFile, LegacyPatchProfile, LegacyPatchRisk,
+    MachineIdentity, MachineProfile, ProfileMatch, RecoveryCapability, Sha256Digest, StepEvidence,
+    StepId, StepState, StoredArtifact,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, path::BaseDirectory};
@@ -25,6 +25,7 @@ pub struct CreateProfileRequest {
     pub board_path: BoardPath,
     pub firmware_path: String,
     pub recovery: RecoveryCapability,
+    pub firmware_install: FirmwareInstallRoute,
     pub legacy_patches: Option<LegacyPatchProfile>,
 }
 
@@ -790,6 +791,7 @@ fn build_profile(
         identity,
         firmware,
         request.recovery,
+        request.firmware_install,
         request.legacy_patches,
     )
     .map_err(BackendError::from)?;
@@ -960,8 +962,8 @@ mod tests {
     };
 
     use nvstraps_deploy::{
-        GpuFingerprint, LegacyPatchCatalogFile, LegacyPatchCatalogPin, LegacyPatchSelection,
-        PciLocation, RecoveryMethod, Sha256Digest,
+        FirmwareInstallMethod, GpuFingerprint, LegacyPatchCatalogFile, LegacyPatchCatalogPin,
+        LegacyPatchSelection, PciLocation, RecoveryMethod, Sha256Digest,
     };
 
     use super::*;
@@ -1034,9 +1036,20 @@ mod tests {
                 tested_or_documented: true,
                 note: "documented recovery".into(),
             },
+            firmware_install(),
             legacy_patches,
         )
         .unwrap()
+    }
+
+    fn firmware_install() -> FirmwareInstallRoute {
+        FirmwareInstallRoute {
+            method: FirmwareInstallMethod::FirmwareSetupUtility,
+            artifact_file_name: "vendor.bin".into(),
+            tested_or_documented: true,
+            official_instructions_url: "https://vendor.invalid/manual".into(),
+            note: "Select the pinned artifact in firmware setup".into(),
+        }
     }
 
     fn valid_builtin_legacy_profile() -> LegacyPatchProfile {
@@ -1170,6 +1183,7 @@ mod tests {
                 tested_or_documented: false,
                 note: String::new(),
             },
+            firmware_install: firmware_install(),
             legacy_patches: None,
         };
         let firmware = FirmwareFingerprint {
@@ -1207,6 +1221,7 @@ mod tests {
                 tested_or_documented: true,
                 note: "tested clip and backup".into(),
             },
+            firmware_install: firmware_install(),
             legacy_patches: Some(forged),
         };
         let firmware = FirmwareFingerprint {

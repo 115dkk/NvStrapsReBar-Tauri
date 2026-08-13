@@ -524,8 +524,9 @@ mod tests {
     };
 
     use crate::{
-        BoardPath, FirmwareFingerprint, GpuFingerprint, MachineIdentity, PciLocation,
-        RecoveryCapability, RecoveryMethod, StepState,
+        BoardPath, FirmwareFingerprint, FirmwareInstallMethod, FirmwareInstallRoute,
+        GpuFingerprint, MachineIdentity, PciLocation, RecoveryCapability, RecoveryMethod,
+        StepState,
     };
 
     use super::*;
@@ -592,6 +593,13 @@ mod tests {
                 method: RecoveryMethod::UsbFlashback,
                 tested_or_documented: true,
                 note: "documented rear-panel recovery".into(),
+            },
+            FirmwareInstallRoute {
+                method: FirmwareInstallMethod::FirmwareSetupUtility,
+                artifact_file_name: "vendor-bios.bin".into(),
+                tested_or_documented: true,
+                official_instructions_url: "https://vendor.invalid/manual".into(),
+                note: "Select the pinned image in firmware setup".into(),
             },
         )
         .unwrap()
