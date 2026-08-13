@@ -10,6 +10,12 @@ commands with `@tauri-apps/api/core`'s `invoke` function.
 | `validate_config` | `{ draft }` | Validation errors/warnings, change status, encoded size, affected GPUs, and reboot requirement |
 | `save_config` | `{ draft }` | A verified save receipt after the EFI variable is written and read back |
 | `request_elevation` | none | Starts a new elevated copy through Windows `runas`, then exits the current copy |
+| `get_machine_identity` | none | Pins board, BIOS, GPU, bridge, and BAR0 identity from Windows and the live PCI inventory |
+| `inspect_firmware_image` | `{ path }` | Resolves an absolute firmware-image path and returns its name, length, and SHA-256 |
+| `create_machine_profile` | `{ request }` | Creates an immutable profile, preserves and re-hashes the original image, and starts an append-only plan |
+| `list_machine_profiles` | none | Lists all validated local deployment profiles |
+| `get_deployment_plan` | `{ profileId }` | Loads the newest validated revision from an append-only plan history |
+| `compare_machine_profile` | `{ request }` | Re-enumerates the machine and optionally re-hashes a source image before reporting pinned mismatches |
 
 `ConfigDraft` uses camel-case JSON fields:
 

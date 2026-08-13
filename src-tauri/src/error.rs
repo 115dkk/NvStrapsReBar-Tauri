@@ -15,6 +15,8 @@ pub enum BackendError {
     DeviceInventory(String),
     #[error("machine identity failed: {0}")]
     MachineIdentity(String),
+    #[error("deployment workflow failed: {0}")]
+    Deployment(String),
     #[error("application state could not be locked")]
     StatePoisoned,
     #[error("failed to relaunch with administrator privileges: {0}")]
@@ -65,6 +67,7 @@ impl From<BackendError> for ApiError {
             BackendError::InvalidConfiguration(_) => ("invalid_configuration", true, None),
             BackendError::DeviceInventory(_) => ("device_inventory_failed", true, None),
             BackendError::MachineIdentity(_) => ("machine_identity_failed", true, None),
+            BackendError::Deployment(_) => ("deployment_failed", true, None),
             BackendError::StatePoisoned => ("state_unavailable", false, None),
             BackendError::Elevation(_) => ("elevation_failed", true, None),
         };
@@ -81,6 +84,18 @@ impl From<BackendError> for ApiError {
 impl From<nvstraps_core::config::ConfigError> for ApiError {
     fn from(error: nvstraps_core::config::ConfigError) -> Self {
         BackendError::from(error).into()
+    }
+}
+
+impl From<nvstraps_deploy::ProfileError> for BackendError {
+    fn from(error: nvstraps_deploy::ProfileError) -> Self {
+        Self::Deployment(error.to_string())
+    }
+}
+
+impl From<nvstraps_deploy::StoreError> for BackendError {
+    fn from(error: nvstraps_deploy::StoreError) -> Self {
+        Self::Deployment(error.to_string())
     }
 }
 
