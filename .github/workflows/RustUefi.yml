@@ -39,8 +39,8 @@ jobs:
       - name: Enforce the Rust-only source boundary
         run: npm run check:riir
 
-      - name: Test the FFS encoder and independent decoder
-        run: cargo test -p nvstraps-ffs
+      - name: Test the portable Rust modules
+        run: cargo test -p nvstraps-core -p nvstraps-deploy -p nvstraps-ffs -p nvstraps-uefi --all-targets
 
       - name: Build, validate, and wrap the Rust boot-service driver
         run: npm run build:firmware
