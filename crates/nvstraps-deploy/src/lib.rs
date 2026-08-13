@@ -858,6 +858,65 @@ impl DeploymentPlan {
             .find(|step| step.state == StepState::Ready)
     }
 
+    pub fn require_active(&self, expected: StepId) -> Result<(), PlanError> {
+        match self.active_step() {
+            Some(step) if step.id == expected => Ok(()),
+            Some(step) => Err(PlanError::OutOfOrder {
+                expected: step.id,
+                actual: expected,
+            }),
+            None => Err(PlanError::AlreadyComplete),
+        }
+    }
+
+    pub fn is_step_completed(&self, step_id: StepId) -> bool {
+        self.steps
+            .iter()
+            .any(|step| step.id == step_id && step.state == StepState::Completed)
+    }
+
+    pub fn completed_evidence(&self, step_id: StepId) -> Result<&StepEvidence, PlanError> {
+        let step = self
+            .steps
+            .iter()
+            .find(|step| step.id == step_id)
+            .ok_or(PlanError::UnknownStep(step_id))?;
+        if step.state != StepState::Completed {
+            return Err(PlanError::StepNotCompleted(step_id));
+        }
+        let evidence = step.evidence.as_ref().ok_or(PlanError::MissingEvidence)?;
+        let expected = expected_evidence(step_id);
+        if evidence.kind != expected {
+            return Err(PlanError::WrongEvidence {
+                step: step_id,
+                expected,
+                actual: evidence.kind,
+            });
+        }
+        Ok(evidence)
+    }
+
+    pub fn require_completed_value(
+        &self,
+        step_id: StepId,
+        expected: &str,
+    ) -> Result<(), PlanError> {
+        if self.completed_evidence(step_id)?.value == expected {
+            Ok(())
+        } else {
+            Err(PlanError::EvidenceValueMismatch(step_id))
+        }
+    }
+
+    pub fn complete_with_value(
+        &mut self,
+        step_id: StepId,
+        value: impl Into<String>,
+    ) -> Result<(), PlanError> {
+        let evidence = StepEvidence::new(expected_evidence(step_id), value)?;
+        self.complete(step_id, evidence)
+    }
+
     pub fn complete(&mut self, step_id: StepId, evidence: StepEvidence) -> Result<(), PlanError> {
         let active_index = self
             .steps
@@ -1098,6 +1157,8 @@ pub enum PlanError {
     UnknownStep(StepId),
     #[error("step {0:?} has not been reached and cannot be invalidated")]
     StepNotReached(StepId),
+    #[error("step {0:?} is not completed")]
+    StepNotCompleted(StepId),
     #[error("profile is invalid: {0}")]
     InvalidProfile(#[source] ProfileError),
     #[error("deployment plan schema version {0} is not supported")]
@@ -1654,6 +1715,49 @@ mod tests {
         assert_eq!(plan.active_step().unwrap().id, StepId::VerifyProfile);
         assert!(plan.steps.iter().all(|step| step.evidence.is_none()));
         assert_eq!(plan.revision, 2);
+    }
+
+    #[test]
+    fn plan_interface_owns_step_queries_values_and_canonical_evidence() {
+        let machine = profile(BoardPath::NativeResizableBar);
+        let mut plan = DeploymentPlan::for_profile(&machine).unwrap();
+
+        plan.require_active(StepId::VerifyProfile).unwrap();
+        assert!(matches!(
+            plan.require_active(StepId::ConfirmRecovery),
+            Err(PlanError::OutOfOrder { .. })
+        ));
+        assert!(!plan.is_step_completed(StepId::VerifyProfile));
+        assert!(matches!(
+            plan.completed_evidence(StepId::VerifyProfile),
+            Err(PlanError::StepNotCompleted(StepId::VerifyProfile))
+        ));
+
+        plan.complete_with_value(StepId::VerifyProfile, machine.profile_id.clone())
+            .unwrap();
+        assert!(plan.is_step_completed(StepId::VerifyProfile));
+        assert_eq!(
+            plan.completed_evidence(StepId::VerifyProfile).unwrap().kind,
+            EvidenceKind::ExactProfileMatch
+        );
+        plan.require_completed_value(StepId::VerifyProfile, &machine.profile_id)
+            .unwrap();
+        assert!(matches!(
+            plan.require_completed_value(StepId::VerifyProfile, "another profile"),
+            Err(PlanError::EvidenceValueMismatch(StepId::VerifyProfile))
+        ));
+
+        plan.complete_with_value(
+            StepId::ConfirmRecovery,
+            machine.recovery.method.evidence_value(),
+        )
+        .unwrap();
+        assert!(matches!(
+            plan.complete_with_value(StepId::PreserveOriginalFirmware, "not-a-digest"),
+            Err(PlanError::MalformedDigest(
+                EvidenceKind::OriginalFirmwareSha256
+            ))
+        ));
     }
 
     #[test]
