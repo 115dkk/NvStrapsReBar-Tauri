@@ -24,7 +24,13 @@ const FFS_FILE_TYPE_DRIVER: u8 = 0x07;
 const FFS_ATTRIBUTE_CHECKSUM: u8 = 0x40;
 const FFS_FILE_STATE_VALID: u8 = 0x07;
 const SECTION_TYPE_PE32: u8 = 0x10;
+const SECTION_TYPE_DXE_DEPEX: u8 = 0x13;
 const SECTION_TYPE_USER_INTERFACE: u8 = 0x15;
+const DEPEX_PUSH: u8 = 0x02;
+const DEPEX_END: u8 = 0x08;
+const PCI_ROOT_BRIDGE_IO_PROTOCOL_GUID_BYTES: [u8; 16] = [
+    0xbb, 0x7e, 0x70, 0x2f, 0x1a, 0x4a, 0xd4, 0x11, 0x9a, 0x38, 0x00, 0x90, 0x27, 0x3f, 0xc1, 0x4d,
+];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PeInspection {
@@ -130,7 +136,16 @@ pub fn inspect_driver_image(image: &[u8]) -> Result<PeInspection, PackError> {
 pub fn build_ffs(driver_image: &[u8]) -> Result<Vec<u8>, PackError> {
     inspect_driver_image(driver_image)?;
 
-    let mut body = encode_section(SECTION_TYPE_PE32, driver_image)?;
+    let mut depex = Vec::with_capacity(PCI_ROOT_BRIDGE_IO_PROTOCOL_GUID_BYTES.len() + 2);
+    depex.push(DEPEX_PUSH);
+    depex.extend_from_slice(&PCI_ROOT_BRIDGE_IO_PROTOCOL_GUID_BYTES);
+    depex.push(DEPEX_END);
+    let mut body = encode_section(SECTION_TYPE_DXE_DEPEX, &depex)?;
+    body.resize(
+        align_up_4(body.len()).ok_or(PackError::InvalidFfs("section alignment overflow"))?,
+        0,
+    );
+    body.extend(encode_section(SECTION_TYPE_PE32, driver_image)?);
     body.resize(
         align_up_4(body.len()).ok_or(PackError::InvalidFfs("section alignment overflow"))?,
         0,
@@ -185,17 +200,29 @@ pub fn inspect_ffs(bytes: &[u8]) -> Result<FfsInspection, PackError> {
 
     verify_checksums(bytes)?;
     let sections = parse_sections(bytes)?;
-    if sections.len() != 2
-        || sections[0].section_type != SECTION_TYPE_PE32
-        || sections[1].section_type != SECTION_TYPE_USER_INTERFACE
+    if sections.len() != 3
+        || sections[0].section_type != SECTION_TYPE_DXE_DEPEX
+        || sections[1].section_type != SECTION_TYPE_PE32
+        || sections[2].section_type != SECTION_TYPE_USER_INTERFACE
     {
         return Err(PackError::InvalidFfs(
-            "expected one PE32 section followed by one UI section",
+            "expected the PCI root-bridge dependency, PE32, and UI sections",
+        ));
+    }
+    let expected_depex = [
+        &[DEPEX_PUSH][..],
+        &PCI_ROOT_BRIDGE_IO_PROTOCOL_GUID_BYTES,
+        &[DEPEX_END],
+    ]
+    .concat();
+    if sections[0].content != expected_depex {
+        return Err(PackError::InvalidFfs(
+            "unexpected DXE dependency expression",
         ));
     }
 
-    let pe = inspect_driver_image(sections[0].content)?;
-    let ui_name = decode_ui_name(sections[1].content)?;
+    let pe = inspect_driver_image(sections[1].content)?;
+    let ui_name = decode_ui_name(sections[2].content)?;
     if ui_name != DRIVER_NAME {
         return Err(PackError::InvalidFfs("unexpected UI section name"));
     }
@@ -391,7 +418,11 @@ mod tests {
         assert_eq!(inspection.file_type, FFS_FILE_TYPE_DRIVER);
         assert_eq!(
             inspection.section_types,
-            [SECTION_TYPE_PE32, SECTION_TYPE_USER_INTERFACE]
+            [
+                SECTION_TYPE_DXE_DEPEX,
+                SECTION_TYPE_PE32,
+                SECTION_TYPE_USER_INTERFACE
+            ]
         );
         assert_eq!(inspection.ui_name, DRIVER_NAME);
         assert_eq!(
@@ -407,10 +438,14 @@ mod tests {
         assert_eq!(&ffs[..16], &FFS_FILE_GUID_BYTES);
         assert_eq!(ffs[18], 0x07);
         assert_eq!(ffs[19], 0x40);
-        assert_eq!(&ffs[20..23], &[0x3c, 0x02, 0x00]);
+        assert_eq!(&ffs[20..23], &[0x54, 0x02, 0x00]);
         assert_eq!(ffs[23], 0x07);
-        assert_eq!(&ffs[24..28], &[0x04, 0x02, 0x00, 0x10]);
-        assert_eq!(&ffs[540..544], &[0x20, 0x00, 0x00, 0x15]);
+        assert_eq!(&ffs[24..28], &[0x16, 0x00, 0x00, 0x13]);
+        assert_eq!(ffs[28], DEPEX_PUSH);
+        assert_eq!(&ffs[29..45], &PCI_ROOT_BRIDGE_IO_PROTOCOL_GUID_BYTES);
+        assert_eq!(ffs[45], DEPEX_END);
+        assert_eq!(&ffs[48..52], &[0x04, 0x02, 0x00, 0x10]);
+        assert_eq!(&ffs[564..568], &[0x20, 0x00, 0x00, 0x15]);
     }
 
     #[test]
