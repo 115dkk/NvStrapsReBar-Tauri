@@ -1,8 +1,10 @@
 use std::fmt;
 
+mod efi_compression;
 mod firmware;
 mod legacy_patch;
 
+pub use efi_compression::{EfiCompression, EfiCompressionError, efi_compress, efi_decompress};
 pub use firmware::{
     FirmwareInjection, InjectionError, LegacyFirmwarePatch, LegacyFirmwarePatchApplication,
     LegacyFirmwarePatchChange, LegacyFirmwarePatchError, LegacyFirmwarePatchPath,
