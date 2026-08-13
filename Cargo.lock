@@ -1814,6 +1814,9 @@ version = "0.1.0"
 [[package]]
 name = "nvstraps-ffs"
 version = "0.1.0"
+dependencies = [
+ "oxiarc-lzma",
+]
 
 [[package]]
 name = "nvstraps-rebar"
@@ -2043,6 +2046,24 @@ name = "option-ext"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
+
+[[package]]
+name = "oxiarc-core"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "119a925483e4917b645fd77acef86859164e166faa4cce3353c1d7cecfd3665a"
+dependencies = [
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "oxiarc-lzma"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "41b62ce7b597baf44b03171ce0f229656513e965b3abbaa9a7ebaac8b2188299"
+dependencies = [
+ "oxiarc-core",
+]
 
 [[package]]
 name = "pango"

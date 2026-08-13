@@ -58,11 +58,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 .open(&output)?;
             output_file.write_all(&patched)?;
             println!(
-                "wrote {}: FV {:#x}, file {:#x}, replaced_pad={}",
+                "wrote {}: FV {:#x}, file {:#x}, replaced_pad={}, encapsulated_fv={}, recompressed_guided={}",
                 Path::new(&output).display(),
                 report.firmware_volume_offset,
                 report.file_offset,
-                report.replaced_pad_file
+                report.replaced_pad_file,
+                report.encapsulated_volume_image,
+                report.recompressed_guided_section
             );
         }
         _ => return Err(usage().into()),
