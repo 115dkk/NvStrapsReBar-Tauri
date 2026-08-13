@@ -4,7 +4,7 @@ use nvstraps_core::{
         OPTION_DISABLE_SETUP_CRC, OPTION_GLOBAL_MASK, OPTION_OVERRIDE_SIZE_MASK, OPTION_SKIP_S3,
         TARGET_PCI_BAR_GPU_ONLY, TARGET_PCI_BAR_MAX, TARGET_PCI_BAR_STRAPS_ONLY,
     },
-    registry::{BAR_SIZE_EXCLUDED, BAR_SIZE_NONE, MAX_BAR_SIZE_SELECTOR},
+    registry::{BAR_SIZE_EXCLUDED, BAR_SIZE_NONE, MAX_BAR_SIZE_SELECTOR, registry_bar_size},
 };
 use serde::{Deserialize, Serialize};
 
@@ -48,6 +48,15 @@ pub struct GpuRule {
     pub override_bar_size_mask: Option<bool>,
 }
 
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DeploymentConfigRecommendation {
+    pub draft: ConfigDraft,
+    pub turing_gpu_count: usize,
+    pub registry_managed_gpu_count: usize,
+    pub exact_fallback_rule_count: usize,
+}
+
 impl Default for ConfigDraft {
     fn default() -> Self {
         Self {
@@ -80,6 +89,75 @@ pub fn config_from_draft(draft: &ConfigDraft, devices: &[GpuDevice]) -> BackendR
     };
     populate_hardware(&mut config, devices)?;
     Ok(config)
+}
+
+pub fn recommend_deployment_config(
+    devices: &[GpuDevice],
+) -> BackendResult<DeploymentConfigRecommendation> {
+    let turing_devices = devices
+        .iter()
+        .filter(|device| device.is_turing)
+        .collect::<Vec<_>>();
+    if turing_devices.is_empty() {
+        return Err(invalid(
+            "the guarded deployment preset requires at least one detected Turing GPU",
+        ));
+    }
+
+    let mut registry_managed_gpu_count = 0;
+    let mut rules = Vec::new();
+    for device in &turing_devices {
+        if registry_bar_size(device.device_id).is_some() {
+            registry_managed_gpu_count += 1;
+            continue;
+        }
+        let bar_size_selector = device.recommended_bar_size_selector.ok_or_else(|| {
+            invalid(format!(
+                "Turing GPU {:04X} has no safe fallback BAR selector",
+                device.device_id
+            ))
+        })?;
+        rules.push(GpuRule {
+            match_scope: MatchScope::Location,
+            device_id: device.device_id,
+            subsystem_vendor_id: device.subsystem_vendor_id,
+            subsystem_device_id: device.subsystem_device_id,
+            bus: device.bus,
+            device: device.device,
+            function: device.function,
+            bar_size_selector: Some(bar_size_selector),
+            override_bar_size_mask: None,
+        });
+    }
+    rules.sort_by_key(|rule| {
+        (
+            rule.bus,
+            rule.device,
+            rule.function,
+            rule.device_id,
+            rule.subsystem_vendor_id,
+            rule.subsystem_device_id,
+        )
+    });
+
+    let draft = ConfigDraft {
+        global_mode: 1,
+        target_pci_bar_size: TARGET_PCI_BAR_DISABLED,
+        skip_s3_resume: false,
+        override_bar_size_mask: false,
+        guard_setup_changes: true,
+        rules,
+    };
+    // Build the exact wire model now so the recommendation endpoint cannot offer a draft that
+    // would later fail the firmware count, topology, or BAR0 safety gates.
+    config_from_draft(&draft, devices)?;
+
+    Ok(DeploymentConfigRecommendation {
+        exact_fallback_rule_count: draft.rules.len(),
+        draft,
+        turing_gpu_count: turing_devices.len(),
+        registry_managed_gpu_count,
+    })
 }
 
 pub fn draft_from_config(config: &NvConfig) -> ConfigDraft {
@@ -422,5 +500,42 @@ mod tests {
         assert_eq!(effective_bar_size(&config, &device), None);
         config.option_flags = 2;
         assert_eq!(effective_bar_size(&config, &device), Some(5));
+    }
+
+    #[test]
+    fn guarded_recommendation_uses_registry_plus_exact_unknown_gpu_rules() {
+        let known = sample_device(0x1E84);
+        let mut unknown = sample_device(0x1F81);
+        unknown.id = "pci-02-00-0".into();
+        unknown.bus = 2;
+        unknown.bar0_base = 0xE000_0000;
+        unknown.bar0_top = 0xE0FF_FFFF;
+
+        let recommendation =
+            recommend_deployment_config(&[unknown.clone(), known.clone()]).unwrap();
+        assert_eq!(recommendation.turing_gpu_count, 2);
+        assert_eq!(recommendation.registry_managed_gpu_count, 1);
+        assert_eq!(recommendation.exact_fallback_rule_count, 1);
+        assert_eq!(recommendation.draft.global_mode, 1);
+        assert_eq!(recommendation.draft.target_pci_bar_size, 0);
+        assert!(recommendation.draft.guard_setup_changes);
+        assert_eq!(
+            recommendation.draft.rules[0].match_scope,
+            MatchScope::Location
+        );
+        assert_eq!(recommendation.draft.rules[0].bus, 2);
+
+        let config =
+            config_from_draft(&recommendation.draft, &[known.clone(), unknown.clone()]).unwrap();
+        assert_eq!(effective_bar_size(&config, &known), Some(7));
+        assert_eq!(effective_bar_size(&config, &unknown), Some(5));
+    }
+
+    #[test]
+    fn guarded_recommendation_refuses_a_non_turing_inventory() {
+        let mut device = sample_device(0x2684);
+        device.is_turing = false;
+        device.recommended_bar_size_selector = None;
+        assert!(recommend_deployment_config(&[device]).is_err());
     }
 }

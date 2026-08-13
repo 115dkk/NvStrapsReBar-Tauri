@@ -8,7 +8,7 @@ use tauri::{AppHandle, State};
 
 use crate::{
     app::{AppState, SaveReceipt, save_config_inner},
-    config::ConfigDraft,
+    config::{ConfigDraft, DeploymentConfigRecommendation, recommend_deployment_config},
     deployment::load_exact_deployment,
     error::{ApiError, BackendError, BackendResult, CommandResult},
     firmware::{STATUS_VARIABLE_NAME, read_variable},
@@ -113,6 +113,26 @@ pub fn save_deployment_config(
     state: State<'_, AppState>,
 ) -> CommandResult<SaveDeploymentConfigReceipt> {
     save_deployment_config_command(&app, request, &state).map_err(ApiError::from)
+}
+
+#[tauri::command]
+pub fn get_recommended_deployment_config(
+    app: AppHandle,
+    profile_id: String,
+) -> CommandResult<DeploymentConfigRecommendation> {
+    get_recommended_deployment_config_command(&app, &profile_id).map_err(ApiError::from)
+}
+
+fn get_recommended_deployment_config_command(
+    app: &AppHandle,
+    profile_id: &str,
+) -> BackendResult<DeploymentConfigRecommendation> {
+    let exact = load_exact_deployment(app, profile_id, "deployment configuration recommendation")?;
+    exact
+        .plan
+        .require_active(StepId::WriteNvstrapsConfiguration)
+        .map_err(BackendError::from)?;
+    recommend_deployment_config(&exact.devices)
 }
 
 fn save_deployment_config_command(

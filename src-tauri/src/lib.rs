@@ -31,6 +31,7 @@ pub fn run() {
             deployment::compare_machine_profile,
             deployment::prepare_firmware_artifact,
             deployment::export_deployment_package,
+            deployment_workflow::get_recommended_deployment_config,
             deployment_workflow::save_deployment_config,
             deployment_workflow::preview_manual_deployment_step,
             deployment_workflow::confirm_manual_deployment_step,
