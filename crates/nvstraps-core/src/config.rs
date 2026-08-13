@@ -9,6 +9,13 @@ pub const HEADER_SIZE: usize = 1 + 2 + 8;
 pub const GPU_SELECTOR_SIZE: usize = 10;
 pub const GPU_CONFIG_SIZE: usize = 24;
 pub const BRIDGE_CONFIG_SIZE: usize = 7;
+pub const MAX_ENCODED_SIZE: usize = HEADER_SIZE
+    + 1
+    + MAX_GPU_COUNT * GPU_SELECTOR_SIZE
+    + 1
+    + MAX_GPU_COUNT * GPU_CONFIG_SIZE
+    + 1
+    + MAX_BRIDGE_COUNT * BRIDGE_CONFIG_SIZE;
 
 pub const OPTION_GLOBAL_MASK: u16 = 0x0003;
 pub const OPTION_SKIP_S3: u16 = 0x0004;

@@ -11,10 +11,10 @@ fn main() -> Status {
         return Status::ABORTED;
     }
 
-    // Link the exact no_std contract used by the Windows configuration shell.
-    // The full protocol hook is layered on this verified image/packaging seam.
-    let _contract_guid = nvstraps_core::VARIABLE_VENDOR_GUID;
-    let _unconfigured = nvstraps_core::status::DecodedStatus::decode(0);
+    // The functional entry sequence is enabled only after each hardware adapter
+    // has its parity gate. Linking the library here keeps every landed adapter
+    // in the validated PE/FFS image while the original C driver remains live.
+    let _status_writer = nvstraps_uefi::status_writer::StatusWriter::new();
 
     Status::SUCCESS
 }
