@@ -184,10 +184,14 @@ fn verify_deployment_driver_command(
     profile_id: &str,
 ) -> BackendResult<DriverVerificationReceipt> {
     let exact = load_exact_deployment(app, profile_id, "Rust DXE driver verification")?;
-    exact
+    let active_step = exact
         .plan
-        .require_active(StepId::VerifyDriverLoaded)
-        .map_err(BackendError::from)?;
+        .active_step()
+        .map(|step| step.id)
+        .ok_or_else(|| {
+            BackendError::Deployment("the deployment plan is already complete".into())
+        })?;
+    let records_boot = driver_verification_records_boot(active_step)?;
 
     let raw = read_driver_status_raw()?;
     let status = DriverStatus::from_raw(raw);
@@ -200,6 +204,16 @@ fn verify_deployment_driver_command(
 
     let mut workflow = DeploymentWorkflow::from_plan(&exact.store, &exact.profile, exact.plan)
         .map_err(BackendError::from)?;
+    if records_boot {
+        // The status variable deliberately lacks NON_VOLATILE. Reading a valid value therefore
+        // proves that this Windows session followed a boot in which the Rust DXE driver ran.
+        workflow
+            .record_step(
+                StepId::RebootAfterFirmware,
+                format!("volatile-status-observed:{}", unix_timestamp_ms()),
+            )
+            .map_err(BackendError::from)?;
+    }
     workflow
         .record_step(StepId::VerifyDriverLoaded, status.raw.clone())
         .map_err(BackendError::from)?;
@@ -207,6 +221,16 @@ fn verify_deployment_driver_command(
         plan: workflow.into_plan(),
         status,
     })
+}
+
+fn driver_verification_records_boot(active_step: StepId) -> BackendResult<bool> {
+    match active_step {
+        StepId::RebootAfterFirmware => Ok(true),
+        StepId::VerifyDriverLoaded => Ok(false),
+        _ => Err(BackendError::Deployment(format!(
+            "Rust DXE verification is not valid while {active_step:?} is active"
+        ))),
+    }
 }
 
 fn verify_configuration_reboot_command(
@@ -325,7 +349,6 @@ fn manual_step_slug(step_id: StepId) -> &'static str {
     match step_id {
         StepId::FlashWithVendorRoute => "VENDOR-FLASH",
         StepId::ConfigureFirmwareSetup => "FIRMWARE-SETTINGS",
-        StepId::RebootAfterFirmware => "PATCHED-BOOT",
         StepId::ConfigureNvidiaApplications => "NVIDIA-POLICY",
         _ => "UNSUPPORTED",
     }
@@ -359,10 +382,6 @@ fn manual_step_warnings(profile: &MachineProfile, step_id: StepId) -> BackendRes
                 }
             },
             "Confirm only after saving these exact firmware setup values.".into(),
-        ],
-        StepId::RebootAfterFirmware => vec![
-            "Confirm only after Windows boots successfully from the patched firmware.".into(),
-            "A reboot request by itself does not satisfy this step.".into(),
         ],
         StepId::ConfigureNvidiaApplications => vec![
             "Confirm only after applying and independently reviewing the intended per-application ReBAR policy.".into(),
@@ -502,6 +521,20 @@ mod tests {
             )
             .is_err()
         );
+        assert!(
+            build_manual_step_preview(
+                &profile,
+                &active_plan(&profile, StepId::RebootAfterFirmware, 8)
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn volatile_driver_status_also_proves_the_returned_firmware_boot() {
+        assert!(driver_verification_records_boot(StepId::RebootAfterFirmware).unwrap());
+        assert!(!driver_verification_records_boot(StepId::VerifyDriverLoaded).unwrap());
+        assert!(driver_verification_records_boot(StepId::ConfigureFirmwareSetup).is_err());
     }
 
     #[test]
