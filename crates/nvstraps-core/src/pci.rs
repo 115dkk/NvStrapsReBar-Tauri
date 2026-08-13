@@ -131,6 +131,19 @@ pub const fn highest_set_bit(value: u32) -> u8 {
     }
 }
 
+/// Encodes a register address exactly like EDK2's `EFI_PCI_ADDRESS` macro.
+/// Extended configuration offsets live in the high 32 bits.
+pub const fn boot_script_register_address(address: PciAddress, offset: u16) -> u64 {
+    let location = ((address.bus as u64) << 24)
+        | ((address.device as u64) << 16)
+        | ((address.function as u64) << 8);
+    if offset < CONFIG_SPACE_SIZE {
+        location | offset as u64
+    } else {
+        location | ((offset as u64) << 32)
+    }
+}
+
 pub fn bridge_remap(
     saved_command: u32,
     saved_io_base_limit: u32,
@@ -197,6 +210,11 @@ mod tests {
         assert!(is_pci_bridge(0x81));
         assert!(!is_pci_bridge(0x00));
         assert!(is_vga_controller(0x0300_0000));
+        assert_eq!(boot_script_register_address(address, 0x20), 0x021f_0720);
+        assert_eq!(
+            boot_script_register_address(address, 0x180),
+            0x0000_0180_021f_0700
+        );
     }
 
     #[test]
