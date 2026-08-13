@@ -18,6 +18,7 @@
     "check:rust": "cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace --all-targets && cargo check -p nvstraps-core --no-default-features",
     "build:firmware": "cargo build -p nvstraps-uefi --release --target x86_64-unknown-uefi && cargo run -p nvstraps-ffs -- pack target/x86_64-unknown-uefi/release/NvStrapsReBar.efi target/x86_64-unknown-uefi/release/NvStrapsReBar.ffs && cargo run -p nvstraps-ffs -- inspect target/x86_64-unknown-uefi/release/NvStrapsReBar.ffs",
     "check:firmware": "cargo test -p nvstraps-ffs && npm run build:firmware",
+    "test:qemu": "bash scripts/qemu-smoke.sh",
     "tauri": "tauri",
     "tauri:ci": "tauri build --no-bundle"
   },

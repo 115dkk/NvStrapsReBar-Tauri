@@ -1,4 +1,4 @@
-name: Rust UEFI port validation (not deployable yet)
+name: Rust UEFI validation
 
 on:
   push:
@@ -11,12 +11,13 @@ permissions:
 
 jobs:
   validate-rust-uefi:
-    name: Validate non-deployable Rust DXE port (${{ matrix.os }})
+    name: Validate Rust DXE port (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -43,5 +44,18 @@ jobs:
       - name: Reject warnings in the UEFI target
         run: cargo clippy -p nvstraps-uefi --release --target x86_64-unknown-uefi -- -D warnings
 
-      # Intentionally no artifact upload: the Rust image is only a packaging
-      # and ABI skeleton until the protocol hook and hardware behavior land.
+      - name: Install OVMF and QEMU
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install --yes ovmf qemu-system-x86
+
+      - name: Prove automatic dispatch and host-bridge hook installation
+        if: runner.os == 'Linux'
+        run: npm run test:qemu
+
+      - name: Upload QEMU evidence
+        if: runner.os == 'Linux' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-uefi-qemu-evidence
+          path: target/qemu-smoke/
+          if-no-files-found: error
