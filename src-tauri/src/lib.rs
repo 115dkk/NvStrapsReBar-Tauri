@@ -24,6 +24,7 @@ pub fn run() {
             deployment::get_deployment_plan,
             deployment::compare_machine_profile,
             deployment::prepare_firmware_artifact,
+            deployment::export_deployment_package,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run NvStrapsReBar");

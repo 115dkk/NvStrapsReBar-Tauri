@@ -4,10 +4,10 @@ use std::{
 };
 
 use nvstraps_deploy::{
-    ArtifactKind, BoardPath, DeploymentPlan, DeploymentStore, EvidenceKind, FirmwareFingerprint,
-    FirmwareInstallRoute, LegacyPatchCatalogFile, LegacyPatchProfile, LegacyPatchRisk,
-    MachineIdentity, MachineProfile, ProfileMatch, RecoveryCapability, Sha256Digest, StepEvidence,
-    StepId, StepState, StoredArtifact,
+    ArtifactKind, BoardPath, DeploymentPackageReceipt, DeploymentPlan, DeploymentStore,
+    EvidenceKind, FirmwareFingerprint, FirmwareInstallRoute, LegacyPatchCatalogFile,
+    LegacyPatchProfile, LegacyPatchRisk, MachineIdentity, MachineProfile, ProfileMatch,
+    RecoveryCapability, Sha256Digest, StepEvidence, StepId, StepState, StoredArtifact,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, path::BaseDirectory};
@@ -34,6 +34,13 @@ pub struct CreateProfileRequest {
 pub struct CompareProfileRequest {
     pub profile_id: String,
     pub firmware_path: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportDeploymentPackageRequest {
+    pub profile_id: String,
+    pub destination_root: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -282,6 +289,49 @@ pub async fn prepare_firmware_artifact(
             )))
         })?
         .map_err(ApiError::from)
+}
+
+#[tauri::command]
+pub async fn export_deployment_package(
+    app: AppHandle,
+    request: ExportDeploymentPackageRequest,
+) -> CommandResult<DeploymentPackageReceipt> {
+    tauri::async_runtime::spawn_blocking(move || export_package_command(&app, request))
+        .await
+        .map_err(|error| {
+            ApiError::from(BackendError::Deployment(format!(
+                "deployment package worker failed: {error}"
+            )))
+        })?
+        .map_err(ApiError::from)
+}
+
+fn export_package_command(
+    app: &AppHandle,
+    request: ExportDeploymentPackageRequest,
+) -> BackendResult<DeploymentPackageReceipt> {
+    let store = store(app)?;
+    let profile = store
+        .load_profile(&request.profile_id)
+        .map_err(BackendError::from)?;
+    let plan = store.load_plan(&profile).map_err(BackendError::from)?;
+    let devices = enumerate_gpus()?;
+    let current_identity = collect_machine_identity(&devices)?;
+    let original_path = store
+        .original_firmware_path(&request.profile_id)
+        .map_err(BackendError::from)?;
+    let original_fingerprint = FirmwareFingerprint::inspect(&original_path)?;
+    let comparison = profile.compare(&current_identity, Some(&original_fingerprint));
+    if !comparison.is_exact() {
+        let differences = serde_json::to_string(&comparison.differences)
+            .unwrap_or_else(|_| "machine profile mismatch".into());
+        return Err(BackendError::Deployment(format!(
+            "machine profile changed; deployment package export was refused: {differences}"
+        )));
+    }
+    store
+        .export_deployment_package(&profile, &plan, request.destination_root)
+        .map_err(BackendError::from)
 }
 
 fn prepare_command(app: &AppHandle, profile_id: &str) -> BackendResult<FirmwarePreparation> {
@@ -1296,6 +1346,18 @@ mod tests {
         assert_eq!(prepared.legacy_patch.as_ref().unwrap().catalogs.len(), 1);
         assert!(prepared.patched_firmware.is_some());
         assert!(prepared.injection.is_some());
+        let destination = directory.0.join("usb");
+        fs::create_dir(&destination).unwrap();
+        let package = store
+            .export_deployment_package(&profile, &prepared.plan, &destination)
+            .unwrap();
+        assert_eq!(package.manifest.files.len(), 6);
+        assert!(
+            package
+                .package_path
+                .join("receipts/legacy-patch-receipt.json")
+                .is_file()
+        );
         let mut forged_receipt = prepared.legacy_patch.clone().unwrap();
         let duplicate = forged_receipt.catalogs[0].applications[0].clone();
         forged_receipt.catalogs[0].applications.push(duplicate);
