@@ -6,10 +6,14 @@ use std::{
 };
 
 use nvstraps_deploy::Sha256Digest;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
-use crate::error::{ApiError, BackendError, BackendResult, CommandResult};
+use crate::{
+    deployment::load_exact_deployment,
+    error::{ApiError, BackendError, BackendResult, CommandResult},
+    firmware::inspect_access,
+};
 
 const VERSION: &str = "v3.0.2.1";
 const SOURCE_COMMIT: &str = "bedb800569384eda737cb7aa596fbd97b5d6863c";
@@ -97,6 +101,23 @@ pub struct ProfileInspectorInstallation {
     pub installed_now: bool,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LaunchProfileInspectorRequest {
+    pub profile_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileInspectorLaunch {
+    pub profile_id: String,
+    pub process_id: u32,
+    pub executable_path: PathBuf,
+    pub executable_sha256: Sha256Digest,
+    pub elevated: bool,
+    pub warnings: Vec<String>,
+}
+
 #[tauri::command]
 pub async fn install_nvidia_profile_inspector(
     app: AppHandle,
@@ -123,6 +144,59 @@ pub fn get_nvidia_profile_inspector_installation(
     verify_installation(&version_path, false)
         .map(Some)
         .map_err(ApiError::from)
+}
+
+#[tauri::command]
+pub fn launch_nvidia_profile_inspector(
+    app: AppHandle,
+    request: LaunchProfileInspectorRequest,
+) -> CommandResult<ProfileInspectorLaunch> {
+    launch_command(&app, request).map_err(ApiError::from)
+}
+
+fn launch_command(
+    app: &AppHandle,
+    request: LaunchProfileInspectorRequest,
+) -> BackendResult<ProfileInspectorLaunch> {
+    let exact = load_exact_deployment(app, &request.profile_id, "Profile Inspector launch")?;
+    let access = inspect_access();
+    if !access.is_elevated {
+        return Err(BackendError::Elevation(
+            "relaunch NvStrapsReBar as administrator before opening Profile Inspector".into(),
+        ));
+    }
+    let installation = verify_installation(&installation_root(app)?.join(VERSION), false)?;
+    let executable = installation
+        .manifest
+        .files
+        .iter()
+        .find(|file| file.relative_path == EXECUTABLE_FILE_NAME)
+        .ok_or_else(|| {
+            BackendError::Deployment(
+                "Profile Inspector manifest does not contain the executable".into(),
+            )
+        })?;
+    let child = std::process::Command::new(&installation.executable_path)
+        .current_dir(&installation.install_path)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|error| {
+            BackendError::Deployment(format!("failed to launch Profile Inspector: {error}"))
+        })?;
+    Ok(ProfileInspectorLaunch {
+        profile_id: exact.profile.profile_id,
+        process_id: child.id(),
+        executable_path: installation.executable_path,
+        executable_sha256: executable.sha256.clone(),
+        elevated: true,
+        warnings: vec![
+            "Profile Inspector can modify NVIDIA driver profiles only after you press Apply Changes in its own window.".into(),
+            "Export customized profiles before changing policy so the driver database can be restored.".into(),
+            "The pinned installation is reverified before every launch; in-place updater changes are refused on the next launch.".into(),
+        ],
+    })
 }
 
 fn install_command(app: &AppHandle) -> BackendResult<ProfileInspectorInstallation> {
