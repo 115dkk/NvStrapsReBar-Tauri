@@ -6,7 +6,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use nvstraps_deploy::{FirmwareFingerprint, Sha256Digest};
+use nvstraps_deploy::{
+    DeploymentPlan, DeploymentWorkflow, FirmwareFingerprint, Sha256Digest, StepId,
+};
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 
@@ -32,6 +34,13 @@ pub struct NvidiaSmiEvidence {
     pub gpus: Vec<NvidiaBar1Observation>,
     pub all_profile_gpus_observed: bool,
     pub warnings: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NvidiaSmiEvidenceReceipt {
+    pub plan: DeploymentPlan,
+    pub evidence: NvidiaSmiEvidence,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -82,7 +91,7 @@ struct NvidiaSmiMemory {
 pub async fn collect_nvidia_smi_evidence(
     app: AppHandle,
     profile_id: String,
-) -> CommandResult<NvidiaSmiEvidence> {
+) -> CommandResult<NvidiaSmiEvidenceReceipt> {
     tauri::async_runtime::spawn_blocking(move || collect_command(&app, &profile_id))
         .await
         .map_err(|error| {
@@ -93,18 +102,36 @@ pub async fn collect_nvidia_smi_evidence(
         .map_err(ApiError::from)
 }
 
-fn collect_command(app: &AppHandle, profile_id: &str) -> BackendResult<NvidiaSmiEvidence> {
+fn collect_command(app: &AppHandle, profile_id: &str) -> BackendResult<NvidiaSmiEvidenceReceipt> {
     let exact = load_exact_deployment(app, profile_id, "nvidia-smi evidence collection")?;
+    exact
+        .plan
+        .require_active(StepId::VerifyResizableBar)
+        .map_err(BackendError::from)?;
     let executable = nvidia_smi_path()?;
     let tool = FirmwareFingerprint::inspect(&executable)?;
     let xml = run_nvidia_smi(&executable)?;
-    build_evidence(
-        exact.profile.profile_id,
+    let evidence = build_evidence(
+        exact.profile.profile_id.clone(),
         executable,
         tool,
         &xml,
         &exact.devices,
-    )
+    )?;
+    require_resizable_bar_proof(&evidence, &exact.devices)?;
+
+    let mut workflow = DeploymentWorkflow::from_plan(&exact.store, &exact.profile, exact.plan)
+        .map_err(BackendError::from)?;
+    workflow
+        .record_step(
+            StepId::VerifyResizableBar,
+            evidence.raw_xml_sha256.to_string(),
+        )
+        .map_err(BackendError::from)?;
+    Ok(NvidiaSmiEvidenceReceipt {
+        plan: workflow.into_plan(),
+        evidence,
+    })
 }
 
 fn build_evidence(
@@ -174,6 +201,14 @@ fn build_evidence(
         });
     }
     observations.sort_by_key(|gpu| (gpu.bus, gpu.device, gpu.function));
+    if observations.windows(2).any(|pair| {
+        (pair[0].bus, pair[0].device, pair[0].function)
+            == (pair[1].bus, pair[1].device, pair[1].function)
+    }) {
+        return Err(BackendError::Deployment(
+            "nvidia-smi returned duplicate observations for one PCI location".into(),
+        ));
+    }
     let all_profile_gpus_observed = devices.iter().all(|device| {
         observations.iter().any(|observation| {
             observation.bus == device.bus
@@ -196,6 +231,88 @@ fn build_evidence(
         all_profile_gpus_observed,
         warnings,
     })
+}
+
+fn require_resizable_bar_proof(
+    evidence: &NvidiaSmiEvidence,
+    devices: &[GpuDevice],
+) -> BackendResult<()> {
+    const LEGACY_BAR1_BYTES: u64 = 256 * 1024 * 1024;
+
+    if !evidence.all_profile_gpus_observed {
+        return Err(BackendError::Deployment(
+            "nvidia-smi did not observe every GPU pinned by the exact machine profile".into(),
+        ));
+    }
+    for device in devices {
+        let observation = evidence
+            .gpus
+            .iter()
+            .find(|observation| {
+                observation.bus == device.bus
+                    && observation.device == device.device
+                    && observation.function == device.function
+            })
+            .ok_or_else(|| {
+                BackendError::Deployment(format!(
+                    "nvidia-smi omitted profile GPU {:02X}:{:02X}.{}",
+                    device.bus, device.device, device.function
+                ))
+            })?;
+        let total = required_decimal_bytes(
+            observation.bar1_total_bytes.as_deref(),
+            &observation.pci_bus_id,
+            "total",
+        )?;
+        let used = required_decimal_bytes(
+            observation.bar1_used_bytes.as_deref(),
+            &observation.pci_bus_id,
+            "used",
+        )?;
+        let free = required_decimal_bytes(
+            observation.bar1_free_bytes.as_deref(),
+            &observation.pci_bus_id,
+            "free",
+        )?;
+        if used.checked_add(free) != Some(total) {
+            return Err(BackendError::Deployment(format!(
+                "{} BAR1 total does not equal used plus free",
+                observation.pci_bus_id
+            )));
+        }
+        if observation.matches_windows_bar_size != Some(true) || total != device.current_bar_size {
+            return Err(BackendError::Deployment(format!(
+                "{} BAR1 does not match the independent Windows PCI resource observation",
+                observation.pci_bus_id
+            )));
+        }
+        if total <= LEGACY_BAR1_BYTES {
+            return Err(BackendError::Deployment(format!(
+                "{} BAR1 is only {total} bytes; it does not prove an aperture larger than the legacy 256 MiB window",
+                observation.pci_bus_id
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn required_decimal_bytes(
+    value: Option<&str>,
+    pci_bus_id: &str,
+    field: &str,
+) -> BackendResult<u64> {
+    value
+        .ok_or_else(|| {
+            BackendError::Deployment(format!(
+                "{pci_bus_id} BAR1 {field} is unavailable and cannot prove ReBAR"
+            ))
+        })?
+        .parse::<u64>()
+        .map_err(|_| {
+            BackendError::Deployment(format!(
+                "{pci_bus_id} BAR1 {field} is not a canonical byte count"
+            ))
+        })
 }
 
 fn decimal(value: Option<u64>) -> Option<String> {
@@ -437,7 +554,7 @@ mod tests {
             PathBuf::from(r"C:\Windows\System32\nvidia-smi.exe"),
             tool,
             XML.as_bytes(),
-            &[device],
+            std::slice::from_ref(&device),
         )
         .unwrap();
         assert_eq!(evidence.driver_version, "596.36");
@@ -448,6 +565,7 @@ mod tests {
             Some("8589934592")
         );
         assert_eq!(evidence.gpus[0].matches_windows_bar_size, Some(true));
+        require_resizable_bar_proof(&evidence, &[device]).unwrap();
     }
 
     #[test]
@@ -457,6 +575,67 @@ mod tests {
         assert!(parse_memory_bytes("2 GB").is_err());
         assert_eq!(parse_pci_bus_id("00000000:01:00.0").unwrap(), (1, 0, 0));
         assert!(parse_pci_bus_id("00000000:01:20.0").is_err());
+    }
+
+    #[test]
+    fn proof_rejects_the_legacy_256_mib_aperture_and_unavailable_values() {
+        let device = GpuDevice {
+            id: "gpu".into(),
+            name: "RTX".into(),
+            vendor_id: 0x10de,
+            device_id: 0x1e81,
+            subsystem_vendor_id: 0x1462,
+            subsystem_device_id: 0x3755,
+            bus: 1,
+            device: 0,
+            function: 0,
+            bridge: crate::devices::PciBridge {
+                vendor_id: 0x8086,
+                device_id: 0x460d,
+                bus: 0,
+                device: 1,
+                function: 0,
+            },
+            bar0_base: 0x8000_0000,
+            bar0_top: 0x80ff_ffff,
+            current_bar_size: 256 * 1024 * 1024,
+            dedicated_video_memory: 8 * 1024 * 1024 * 1024,
+            is_turing: true,
+            recommended_bar_size_selector: Some(7),
+            effective_bar_size_selector: Some(7),
+        };
+        let mut evidence = NvidiaSmiEvidence {
+            profile_id: "nvstraps-test".into(),
+            tool_path: "nvidia-smi.exe".into(),
+            tool: FirmwareFingerprint {
+                file_name: "nvidia-smi.exe".into(),
+                byte_length: 1,
+                sha256: Sha256Digest::from_bytes(b"tool"),
+            },
+            raw_xml_sha256: Sha256Digest::from_bytes(b"xml"),
+            driver_version: "test".into(),
+            captured_at: "now".into(),
+            gpus: vec![NvidiaBar1Observation {
+                pci_bus_id: "00000000:01:00.0".into(),
+                product_name: "RTX".into(),
+                bus: 1,
+                device: 0,
+                function: 0,
+                framebuffer_total_bytes: Some((8_u64 * 1024 * 1024 * 1024).to_string()),
+                bar1_total_bytes: Some((256_u64 * 1024 * 1024).to_string()),
+                bar1_used_bytes: Some("0".into()),
+                bar1_free_bytes: Some((256_u64 * 1024 * 1024).to_string()),
+                matched_profile_gpu: true,
+                matches_windows_bar_size: Some(true),
+            }],
+            all_profile_gpus_observed: true,
+            warnings: Vec::new(),
+        };
+
+        assert!(require_resizable_bar_proof(&evidence, std::slice::from_ref(&device)).is_err());
+        evidence.gpus[0].bar1_total_bytes = None;
+        evidence.gpus[0].bar1_free_bytes = None;
+        assert!(require_resizable_bar_proof(&evidence, &[device]).is_err());
     }
 
     #[cfg(windows)]
