@@ -169,13 +169,24 @@ impl MachineIdentity {
 
     /// Compares every pinned identity field, including the firmware-assigned BAR0 ranges.
     pub fn compare_exact(&self, current: &Self) -> ProfileMatch {
-        compare_machine_identity(self, current, false)
+        compare_machine_identity(self, current, AllowedIdentityChange::None)
     }
 
     /// Compares stable machine identity while allowing firmware to relocate BAR0 during a
-    /// controlled flash or reboot boundary.
+    /// controlled configuration reboot boundary.
     pub fn compare_allowing_bar0_relocation(&self, current: &Self) -> ProfileMatch {
-        compare_machine_identity(self, current, true)
+        compare_machine_identity(self, current, AllowedIdentityChange::Bar0Relocation)
+    }
+
+    /// Compares stable machine identity while allowing the pinned vendor firmware transition to
+    /// update its revision metadata and relocate BAR0. BIOS vendor, board identity, and GPU
+    /// topology remain exact.
+    pub fn compare_allowing_firmware_transition(&self, current: &Self) -> ProfileMatch {
+        compare_machine_identity(
+            self,
+            current,
+            AllowedIdentityChange::FirmwareRevisionAndBar0,
+        )
     }
 }
 
@@ -1292,10 +1303,17 @@ fn compare_field(
     }
 }
 
+#[derive(Clone, Copy)]
+enum AllowedIdentityChange {
+    None,
+    Bar0Relocation,
+    FirmwareRevisionAndBar0,
+}
+
 fn compare_machine_identity(
     expected: &MachineIdentity,
     current: &MachineIdentity,
-    allow_bar0_relocation: bool,
+    allowed_change: AllowedIdentityChange,
 ) -> ProfileMatch {
     let mut differences = Vec::new();
     let Ok(expected) = expected.clone().normalized() else {
@@ -1323,15 +1341,27 @@ fn compare_machine_identity(
             &current.board_version,
         ),
         ("biosVendor", &expected.bios_vendor, &current.bios_vendor),
-        ("biosVersion", &expected.bios_version, &current.bios_version),
-        (
-            "biosReleaseDate",
-            &expected.bios_release_date,
-            &current.bios_release_date,
-        ),
     ] {
         compare_field(&mut differences, field, expected, actual);
     }
+    if !matches!(
+        allowed_change,
+        AllowedIdentityChange::FirmwareRevisionAndBar0
+    ) {
+        compare_field(
+            &mut differences,
+            "biosVersion",
+            &expected.bios_version,
+            &current.bios_version,
+        );
+        compare_field(
+            &mut differences,
+            "biosReleaseDate",
+            &expected.bios_release_date,
+            &current.bios_release_date,
+        );
+    }
+    let allow_bar0_relocation = !matches!(allowed_change, AllowedIdentityChange::None);
     let gpu_topology_matches = expected.gpus.len() == current.gpus.len()
         && expected.gpus.iter().all(|expected_gpu| {
             current.gpus.iter().any(|current_gpu| {
@@ -1759,7 +1789,7 @@ mod tests {
     }
 
     #[test]
-    fn controlled_boot_identity_allows_only_bar0_relocation_and_is_canonical() {
+    fn controlled_boot_identity_distinguishes_firmware_and_bar0_transitions() {
         let expected = profile(BoardPath::NativeResizableBar).identity;
         let mut relocated = expected.clone();
         relocated.gpus[0].bar0_base = 0x1_8000_0000;
@@ -1771,15 +1801,35 @@ mod tests {
                 .compare_allowing_bar0_relocation(&relocated)
                 .is_exact()
         );
-        let mut different_gpu = relocated.clone();
+        let mut firmware_transition = relocated.clone();
+        firmware_transition.bios_version = "1.O0".into();
+        firmware_transition.bios_release_date = "2026-08-14".into();
+        assert!(
+            !expected
+                .compare_allowing_bar0_relocation(&firmware_transition)
+                .is_exact()
+        );
+        assert!(
+            expected
+                .compare_allowing_firmware_transition(&firmware_transition)
+                .is_exact()
+        );
+        let mut different_vendor = firmware_transition.clone();
+        different_vendor.bios_vendor = "Different firmware vendor".into();
+        assert!(
+            !expected
+                .compare_allowing_firmware_transition(&different_vendor)
+                .is_exact()
+        );
+        let mut different_gpu = firmware_transition.clone();
         different_gpu.gpus[0].device_id ^= 1;
         assert!(
             !expected
-                .compare_allowing_bar0_relocation(&different_gpu)
+                .compare_allowing_firmware_transition(&different_gpu)
                 .is_exact()
         );
 
-        let observation = BootObservation::new(1_786_654_321_000, relocated).unwrap();
+        let observation = BootObservation::new(1_786_654_321_000, firmware_transition).unwrap();
         let encoded = observation.to_evidence_value().unwrap();
         assert_eq!(BootObservation::parse(&encoded).unwrap(), observation);
         assert!(BootObservation::parse(&format!(" {encoded}")).is_err());

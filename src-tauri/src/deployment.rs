@@ -453,19 +453,16 @@ fn deployment_identity_comparison(
     let expected = boot_observation
         .as_ref()
         .map_or(&profile.identity, |observation| &observation.identity);
-    let allows_bar0_relocation = plan.active_step().is_some_and(|step| {
-        matches!(
-            step.id,
+    Ok(match plan.active_step().map(|step| step.id) {
+        Some(
             StepId::FlashWithVendorRoute
-                | StepId::ConfigureFirmwareSetup
-                | StepId::RebootAfterFirmware
-                | StepId::RebootAfterConfiguration
-        )
-    });
-    Ok(if allows_bar0_relocation {
-        expected.compare_allowing_bar0_relocation(current_identity)
-    } else {
-        expected.compare_exact(current_identity)
+            | StepId::ConfigureFirmwareSetup
+            | StepId::RebootAfterFirmware,
+        ) => expected.compare_allowing_firmware_transition(current_identity),
+        Some(StepId::RebootAfterConfiguration) => {
+            expected.compare_allowing_bar0_relocation(current_identity)
+        }
+        _ => expected.compare_exact(current_identity),
     })
 }
 
@@ -1492,7 +1489,7 @@ mod tests {
     }
 
     #[test]
-    fn deployment_preflight_allows_bar0_only_at_controlled_handoff_boundaries() {
+    fn deployment_preflight_pins_each_controlled_identity_transition() {
         let profile = profile(
             BoardPath::NativeResizableBar,
             FirmwareFingerprint {
@@ -1503,12 +1500,21 @@ mod tests {
         );
         let mut plan = DeploymentPlan::for_profile(&profile).unwrap();
         advance_to_flash(&profile, &mut plan);
-        let mut relocated = profile.identity.clone();
-        relocated.gpus[0].bar0_base += 0x1_0000_0000;
-        relocated.gpus[0].bar0_top += 0x1_0000_0000;
+        let mut transitioned = profile.identity.clone();
+        transitioned.bios_version = "3".into();
+        transitioned.bios_release_date = "2026-08-15".into();
+        transitioned.gpus[0].bar0_base += 0x1_0000_0000;
+        transitioned.gpus[0].bar0_top += 0x1_0000_0000;
 
         assert!(
-            deployment_identity_comparison(&profile, &plan, &relocated)
+            deployment_identity_comparison(&profile, &plan, &transitioned)
+                .unwrap()
+                .is_exact()
+        );
+        let mut different_vendor = transitioned.clone();
+        different_vendor.bios_vendor = "Unexpected vendor".into();
+        assert!(
+            !deployment_identity_comparison(&profile, &plan, &different_vendor)
                 .unwrap()
                 .is_exact()
         );
@@ -1517,12 +1523,12 @@ mod tests {
         plan.complete_with_value(StepId::ConfigureFirmwareSetup, "operator-attested:2")
             .unwrap();
         assert!(
-            deployment_identity_comparison(&profile, &plan, &relocated)
+            deployment_identity_comparison(&profile, &plan, &transitioned)
                 .unwrap()
                 .is_exact()
         );
 
-        let boot = BootObservation::new(3, relocated.clone())
+        let boot = BootObservation::new(3, transitioned.clone())
             .unwrap()
             .to_evidence_value()
             .unwrap();
@@ -1530,7 +1536,7 @@ mod tests {
             .unwrap();
         plan.complete_with_value(StepId::VerifyDriverLoaded, "0x0000000000000028")
             .unwrap();
-        let mut moved_again = relocated.clone();
+        let mut moved_again = transitioned.clone();
         moved_again.gpus[0].bar0_base += 0x1000;
         assert!(
             !deployment_identity_comparison(&profile, &plan, &moved_again)
@@ -1538,7 +1544,22 @@ mod tests {
                 .is_exact()
         );
         assert!(
-            deployment_identity_comparison(&profile, &plan, &relocated)
+            deployment_identity_comparison(&profile, &plan, &transitioned)
+                .unwrap()
+                .is_exact()
+        );
+
+        plan.complete_with_value(StepId::WriteNvstrapsConfiguration, "readback:exact")
+            .unwrap();
+        assert!(
+            deployment_identity_comparison(&profile, &plan, &moved_again)
+                .unwrap()
+                .is_exact()
+        );
+        let mut changed_bios_again = moved_again;
+        changed_bios_again.bios_version = "4".into();
+        assert!(
+            !deployment_identity_comparison(&profile, &plan, &changed_bios_again)
                 .unwrap()
                 .is_exact()
         );
