@@ -70,6 +70,12 @@ A read-only scan of one exact firmware fingerprint against pinned patch catalogs
 rule as applicable, absent, or blocked. Only analyzer-owned match counts and catalog hashes may
 enter a legacy Machine Profile.
 
+### Firmware device transaction
+
+The bounded UEFI operation that remaps one bridge and GPU BAR0, programs BAR1 straps, then offers
+both mappings their reverse-order restore. One execution Module owns that ordering; the production
+UEFI adapter and host simulation adapter only perform its individual operations.
+
 ### External adapter
 
 A narrowly verified handoff to software the repository does not own. Current external adapters
@@ -86,6 +92,8 @@ are the installed `nvidia-smi.exe` and a pinned official NVIDIA Profile Inspecto
   subsystem, PCI location, or bridge. The resulting complete identity is immediately re-pinned.
 - Deployment Plan order, evidence kind, evidence value rules, and revision transitions have one
   canonical Rust owner.
+- A Firmware device transaction always attempts device restore before bridge restore, and a failed
+  operation cannot bypass restoration of an earlier successful remap.
 - Every persisted artifact is read back and content-addressed; an existing different artifact is
   an immutable conflict.
 - Vendor flash, UEFI settings, NVIDIA application policy, hardware work, and physical recovery

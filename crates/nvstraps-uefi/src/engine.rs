@@ -17,10 +17,13 @@ use nvstraps_core::straps::{
 };
 use uefi::{Handle, Status, boot};
 
-use crate::pci::{MappingFailure, PciAccess, PciFailure, open_root_bridge};
+use crate::execution::{
+    DeviceTransaction, DeviceTransactionReceipt, ExecutionFault, execute_device_transaction,
+};
+use crate::pci::{PciAccess, PciFailure, open_root_bridge};
 use crate::s3::S3Script;
 use crate::status_writer::StatusWriter;
-use crate::straps::configure_bar1_size;
+use crate::uefi_adapter::UefiExecutionAdapter;
 
 const TARGET_BRIDGE_IO_BASE_LIMIT: u64 = 0xf1f1;
 const PCI_BAR_COUNT: u8 = 6;
@@ -222,63 +225,53 @@ impl FirmwareEngine {
             }
         }
 
-        let bridge_saved = match pci.save_and_remap_bridge(
-            bridge_address,
-            gpu_config.bar0_base,
-            gpu_config.bar0_top,
-            TARGET_BRIDGE_IO_BASE_LIMIT,
-            &mut self.resume,
-        ) {
-            Ok(saved) => saved,
-            Err(failure) => {
-                self.record_mapping_failure(failure, address, StatusCode::BadBridgeConfig);
+        let request = DeviceTransaction {
+            device: address,
+            bridge: bridge_address,
+            bar0_base: gpu_config.bar0_base,
+            bar0_top: gpu_config.bar0_top,
+            bridge_io_base_limit: TARGET_BRIDGE_IO_BASE_LIMIT,
+            bar_size_selector: selector,
+        };
+        let receipt = {
+            let mut adapter = UefiExecutionAdapter::new(pci, &mut self.resume);
+            execute_device_transaction(&mut adapter, &request)
+        };
+        let strap_result = match receipt {
+            DeviceTransactionReceipt::BridgeRemapFailed { failure } => {
+                self.record_execution_fault(failure, address, StatusCode::BadBridgeConfig);
                 return;
             }
-        };
-        let device_saved =
-            match pci.save_and_remap_device_bar0(address, gpu_config.bar0_base, &mut self.resume) {
-                Ok(saved) => saved,
-                Err(failure) => {
-                    self.record_mapping_failure(failure, address, StatusCode::BadGpuConfig);
-                    if let Err(failure) = pci.restore_bridge(bridge_address, bridge_saved) {
-                        self.record_pci_failure(failure);
-                    }
-                    return;
+            DeviceTransactionReceipt::DeviceRemapFailed {
+                failure,
+                bridge_restore_failure,
+            } => {
+                self.record_execution_fault(failure, address, StatusCode::BadGpuConfig);
+                if let Some(failure) = bridge_restore_failure {
+                    self.record_execution_fault(failure, address, StatusCode::BadBridgeConfig);
                 }
-            };
-
-        // SAFETY: Both the bridge window and BAR0 were validated and remapped
-        // to the configured 32-bit MMIO range for the duration of this call.
-        let strap_result = unsafe {
-            configure_bar1_size(gpu_config.bar0_base & !0x0f, selector, &mut self.resume)
-        };
-        let device_restore = pci.restore_device_bar0(address, device_saved);
-        let bridge_restore = pci.restore_bridge(bridge_address, bridge_saved);
-        let mut restore_failed = false;
-        if let Err(failure) = device_restore {
-            self.record_pci_failure(failure);
-            restore_failed = true;
-        }
-        if let Err(failure) = bridge_restore {
-            self.record_pci_failure(failure);
-            restore_failed = true;
-        }
-        if restore_failed {
-            return;
-        }
-        let strap_result = match strap_result {
-            Ok(result) => result,
-            Err(_) => {
-                self.record_status(StatusCode::BadGpuConfig, Some(address));
                 return;
             }
+            DeviceTransactionReceipt::RestorationFailed {
+                device_failure,
+                bridge_failure,
+            } => {
+                if let Some(failure) = device_failure {
+                    self.record_execution_fault(failure, address, StatusCode::BadGpuConfig);
+                }
+                if let Some(failure) = bridge_failure {
+                    self.record_execution_fault(failure, address, StatusCode::BadBridgeConfig);
+                }
+                return;
+            }
+            DeviceTransactionReceipt::StrapProgrammingFailed { failure } => {
+                self.record_execution_fault(failure, address, StatusCode::BadGpuConfig);
+                return;
+            }
+            DeviceTransactionReceipt::Completed(receipt) => receipt,
         };
-        if let Some(status) = strap_result.resume_error {
-            self.record_efi_error(
-                EfiErrorLocation::WriteS3SaveStateProtocol,
-                status,
-                Some(address),
-            );
+        if let Some(failure) = strap_result.resume_fault {
+            self.record_execution_fault(failure, address, StatusCode::BadGpuConfig);
         }
         self.record_status(
             if strap_result.reported_changed {
@@ -427,17 +420,27 @@ impl FirmwareEngine {
         self.enumerated_bridges.contains(&Some(address))
     }
 
-    fn record_mapping_failure(
+    fn record_execution_fault(
         &mut self,
-        failure: MappingFailure,
+        failure: ExecutionFault,
         device: PciAddress,
         invalid_status: StatusCode,
     ) {
         match failure {
-            MappingFailure::InvalidConfiguration(_) => {
+            ExecutionFault::InvalidConfiguration => {
                 self.record_status(invalid_status, Some(device));
             }
-            MappingFailure::Firmware(failure) => self.record_pci_failure(failure),
+            ExecutionFault::Firmware {
+                location,
+                status,
+                address,
+            } => {
+                let _ = self.status.record_efi_error_code(
+                    location,
+                    status,
+                    address.map(PciAddress::location),
+                );
+            }
         }
     }
 

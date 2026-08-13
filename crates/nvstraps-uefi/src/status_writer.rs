@@ -32,9 +32,18 @@ impl StatusWriter {
         status: Status,
         location: Option<PciLocation>,
     ) -> Result<(), Status> {
-        if let Some(raw) =
-            self.accumulator
-                .record_efi_error(error_location, (status.0 & 0xff) as u8, location)
+        self.record_efi_error_code(error_location, (status.0 & 0xff) as u8, location)
+    }
+
+    pub fn record_efi_error_code(
+        &mut self,
+        error_location: EfiErrorLocation,
+        status: u8,
+        location: Option<PciLocation>,
+    ) -> Result<(), Status> {
+        if let Some(raw) = self
+            .accumulator
+            .record_efi_error(error_location, status, location)
         {
             variables::write_status(raw)?;
         }
