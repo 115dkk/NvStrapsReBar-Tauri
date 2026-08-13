@@ -1,55 +1,18 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { bridge } from "./bridge";
+import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import type { SystemSnapshot } from "./types";
+import {
+        createDeploymentWorkspaceSession,
+        type DeploymentWorkspaceIntent,
+} from "./deployment-workspace/session";
 import type {
         BoardPath,
-        DeploymentPackageReceipt,
-        DeploymentPlan,
-        DeploymentConfigRecommendation,
-        ConfigurationRebootPreview,
-        FirmwareFingerprint,
         FirmwareInstallMethod,
-        FirmwarePreparation,
-        FirmwareSetupRebootPreview,
-        LegacyFirmwareAnalysis,
         LegacyPatchRisk,
-        ManualDeploymentStepPreview,
-        MachineProfile,
-        NvidiaProfileBackupReceipt,
-        NvidiaSmiEvidence,
-        ProfileInspectorInstallation,
-        ProfileInspectorLaunch,
         RecoveryMethod,
-        SystemSnapshot,
-} from "./types";
+} from "./deployment-workspace/contract";
 
-const MSI_MANUAL =
-        "https://download.msi.com/archive/mnu_exe/mb/PROZ690-AWIFIDDR4_PROZ690-ADDR4100x150.pdf";
-const exactMsiBoard = (snapshot: SystemSnapshot) => {
-        const machine = snapshot.machineIdentity;
-        return Boolean(
-                machine &&
-                        machine.boardManufacturer ===
-                                "Micro-Star International Co., Ltd." &&
-                        machine.boardProduct === "PRO Z690-A DDR4(MS-7D25)" &&
-                        machine.boardVersion === "1.0",
-        );
-};
 const shortHash = (value?: string) =>
         value ? `${value.slice(0, 10)}…${value.slice(-8)}` : "—";
-const fileName = (path: string) => path.split(/[\\/]/).at(-1) || "firmware.bin";
-const operationError = (error: unknown) =>
-        (error as { message?: string }).message || String(error);
-const sameFirmware = (
-        left: FirmwareFingerprint | null,
-        right: FirmwareFingerprint | null,
-) =>
-        Boolean(
-                left &&
-                        right &&
-                        left.fileName === right.fileName &&
-                        left.byteLength === right.byteLength &&
-                        left.sha256 === right.sha256,
-        );
 const legacyRuleKey = (catalog: string, ruleId: string) =>
         `${catalog}:${ruleId}`;
 const catalogLabels = {
@@ -65,513 +28,56 @@ const riskLabels: Record<LegacyPatchRisk, string> = {
         usbControllerBlacklist: "USB controller blacklist",
         experimentalX79: "Experimental X79 patch",
 };
-const validAcknowledgementNote = (note: string, fingerprintPrefix: string) => {
-        const normalized = note.trim();
-        return (
-                normalized.length >= 40 &&
-                normalized.split(/\s+/).length >= 8 &&
-                normalized
-                        .toLowerCase()
-                        .includes(fingerprintPrefix.toLowerCase())
-        );
-};
-const assertPlanAdvance = (
-        before: DeploymentPlan,
-        after: DeploymentPlan,
-        completedStepIds: DeploymentPlan["steps"][number]["id"][],
-) => {
-        if (
-                after.profileId !== before.profileId ||
-                after.schemaVersion !== before.schemaVersion ||
-                after.originalFirmwareSha256 !== before.originalFirmwareSha256 ||
-                after.recoveryMethod !== before.recoveryMethod
-        )
-                throw new Error(
-                        "The backend returned a deployment receipt for a different profile contract.",
-                );
-        if (after.revision !== before.revision + completedStepIds.length)
-                throw new Error(
-                        "The backend returned an unexpected deployment plan revision.",
-                );
-        if (
-                after.steps.length !== before.steps.length ||
-                after.steps.some(
-                        (step, index) => step.id !== before.steps[index]?.id,
-                )
-        )
-                throw new Error(
-                        "The backend returned a malformed deployment step sequence.",
-                );
-        const readyBefore = before.steps
-                .map((step, index) => ({ step, index }))
-                .filter(({ step }) => step.state === "ready");
-        if (readyBefore.length !== 1)
-                throw new Error(
-                        "The current deployment plan does not have exactly one active step.",
-                );
-        const activeIndex = readyBefore[0]!.index;
-        const expectedCompleted = before.steps.slice(
-                activeIndex,
-                activeIndex + completedStepIds.length,
-        );
-        if (
-                expectedCompleted.length !== completedStepIds.length ||
-                expectedCompleted.some(
-                        (step, index) =>
-                                step.id !== completedStepIds[index] ||
-                                (index === 0
-                                        ? step.state !== "ready"
-                                        : step.state !== "pending"),
-                ) ||
-                completedStepIds.some((_, index) => {
-                        const step = after.steps[activeIndex + index];
-                        return step?.state !== "completed" || !step.evidence;
-                }) ||
-                after.steps.some(
-                        (step, index) =>
-                                (index < activeIndex ||
-                                        index >
-                                                activeIndex +
-                                                        completedStepIds.length) &&
-                                (step.state !== before.steps[index]?.state ||
-                                        JSON.stringify(step.evidence) !==
-                                                JSON.stringify(
-                                                        before.steps[index]?.evidence,
-                                                )),
-                )
-        )
-                throw new Error(
-                        "The backend receipt advanced unexpected deployment steps.",
-                );
-        const nextIndex = activeIndex + completedStepIds.length;
-        const next = after.steps[nextIndex];
-        if (
-                (next &&
-                        (next.state !== "ready" ||
-                                before.steps[nextIndex]?.state !== "pending" ||
-                                JSON.stringify(next.evidence) !==
-                                        JSON.stringify(
-                                                before.steps[nextIndex]?.evidence,
-                                        ))) ||
-                (!next && after.steps.some((step) => step.state === "ready"))
-        )
-                throw new Error(
-                        "The backend receipt did not activate exactly the next deployment step.",
-                );
-        const ready = after.steps.filter((step) => step.state === "ready");
-        if (ready.length !== (next ? 1 : 0))
-                throw new Error(
-                        "The backend returned an invalid active deployment step count.",
-                );
-        return after;
-};
-const assertRecommendation = (value: DeploymentConfigRecommendation) => {
-        const ruleIdentities = value.draft.rules.map((rule) =>
-                [
-                        rule.deviceId,
-                        rule.subsystemVendorId,
-                        rule.subsystemDeviceId,
-                        rule.bus,
-                        rule.device,
-                        rule.function,
-                ].join(":"),
-        );
-        if (
-                value.draft.globalMode !== 1 ||
-                value.draft.targetPciBarSize !== 0 ||
-                value.draft.skipS3Resume !== false ||
-                value.draft.overrideBarSizeMask !== false ||
-                value.draft.guardSetupChanges !== true ||
-                value.turingGpuCount <= 0 ||
-                value.registryManagedGpuCount < 0 ||
-                value.exactFallbackRuleCount < 0 ||
-                value.registryManagedGpuCount + value.exactFallbackRuleCount !==
-                        value.turingGpuCount ||
-                value.exactFallbackRuleCount !== value.draft.rules.length ||
-                new Set(ruleIdentities).size !== ruleIdentities.length ||
-                value.draft.rules.some(
-                        (rule) =>
-                                rule.matchScope !== "location" ||
-                                rule.barSizeSelector !== 5 ||
-                                rule.overrideBarSizeMask !== null,
-                )
-        )
-                throw new Error(
-                        "The backend returned an inconsistent deployment configuration recommendation.",
-                );
-        return value;
-};
-const assertFreshProfilePlan = (
-        profile: MachineProfile,
-        nextPlan: DeploymentPlan,
-) => {
-        if (
-                nextPlan.profileId !== profile.profileId ||
-                nextPlan.originalFirmwareSha256 !==
-                        profile.originalFirmware.sha256 ||
-                nextPlan.steps.filter((step) => step.state === "ready").length !==
-                        1
-        )
-                throw new Error(
-                        "The backend returned a malformed deployment plan for the new profile.",
-                );
-        return nextPlan;
-};
 
 type Props = { snapshot: SystemSnapshot };
-type Activity = { tone: "success" | "warning" | "error"; text: string } | null;
 
 export function DeploymentWorkspace({ snapshot }: Props) {
-        const msi = exactMsiBoard(snapshot);
-        const [displayName, setDisplayName] = useState(
-                        msi ? "PRO Z690-A DDR4 · RTX 2080 SUPER" : "",
-                ),
-                [boardPath, setBoardPath] = useState<BoardPath>(
-                        msi ? "nativeResizableBar" : "nativeResizableBar",
-                ),
-                [firmwarePath, setFirmwarePath] = useState(""),
-                [firmware, setFirmware] = useState<FirmwareFingerprint | null>(
-                        null,
-                ),
-                [recoveryMethod, setRecoveryMethod] =
-                        useState<RecoveryMethod>(
-                                msi ? "usbFlashback" : "vendorRecovery",
-                        ),
-                [installMethod, setInstallMethod] =
-                        useState<FirmwareInstallMethod>(
-                                msi
-                                        ? "firmwareSetupUtility"
-                                        : "firmwareSetupUtility",
-                        ),
-                [instructionsUrl, setInstructionsUrl] = useState(
-                        msi ? MSI_MANUAL : "",
-                ),
-                [recoveryNote, setRecoveryNote] = useState(
-                        msi
-                                ? "MSI Flash BIOS Button recovery: MSI.ROM at USB root, rear Flash BIOS port, physical button."
-                                : "",
-                ),
-                [installNote, setInstallNote] = useState(
-                        msi
-                                ? "Use M-FLASH to select the exported vendor-format image. The app does not perform the flash."
-                                : "",
-                ),
-                [routeConfirmed, setRouteConfirmed] = useState(false),
-                [legacyAnalysis, setLegacyAnalysis] = useState<{
-                        path: string;
-                        value: LegacyFirmwareAnalysis;
-                } | null>(null),
-                [legacyAnalysisStatus, setLegacyAnalysisStatus] = useState<
-                        "idle" | "pending" | "ready" | "error"
-                >("idle"),
-                [legacyAnalysisError, setLegacyAnalysisError] = useState(""),
-                [selectedLegacyRules, setSelectedLegacyRules] = useState<
-                        string[]
-                >([]),
-                [legacyAcknowledgements, setLegacyAcknowledgements] = useState<
-                        Partial<
-                                Record<
-                                        LegacyPatchRisk,
-                                        { note: string; confirmed: boolean }
-                                >
-                        >
-                >({}),
-                [profiles, setProfiles] = useState<MachineProfile[]>([]),
-                [selectedProfileId, setSelectedProfileId] = useState(""),
-                [plan, setPlan] = useState<DeploymentPlan | null>(null),
-                [preflightExact, setPreflightExact] = useState<boolean | null>(
-                        null,
-                ),
-                [preparation, setPreparation] =
-                        useState<FirmwarePreparation | null>(null),
-                [destination, setDestination] = useState(""),
-                [packageReceipt, setPackageReceipt] =
-                        useState<DeploymentPackageReceipt | null>(null),
-                [rebootPreview, setRebootPreview] =
-                        useState<FirmwareSetupRebootPreview | null>(null),
-                [showReboot, setShowReboot] = useState(false),
-                [savedWork, setSavedWork] = useState(false),
-                [manualPreview, setManualPreview] =
-                        useState<ManualDeploymentStepPreview | null>(null),
-                [showManual, setShowManual] = useState(false),
-                [manualConfirmed, setManualConfirmed] = useState(false),
-                [configurationRebootPreview, setConfigurationRebootPreview] =
-                        useState<ConfigurationRebootPreview | null>(null),
-                [showConfigurationReboot, setShowConfigurationReboot] =
-                        useState(false),
-                [guardedConfigConfirmed, setGuardedConfigConfirmed] =
-                        useState(false),
-                [configRecommendation, setConfigRecommendation] = useState<{
-                        profileId: string;
-                        planRevision: number;
-                        value: DeploymentConfigRecommendation;
-                } | null>(null),
-                [recommendationStatus, setRecommendationStatus] = useState<
-                        "idle" | "pending" | "ready" | "error"
-                >("idle"),
-                [recommendationError, setRecommendationError] = useState(""),
-                [workflowReceipt, setWorkflowReceipt] = useState<{
-                        title: string;
-                        detail: string;
-                } | null>(null),
-                [barEvidence, setBarEvidence] =
-                        useState<NvidiaSmiEvidence | null>(null),
-                [installation, setInstallation] =
-                        useState<ProfileInspectorInstallation | null>(null),
-                [backup, setBackup] =
-                        useState<NvidiaProfileBackupReceipt | null>(null),
-                [launch, setLaunch] =
-                        useState<ProfileInspectorLaunch | null>(null),
-                [busyAction, setBusyAction] = useState(""),
-                [activity, setActivity] = useState<Activity>(null);
-        const sequence = useRef(0),
-                busyActionRef = useRef(""),
-                legacyAnalysisRequest = useRef(0),
-                recommendationRequest = useRef(0),
-                rebootDialog = useRef<HTMLDivElement>(null),
-                rebootButton = useRef<HTMLButtonElement>(null);
-
-        const selectedProfile = useMemo(
-                () =>
-                        profiles.find(
-                                (profile) =>
-                                        profile.profileId === selectedProfileId,
-                        ) ?? null,
-                [profiles, selectedProfileId],
+        const session = useMemo(
+                () => createDeploymentWorkspaceSession(snapshot),
+                [snapshot],
         );
-        const legacyAnalysisValid = Boolean(
-                legacyAnalysis &&
-                        legacyAnalysis.path === firmwarePath &&
-                        sameFirmware(legacyAnalysis.value.firmware, firmware),
+        useEffect(() => () => session.dispose(), [session]);
+        const view = useSyncExternalStore(
+                session.subscribe,
+                session.view,
+                session.view,
         );
-        const selectedLegacyEntries = useMemo(() => {
-                if (!legacyAnalysis || !legacyAnalysisValid) return [];
-                return legacyAnalysis.value.catalogs.flatMap((catalog) =>
-                        catalog.rules
-                                .filter(
-                                        (rule) =>
-                                                rule.status === "applicable" &&
-                                                selectedLegacyRules.includes(
-                                                        legacyRuleKey(
-                                                                catalog.catalog,
-                                                                rule.ruleId,
-                                                        ),
-                                                ),
-                                )
-                                .map((rule) => ({ catalog, rule })),
-                );
-        }, [legacyAnalysis, legacyAnalysisValid, selectedLegacyRules]);
-        const selectedLegacyRisks = useMemo(
-                () => [
-                        ...new Set(
-                                selectedLegacyEntries.flatMap(
-                                        ({ rule }) => rule.requiredRisks,
-                                ),
-                        ),
-                ],
-                [selectedLegacyEntries],
-        );
-        const acknowledgementHash = firmware?.sha256.slice(0, 8) ?? "";
-        const missingLegacyRisk = selectedLegacyRisks.find((risk) => {
-                const acknowledgement = legacyAcknowledgements[risk];
-                const note = acknowledgement?.note.trim() ?? "";
-                return !(
-                        acknowledgement?.confirmed &&
-                        validAcknowledgementNote(note, acknowledgementHash)
-                );
-        });
-        const legacyReady =
-                boardPath !== "legacyAbove4g" ||
-                (legacyAnalysisStatus === "ready" &&
-                        legacyAnalysisValid &&
-                        selectedLegacyEntries.length > 0 &&
-                        !missingLegacyRisk);
-        const legacyNextAction = (() => {
-                if (boardPath !== "legacyAbove4g") return "";
-                if (!firmware)
-                        return "Choose and inspect the exact firmware image first.";
-                if (legacyAnalysisStatus === "pending")
-                        return "Wait for the exact-image analysis to finish.";
-                if (legacyAnalysisStatus === "error")
-                        return `Analysis failed: ${legacyAnalysisError} Retry the exact image.`;
-                if (!legacyAnalysis || !legacyAnalysisValid)
-                        return "Analyze this exact firmware image before selecting legacy rules.";
-                if (!selectedLegacyEntries.length)
-                        return "Select at least one applicable rule. Only proven matches can be selected.";
-                if (missingLegacyRisk)
-                        return `Add an image-specific note and confirmation for ${riskLabels[missingLegacyRisk]}.`;
-                return "Legacy selections are pinned to this firmware fingerprint and ready for profile creation.";
-        })();
-        const activeStep = plan?.steps.find((step) => step.state === "ready");
-        const stepCompleted = (stepId: DeploymentPlan["steps"][number]["id"]) =>
-                plan?.steps.find((step) => step.id === stepId)?.state ===
-                "completed";
-        const invalidateLegacyAnalysis = () => {
-                legacyAnalysisRequest.current += 1;
-                setLegacyAnalysis(null);
-                setLegacyAnalysisStatus("idle");
-                setLegacyAnalysisError("");
-                setSelectedLegacyRules([]);
-                setLegacyAcknowledgements({});
-                if (busyActionRef.current === "legacy-analysis")
-                        busyActionRef.current = "";
-                setBusyAction((current) =>
-                        current === "legacy-analysis" ? "" : current,
-                );
-        };
-        const run = async <T,>(
-                action: string,
-                work: () => Promise<T>,
-                apply: (value: T) => void,
-                success: string,
-        ) => {
-                if (busyActionRef.current) return;
-                const current = ++sequence.current;
-                busyActionRef.current = action;
-                setBusyAction(action);
-                setActivity(null);
-                try {
-                        const value = await work();
-                        if (current !== sequence.current)
-                                throw new Error(
-                                        "A stale operation response was rejected because the selected profile or deployment plan changed.",
-                                );
-                        apply(value);
-                        setActivity({ tone: "success", text: success });
-                } catch (error) {
-                        setActivity({
-                                tone: "error",
-                                text: operationError(error),
-                        });
-                } finally {
-                        if (busyActionRef.current === action) {
-                                busyActionRef.current = "";
-                                setBusyAction("");
-                        }
-                }
-        };
-
-        useEffect(() => {
-                let live = true;
-                void Promise.all([
-                        bridge.listMachineProfiles(),
-                        bridge.getNvidiaProfileInspectorInstallation(),
-                ])
-                        .then(([nextProfiles, nextInstallation]) => {
-                                if (!live) return;
-                                setProfiles(nextProfiles);
-                                setInstallation(nextInstallation);
-                                if (nextProfiles.length)
-                                        setSelectedProfileId(
-                                                nextProfiles[0].profileId,
-                                        );
-                        })
-                        .catch((error) =>
-                                live &&
-                                setActivity({
-                                        tone: "error",
-                                        text: operationError(error),
-                                }),
-                        );
-                return () => {
-                        live = false;
-                };
-        }, []);
-
-        useEffect(() => {
-                if (!selectedProfileId) {
-                        setPlan(null);
-                        return;
-                }
-                const current = ++sequence.current;
-                void bridge
-                        .getDeploymentPlan(selectedProfileId)
-                        .then((next) => {
-                                if (current === sequence.current) setPlan(next);
-                        })
-                        .catch((error) =>
-                                current === sequence.current &&
-                                setActivity({
-                                        tone: "error",
-                                        text: operationError(error),
-                                }),
-                        );
-        }, [selectedProfileId]);
-
-        useEffect(() => {
-                const request = ++recommendationRequest.current;
-                setGuardedConfigConfirmed(false);
-                setConfigRecommendation(null);
-                setRecommendationError("");
-                if (
-                        !plan ||
-                        activeStep?.id !== "writeNvstrapsConfiguration"
-                ) {
-                        setRecommendationStatus("idle");
-                        return;
-                }
-                const profileId = plan.profileId;
-                const planRevision = plan.revision;
-                setRecommendationStatus("pending");
-                void bridge
-                        .getRecommendedDeploymentConfig(profileId)
-                        .then((value) => {
-                                if (request !== recommendationRequest.current)
-                                        throw new Error(
-                                                "A stale deployment configuration recommendation was discarded.",
-                                        );
-                                const recommendation =
-                                        assertRecommendation(value);
-                                setConfigRecommendation({
-                                        profileId,
-                                        planRevision,
-                                        value: recommendation,
-                                });
-                                setRecommendationStatus("ready");
-                        })
-                        .catch((error) => {
-                                if (request !== recommendationRequest.current)
-                                        return;
-                                const message = operationError(error);
-                                setRecommendationStatus("error");
-                                setRecommendationError(message);
-                                setActivity({ tone: "error", text: message });
-                        });
-        }, [activeStep?.id, plan?.profileId, plan?.revision]);
-
+        const {
+                displayName, boardPath, firmwarePath, firmware, recoveryMethod,
+                installMethod, instructionsUrl, recoveryNote, installNote,
+                routeConfirmed, legacyAnalysis, legacyAnalysisStatus,
+                legacyAnalysisError, selectedLegacyRules, legacyAcknowledgements,
+                profiles, selectedProfileId, selectedProfile, plan, activeStep,
+                nextAction, preflightExact, preparation, destination,
+                packageReceipt, rebootPreview, showReboot, savedWork,
+                manualPreview, showManual, manualConfirmed,
+                configurationRebootPreview, showConfigurationReboot,
+                guardedConfigConfirmed, configRecommendation,
+                recommendationStatus, recommendationError, workflowReceipt,
+                barEvidence, installation, backup, launch, busyAction, activity,
+                legacyAnalysisValid, selectedLegacyEntries, selectedLegacyRisks,
+                acknowledgementHash, missingLegacyRisk, legacyReady,
+                legacyNextAction,
+        } = view;
+        const rebootDialog = useRef<HTMLDivElement>(null);
+        const rebootButton = useRef<HTMLButtonElement>(null);
         useEffect(() => {
                 if (!(showReboot || showManual || showConfigurationReboot)) return;
                 const previous = document.activeElement as HTMLElement | null;
                 const keydown = (event: KeyboardEvent) => {
                         if (event.key === "Escape") {
-                                setShowReboot(false);
-                                setShowManual(false);
-                                setShowConfigurationReboot(false);
+                                void session.dispatch({ type: "closeModals" });
                                 return;
                         }
-                        if (event.key !== "Tab" || !rebootDialog.current)
-                                return;
-                        const focusable = [
-                                ...rebootDialog.current.querySelectorAll<HTMLElement>(
-                                        "button:not([disabled]), input:not([disabled])",
-                                ),
-                        ];
-                        const first = focusable[0],
-                                last = focusable.at(-1);
-                        if (
-                                event.shiftKey &&
-                                document.activeElement === first &&
-                                last
-                        ) {
-                                event.preventDefault();
-                                last.focus();
-                        } else if (
-                                !event.shiftKey &&
-                                document.activeElement === last &&
-                                first
-                        ) {
-                                event.preventDefault();
-                                first.focus();
+                        if (event.key !== "Tab" || !rebootDialog.current) return;
+                        const focusable = [...rebootDialog.current.querySelectorAll<HTMLElement>(
+                                "button:not([disabled]), input:not([disabled])",
+                        )];
+                        const first = focusable[0], last = focusable.at(-1);
+                        if (event.shiftKey && document.activeElement === first && last) {
+                                event.preventDefault(); last.focus();
+                        } else if (!event.shiftKey && document.activeElement === last && first) {
+                                event.preventDefault(); first.focus();
                         }
                 };
                 addEventListener("keydown", keydown);
@@ -579,604 +85,65 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                         removeEventListener("keydown", keydown);
                         (rebootButton.current ?? previous)?.focus();
                 };
-        }, [showReboot, showManual, showConfigurationReboot]);
-
-        const chooseFirmware = () =>
-                void run(
-                        "firmware",
-                        async () => {
-                                const path = await bridge.selectFirmwareImage();
-                                if (!path) throw new Error("Firmware selection was cancelled.");
-                                const inspected = await bridge.inspectFirmwareImage(path);
-                                return { path, inspected };
-                        },
-                        ({ path, inspected }) => {
-                                invalidateLegacyAnalysis();
-                                setFirmwarePath(path);
-                                setFirmware(inspected);
-                        },
-                        "Source firmware read and hashed. No firmware was modified.",
-                );
-        const inspectManualPath = () =>
-                void run(
-                        "firmware",
-                        () => bridge.inspectFirmwareImage(firmwarePath),
-                        (inspected) => {
-                                invalidateLegacyAnalysis();
-                                setFirmware(inspected);
-                        },
-                        "Source firmware read and hashed. No firmware was modified.",
-                );
-        const analyzeLegacy = async () => {
-                if (busyActionRef.current || !firmware || !firmwarePath) return;
-                const request = ++legacyAnalysisRequest.current;
-                const requestedPath = firmwarePath;
-                const requestedFirmware = structuredClone(firmware);
-                busyActionRef.current = "legacy-analysis";
-                setBusyAction("legacy-analysis");
-                setLegacyAnalysisStatus("pending");
-                setLegacyAnalysisError("");
-                setLegacyAnalysis(null);
-                setSelectedLegacyRules([]);
-                setLegacyAcknowledgements({});
-                setActivity(null);
-                try {
-                        const value = await bridge.analyzeLegacyFirmware(requestedPath);
-                        if (request !== legacyAnalysisRequest.current) return;
-                        if (!sameFirmware(value.firmware, requestedFirmware)) {
-                                throw new Error(
-                                        "The firmware fingerprint changed between inspection and analysis.",
-                                );
-                        }
-                        setLegacyAnalysis({ path: requestedPath, value });
-                        setSelectedLegacyRules(
-                                value.catalogs.flatMap((catalog) =>
-                                        catalog.rules
-                                                .filter(
-                                                        (rule) =>
-                                                                rule.status ===
-                                                                        "applicable" &&
-                                                                rule.recommended,
-                                                )
-                                                .map((rule) =>
-                                                        legacyRuleKey(
-                                                                catalog.catalog,
-                                                                rule.ruleId,
-                                                        ),
-                                                ),
-                                ),
-                        );
-                        setLegacyAnalysisStatus("ready");
-                        setActivity({
-                                tone: "success",
-                                text: "Exact-image legacy analysis completed read-only. No firmware was modified.",
-                        });
-                } catch (error) {
-                        if (request !== legacyAnalysisRequest.current) return;
-                        const message = operationError(error);
-                        setLegacyAnalysisStatus("error");
-                        setLegacyAnalysisError(message);
-                        setActivity({ tone: "error", text: message });
-                } finally {
-                        if (request === legacyAnalysisRequest.current) {
-                                if (busyActionRef.current === "legacy-analysis")
-                                        busyActionRef.current = "";
-                                setBusyAction("");
-                        }
-                }
-        };
-        const toggleLegacyRule = (key: string, checked: boolean) =>
-                setSelectedLegacyRules((current) =>
-                        checked
-                                ? [...new Set([...current, key])]
-                                : current.filter((value) => value !== key),
-                );
-        const setLegacyRiskNote = (risk: LegacyPatchRisk, note: string) =>
-                setLegacyAcknowledgements((current) => ({
-                        ...current,
-                        [risk]: {
-                                note,
-                                confirmed: current[risk]?.confirmed ?? false,
-                        },
-                }));
-        const setLegacyRiskConfirmed = (
-                risk: LegacyPatchRisk,
-                confirmed: boolean,
-        ) =>
-                setLegacyAcknowledgements((current) => ({
-                        ...current,
-                        [risk]: {
-                                note: current[risk]?.note ?? "",
-                                confirmed,
-                        },
-                }));
-        const createProfile = () => {
-                if (!firmware) return;
-                const expectedFirmware = structuredClone(firmware);
-                void run(
-                        "profile",
-                        () =>
-                                bridge.createMachineProfile({
-                                        displayName,
-                                        boardPath,
-                                        firmwarePath,
-                                        expectedFirmware,
-                                        recovery: {
-                                                method: recoveryMethod,
-                                                testedOrDocumented:
-                                                        routeConfirmed,
-                                                note: recoveryNote,
-                                        },
-                                        firmwareInstall: {
-                                                method: installMethod,
-                                                artifactFileName: fileName(
-                                                        firmwarePath,
-                                                ),
-                                                testedOrDocumented:
-                                                        routeConfirmed,
-                                                officialInstructionsUrl:
-                                                        instructionsUrl,
-                                                note: installNote,
-                                        },
-                                        legacyPatches:
-                                                boardPath === "legacyAbove4g" &&
-                                                legacyAnalysis &&
-                                                legacyAnalysisValid
-                                                        ? {
-                                                                  upstreamCommit:
-                                                                          legacyAnalysis
-                                                                                  .value
-                                                                                  .upstreamCommit,
-                                                                  catalogs:
-                                                                          legacyAnalysis.value.catalogs
-                                                                                  .filter(
-                                                                                          (catalog) =>
-                                                                                                  selectedLegacyEntries.some(
-                                                                                                          (entry) =>
-                                                                                                                  entry.catalog.catalog ===
-                                                                                                                  catalog.catalog,
-                                                                                                  ),
-                                                                                  )
-                                                                                  .map(
-                                                                                          (catalog) => ({
-                                                                                                  catalog: catalog.catalog,
-                                                                                                  sourceSha256:
-                                                                                                          catalog.sourceSha256,
-                                                                                          }),
-                                                                                  ),
-                                                                  selections:
-                                                                          selectedLegacyEntries.map(
-                                                                                  ({ catalog, rule }) => ({
-                                                                                          catalog: catalog.catalog,
-                                                                                          ruleId: rule.ruleId,
-                                                                                          expectedMatches:
-                                                                                                  rule.expectedMatches!,
-                                                                                          requiredRisks:
-                                                                                                  rule.requiredRisks,
-                                                                                  }),
-                                                                          ),
-                                                                  acknowledgements:
-                                                                          selectedLegacyRisks.map(
-                                                                                  (risk) => ({
-                                                                                          risk,
-                                                                                          note: legacyAcknowledgements[
-                                                                                                  risk
-                                                                                          ]!.note.trim(),
-                                                                                  }),
-                                                                          ),
-                                                          }
-                                                        : undefined,
-                                }),
-                        (bundle) => {
-                                assertFreshProfilePlan(
-                                        bundle.profile,
-                                        bundle.plan,
-                                );
-                                setProfiles((current) => [
-                                        bundle.profile,
-                                        ...current.filter(
-                                                (profile) =>
-                                                        profile.profileId !==
-                                                        bundle.profile.profileId,
-                                        ),
-                                ]);
-                                setSelectedProfileId(bundle.profile.profileId);
-                                setPlan(bundle.plan);
-                                setPreflightExact(true);
-                        },
-                        boardPath === "legacyAbove4g"
-                                ? `Machine-bound legacy profile created with ${selectedLegacyEntries.length} authoritative rule ${selectedLegacyEntries.length === 1 ? "selection" : "selections"}; no firmware was modified or flashed.`
-                                : "Machine-bound profile created; the exact source image was preserved.",
-                );
-        };
-        const compare = () =>
-                void run(
-                        "preflight",
-                        () =>
-                                bridge.compareMachineProfile(
-                                        selectedProfileId,
-                                ),
-                        (comparison) => {
-                                const exact =
-                                        comparison.result.differences.length ===
-                                        0;
-                                setPreflightExact(exact);
-                                if (!exact)
-                                        throw new Error(
-                                                `Pinned machine preflight found ${comparison.result.differences.length} difference${comparison.result.differences.length === 1 ? "" : "s"}; deployment remains blocked until the selected profile matches.`,
-                                        );
-                        },
-                        "Current machine, GPU topology, BIOS, and preserved source match the profile.",
-                );
-        const prepare = () => {
-                if (!plan || !activeStep) return;
-                const before = plan;
-                const start = before.steps.findIndex(
-                        (step) => step.id === activeStep.id,
-                );
-                const end = before.steps.findIndex(
-                        (step) => step.id === "verifyPatchedArtifact",
-                );
-                const expected = before.steps
-                        .slice(start, end + 1)
-                        .map((step) => step.id);
-                void run(
-                        "prepare",
-                        () =>
-                                bridge.prepareFirmwareArtifact(
-                                        selectedProfileId,
-                                ),
-                        (result) => {
-                                assertPlanAdvance(
-                                        before,
-                                        result.plan,
-                                        expected,
-                                );
-                                setPreparation(result);
-                                setPlan(result.plan);
-                        },
-                        "Rust driver injected and the patched artifact verified. Nothing was flashed.",
-                );
-        };
-        const chooseDestination = () =>
-                void run(
-                        "destination",
-                        async () => {
-                                const path =
-                                        await bridge.selectDestinationDirectory();
-                                if (!path)
-                                        throw new Error(
-                                                "Destination selection was cancelled.",
-                                        );
-                                return path;
-                        },
-                        setDestination,
-                        "Package destination selected.",
-                );
-        const exportPackage = () =>
-                void run(
-                        "export",
-                        () =>
-                                bridge.exportDeploymentPackage(
-                                        selectedProfileId,
-                                        destination,
-                                ),
-                        setPackageReceipt,
-                        "Verified deployment package exported. Vendor flashing remains manual.",
-                );
-        const previewReboot = () =>
-                void run(
-                        "reboot-preview",
-                        () =>
-                                bridge.previewFirmwareSetupReboot(
-                                        selectedProfileId,
-                                ),
-                        (preview) => {
-                                setRebootPreview(preview);
-                                setSavedWork(false);
-                                setShowReboot(true);
-                        },
-                        "Restart scope previewed; no restart has occurred.",
-                );
-        const reboot = () => {
-                if (!rebootPreview) return;
-                setShowReboot(false);
-                void run(
-                        "reboot",
-                        () =>
-                                bridge.rebootToFirmwareSetup(
-                                        rebootPreview,
-                                        savedWork,
-                                ),
-                        (receipt) => {
-                                if (
-                                        receipt.profileId !==
-                                                rebootPreview.profileId ||
-                                        receipt.accepted !== true
-                                )
-                                        throw new Error(
-                                                "The firmware restart request returned an invalid acceptance receipt.",
-                                        );
-                        },
-                        "Windows accepted the restart request. This only opens firmware setup.",
-                );
-        };
-        const openManualConfirmation = () => {
-                if (!plan || !activeStep) return;
-                const expectedProfile = plan.profileId;
-                const expectedRevision = plan.revision;
-                const expectedStep = activeStep.id;
-                void run(
-                        "manual-preview",
-                        async () => {
-                                const preview =
-                                        await bridge.previewManualDeploymentStep(
-                                                selectedProfileId,
-                                        );
-                                if (
-                                        preview.profileId !== expectedProfile ||
-                                        preview.planRevision !== expectedRevision ||
-                                        preview.stepId !== expectedStep
-                                )
-                                        throw new Error(
-                                                "The deployment plan changed while the consequence preview was loading. Review the current step again.",
-                                        );
-                                return preview;
-                        },
-                        (preview) => {
-                                setManualPreview(preview);
-                                setManualConfirmed(false);
-                                setShowManual(true);
-                        },
-                        "Current manual consequence preview loaded; nothing was completed.",
-                );
-        };
-        const confirmManual = () => {
-                if (!manualPreview || !manualConfirmed || !plan) return;
-                const expectedRevision = manualPreview.planRevision;
-                const expectedStep = manualPreview.stepId;
-                const before = plan;
-                setShowManual(false);
-                void run(
-                        "manual-confirm",
-                        () => bridge.confirmManualDeploymentStep(manualPreview),
-                        (receipt) => {
-                                if (
-                                        receipt.plan.profileId !== before.profileId ||
-                                        before.revision !== expectedRevision ||
-                                        receipt.stepId !== expectedStep
-                                )
-                                        throw new Error(
-                                                "The backend returned a stale manual-step receipt.",
-                                        );
-                                assertPlanAdvance(before, receipt.plan, [
-                                        expectedStep,
-                                ]);
-                                setPlan(receipt.plan);
-                                setWorkflowReceipt({
-                                        title: `${manualPreview.title} recorded`,
-                                        detail: `Operator attestation persisted at ${receipt.recordedAtUnixMs}.`,
-                                });
-                        },
-                        "Manual gate recorded in the durable deployment plan.",
-                );
-        };
-        const verifyDriver = () => {
-                if (!plan || !activeStep) return;
-                const before = plan;
-                const expected =
-                        activeStep.id === "rebootAfterFirmware"
-                                ? ([
-                                          "rebootAfterFirmware",
-                                          "verifyDriverLoaded",
-                                  ] as const)
-                                : (["verifyDriverLoaded"] as const);
-                void run(
-                        "driver-verify",
-                        () => bridge.verifyDeploymentDriver(selectedProfileId),
-                        (receipt) => {
-                                assertPlanAdvance(before, receipt.plan, [
-                                        ...expected,
-                                ]);
-                                setPlan(receipt.plan);
-                                setWorkflowReceipt({
-                                        title: "Current boot and Rust DXE verified",
-                                        detail: `${receipt.status.label} · ${receipt.status.raw}. The volatile status proved this boot and advanced both boot and driver gates.`,
-                                });
-                        },
-                        "Current Windows boot and Rust DXE status were durably verified.",
-                );
-        };
-        const saveGuardedConfig = () => {
-                if (
-                        !guardedConfigConfirmed ||
-                        !plan ||
-                        !configRecommendation ||
-                        configRecommendation.profileId !== plan.profileId ||
-                        configRecommendation.planRevision !== plan.revision
-                )
-                        return;
-                const before = plan;
-                const submittedDraft = structuredClone(
-                        configRecommendation.value.draft,
-                );
-                void run(
-                        "deployment-config",
-                        () =>
-                                bridge.saveDeploymentConfig(
-                                        selectedProfileId,
-                                        submittedDraft,
-                                ),
-                        (receipt) => {
-                                assertPlanAdvance(before, receipt.plan, [
-                                        "writeNvstrapsConfiguration",
-                                ]);
-                                if (
-                                        JSON.stringify(receipt.save.draft) !==
-                                        JSON.stringify(submittedDraft)
-                                )
-                                        throw new Error(
-                                                "The configuration read-back receipt does not match the recommended draft that was submitted.",
-                                        );
-                                setPlan(receipt.plan);
-                                setWorkflowReceipt({
-                                        title: "Configuration write verified by read-back",
-                                        detail: `${receipt.save.bytesWritten} bytes · saved ${receipt.save.savedAtUnixMs}. A Windows restart is still required.`,
-                                });
-                                setGuardedConfigConfirmed(false);
-                        },
-                        "Guarded deployment configuration was written and verified by read-back.",
-                );
-        };
-        const openConfigurationReboot = () => {
-                if (!plan) return;
-                const expectedProfile = plan.profileId;
-                const expectedRevision = plan.revision;
-                void run(
-                        "configuration-reboot-preview",
-                        async () => {
-                                const preview =
-                                        await bridge.previewConfigurationReboot(
-                                                selectedProfileId,
-                                        );
-                                if (
-                                        preview.profileId !== expectedProfile ||
-                                        preview.planRevision !== expectedRevision
-                                )
-                                        throw new Error(
-                                                "The deployment plan changed while the restart preview was loading.",
-                                        );
-                                return preview;
-                        },
-                        (preview) => {
-                                setConfigurationRebootPreview(preview);
-                                setSavedWork(false);
-                                setShowConfigurationReboot(true);
-                        },
-                        "Configuration restart previewed; the plan did not advance.",
-                );
-        };
-        const requestConfigurationReboot = () => {
-                if (!configurationRebootPreview) return;
-                setShowConfigurationReboot(false);
-                void run(
-                        "configuration-reboot",
-                        () =>
-                                bridge.rebootAfterConfiguration(
-                                        configurationRebootPreview,
-                                        savedWork,
-                                ),
-                        (receipt) => {
-                                if (
-                                        receipt.profileId !== selectedProfileId ||
-                                        receipt.accepted !== true ||
-                                        receipt.planAdvanced !== false
-                                )
-                                        throw new Error(
-                                                "The restart request returned an invalid plan-advancement receipt.",
-                                        );
-                                setWorkflowReceipt({
-                                        title: "Configuration restart request accepted",
-                                        detail: "Plan advanced: false. Return after Windows boots, then verify the later boot separately.",
-                                });
-                        },
-                        "Windows accepted the restart request; this did not complete the reboot gate.",
-                );
-        };
-        const verifyConfigurationBoot = () => {
-                if (!plan) return;
-                const before = plan;
-                void run(
-                        "configuration-boot-verify",
-                        () =>
-                                bridge.verifyConfigurationReboot(
-                                        selectedProfileId,
-                                ),
-                        (receipt) => {
-                                assertPlanAdvance(before, receipt.plan, [
-                                        "rebootAfterConfiguration",
-                                ]);
-                                setPlan(receipt.plan);
-                                setWorkflowReceipt({
-                                        title: "Returned Windows boot verified",
-                                        detail: `Boot ${receipt.bootedAtUnixMs} is later than configuration read-back ${receipt.configurationSavedAtUnixMs}.`,
-                                });
-                        },
-                        "A Windows boot after the configuration read-back was durably verified.",
-                );
-        };
-        const collectBar = () => {
-                if (!plan) return;
-                const before = plan;
-                void run(
-                        "bar1",
-                        () =>
-                                bridge.collectNvidiaSmiEvidence(
-                                        selectedProfileId,
-                                ),
-                        (receipt) => {
-                                if (
-                                        receipt.evidence.profileId !==
-                                                selectedProfileId ||
-                                        receipt.evidence.allProfileGpusObserved !==
-                                                true
-                                )
-                                        throw new Error(
-                                                "NVIDIA telemetry did not prove every GPU in the selected profile.",
-                                        );
-                                assertPlanAdvance(before, receipt.plan, [
-                                        "verifyResizableBar",
-                                ]);
-                                setPlan(receipt.plan);
-                                setBarEvidence(receipt.evidence);
-                                setWorkflowReceipt({
-                                        title: "Resizable BAR independently verified",
-                                        detail: `All profile GPUs observed · XML ${shortHash(receipt.evidence.rawXmlSha256)}.`,
-                                });
-                        },
-                        "NVIDIA BAR1 evidence captured and matched to this profile.",
-                );
-        };
-        const installInspector = () =>
-                void run(
-                        "install-inspector",
-                        bridge.installNvidiaProfileInspector,
-                        setInstallation,
-                        "Pinned NVIDIA Profile Inspector verified and installed.",
-                );
-        const backupProfiles = () =>
-                void run(
-                        "backup-profiles",
-                        () => bridge.backupNvidiaProfiles(selectedProfileId),
-                        setBackup,
-                        "Customized NVIDIA profiles exported to an immutable backup.",
-                );
-        const launchInspector = () =>
-                void run(
-                        "launch-inspector",
-                        () =>
-                                bridge.launchNvidiaProfileInspector(
-                                        selectedProfileId,
-                                ),
-                        (result) => {
-                                setLaunch(result);
-                                setBackup(result.backup);
-                        },
-                        "Profile Inspector launched after an automatic profile backup. Policy changes remain manual.",
-                );
-
+        }, [session, showReboot, showManual, showConfigurationReboot]);
+        const send = (intent: DeploymentWorkspaceIntent) => void session.dispatch(intent);
+        const setDisplayName = (value: string) => send({ type: "setDisplayName", value });
+        const setBoardPath = (value: BoardPath) => send({ type: "setBoardPath", value });
+        const setFirmwarePath = (value: string) => send({ type: "setFirmwarePath", value });
+        const setRecoveryMethod = (value: RecoveryMethod) => send({ type: "setRecoveryMethod", value });
+        const setInstallMethod = (value: FirmwareInstallMethod) => send({ type: "setInstallMethod", value });
+        const setInstructionsUrl = (value: string) => send({ type: "setInstructionsUrl", value });
+        const setRecoveryNote = (value: string) => send({ type: "setRecoveryNote", value });
+        const setInstallNote = (value: string) => send({ type: "setInstallNote", value });
+        const setRouteConfirmed = (value: boolean) => send({ type: "setRouteConfirmed", value });
+        const setDestination = (value: string) => send({ type: "setDestination", value });
+        const setSavedWork = (value: boolean) => send({ type: "setSavedWork", value });
+        const setManualConfirmed = (value: boolean) => send({ type: "setManualConfirmed", value });
+        const setGuardedConfigConfirmed = (value: boolean) => send({ type: "setGuardedConfigConfirmed", value });
+        const setSelectedProfileId = (value: string) => send({ type: "setSelectedProfile", value });
+        const toggleLegacyRule = (key: string, checked: boolean) => send({ type: "toggleLegacyRule", key, checked });
+        const setLegacyRiskNote = (risk: LegacyPatchRisk, note: string) => send({ type: "setLegacyRiskNote", risk, note });
+        const setLegacyRiskConfirmed = (risk: LegacyPatchRisk, confirmed: boolean) => send({ type: "setLegacyRiskConfirmed", risk, confirmed });
+        const setShowReboot = (value: boolean) => { if (!value) send({ type: "closeModals" }); };
+        const setShowManual = setShowReboot;
+        const setShowConfigurationReboot = setShowReboot;
+        const setActivity = (value: null) => { if (value === null) send({ type: "dismissActivity" }); };
+        const msi = snapshot.machineIdentity?.boardManufacturer === "Micro-Star International Co., Ltd." &&
+                snapshot.machineIdentity.boardProduct === "PRO Z690-A DDR4(MS-7D25)" &&
+                snapshot.machineIdentity.boardVersion === "1.0";
+        const stepCompleted = (stepId: string) =>
+                plan?.steps.find((step) => step.id === stepId)?.state === "completed";
+        const chooseFirmware = () => send({ type: "chooseFirmware" });
+        const inspectManualPath = () => send({ type: "inspectFirmware" });
+        const analyzeLegacy = () => send({ type: "analyzeLegacy" });
+        const createProfile = () => send({ type: "createProfile" });
+        const compare = () => send({ type: "compare" });
+        const prepare = () => send({ type: "prepare" });
+        const chooseDestination = () => send({ type: "chooseDestination" });
+        const exportPackage = () => send({ type: "exportPackage" });
+        const previewReboot = () => send({ type: "previewFirmwareReboot" });
+        const reboot = () => send({ type: "requestFirmwareReboot" });
+        const openManualConfirmation = () => send({ type: "openManual" });
+        const confirmManual = () => send({ type: "confirmManual" });
+        const verifyDriver = () => send({ type: "verifyDriver" });
+        const saveGuardedConfig = () => send({ type: "saveGuardedConfig" });
+        const openConfigurationReboot = () => send({ type: "openConfigurationReboot" });
+        const requestConfigurationReboot = () => send({ type: "requestConfigurationReboot" });
+        const verifyConfigurationBoot = () => send({ type: "verifyConfigurationBoot" });
+        const collectBar = () => send({ type: "collectBar" });
+        const installInspector = () => send({ type: "installInspector" });
+        const backupProfiles = () => send({ type: "backupProfiles" });
+        const launchInspector = () => send({ type: "launchInspector" });
         const activeAction = () => {
-                if (!activeStep)
+                if (nextAction === "complete")
                         return (
                                 <div className="workflow-complete" role="status">
                                         <strong>Deployment plan complete</strong>
                                         <span>Every durable gate has a persisted receipt.</span>
                                 </div>
                         );
-                switch (activeStep.id) {
-                        case "prepareRustDriver":
-                        case "applyLegacyBoardPatches":
-                        case "verifyPatchedArtifact":
+                switch (nextAction) {
+                        case "prepare":
                                 return (
                                         <button
                                                 className="primary"
@@ -1186,8 +153,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 Prepare and verify firmware artifact
                                         </button>
                                 );
-                        case "flashWithVendorRoute":
-                        case "configureFirmwareSetup":
+                        case "manual":
                                 return (
                                         <div className="workflow-actions">
                                                 <button
@@ -1207,8 +173,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 </button>
                                         </div>
                                 );
-                        case "rebootAfterFirmware":
-                        case "verifyDriverLoaded":
+                        case "verifyDriver":
                                 return (
                                         <button
                                                 className="primary"
@@ -1218,7 +183,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 Verify current boot + Rust DXE
                                         </button>
                                 );
-                        case "writeNvstrapsConfiguration":
+                        case "writeConfig":
                                 return (
                                         <div className="guarded-config">
                                                 {recommendationStatus === "pending" && (
@@ -1288,7 +253,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 </button>
                                         </div>
                                 );
-                        case "rebootAfterConfiguration":
+                        case "configurationReboot":
                                 return (
                                         <div className="workflow-actions">
                                                 <button
@@ -1307,7 +272,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 </button>
                                         </div>
                                 );
-                        case "verifyResizableBar":
+                        case "collectBar":
                                 return (
                                         <button
                                                 className="primary"
@@ -1317,7 +282,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 Collect and verify BAR1 evidence
                                         </button>
                                 );
-                        case "configureNvidiaApplications":
+                        case "nvidiaPolicy":
                                 return (
                                         <div className="policy-step">
                                                 <div className="tool-actions">
@@ -1526,11 +491,9 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                         value={firmwarePath}
                                                                         placeholder="Choose a vendor BIOS image or enter an absolute path"
                                                 onChange={(event) => {
-                                                                                invalidateLegacyAnalysis();
                                                                                 setFirmwarePath(
                                                                                         event.target.value,
                                                                                 );
-                                                                                setFirmware(null);
                                                                         }}
                                                                 />
                                                                 <button
@@ -1568,7 +531,6 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         <select
                                                                 value={boardPath}
                                                                 onChange={(event) => {
-                                                                        invalidateLegacyAnalysis();
                                                                         setBoardPath(
                                                                                 event.target.value as BoardPath,
                                                                         );
@@ -1951,23 +913,9 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 <select
                                                         value={selectedProfileId}
                                                         disabled={Boolean(busyAction)}
-                                                        onChange={(event) => {
-                                                                if (busyActionRef.current)
-                                                                        return;
-                                                                sequence.current += 1;
-                                                                setShowManual(false);
-                                                                setShowReboot(false);
-                                                                setShowConfigurationReboot(false);
-                                                                setSelectedProfileId(
-                                                                        event.target.value,
-                                                                );
-                                                                setPreflightExact(null);
-                                                                setPreparation(null);
-                                                                setPackageReceipt(null);
-                                                                setWorkflowReceipt(null);
-                                                                setBarEvidence(null);
-                                                                setGuardedConfigConfirmed(false);
-                                                        }}
+                                                        onChange={(event) =>
+                                                                setSelectedProfileId(event.target.value)
+                                                        }
                                                 >
                                                         {!profiles.length && (
                                                                 <option value="">No stored profiles</option>
