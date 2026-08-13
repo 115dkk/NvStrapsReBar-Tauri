@@ -3,5 +3,6 @@
 
 extern crate alloc;
 
+pub mod pci;
 pub mod status_writer;
 pub mod variables;

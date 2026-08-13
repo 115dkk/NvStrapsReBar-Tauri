@@ -4,6 +4,7 @@
 extern crate alloc;
 
 pub mod config;
+pub mod pci;
 pub mod registry;
 pub mod status;
 
