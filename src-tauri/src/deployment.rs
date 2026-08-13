@@ -24,6 +24,7 @@ pub struct CreateProfileRequest {
     pub display_name: String,
     pub board_path: BoardPath,
     pub firmware_path: String,
+    pub expected_firmware: FirmwareFingerprint,
     pub recovery: RecoveryCapability,
     pub firmware_install: FirmwareInstallRoute,
     pub legacy_patches: Option<LegacyPatchProfile>,
@@ -277,6 +278,7 @@ fn create_profile_command(
 ) -> BackendResult<DeploymentBundle> {
     let firmware_path = canonical_firmware_path(&request.firmware_path)?;
     let firmware = FirmwareFingerprint::inspect(&firmware_path)?;
+    require_expected_firmware(&request.expected_firmware, &firmware)?;
     let devices = enumerate_gpus()?;
     let identity = collect_machine_identity(&devices)?;
     let profile = build_profile(request, identity, firmware)?;
@@ -914,6 +916,20 @@ fn build_profile(
     Ok(profile)
 }
 
+fn require_expected_firmware(
+    expected: &FirmwareFingerprint,
+    actual: &FirmwareFingerprint,
+) -> BackendResult<()> {
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(BackendError::Deployment(format!(
+            "firmware image changed after inspection; expected {} bytes with SHA-256 {}, found {} bytes with SHA-256 {}",
+            expected.byte_length, expected.sha256, actual.byte_length, actual.sha256
+        )))
+    }
+}
+
 fn builtin_legacy_catalogs() -> BackendResult<Vec<BuiltinLegacyCatalog>> {
     let sources = [
         (
@@ -1417,6 +1433,11 @@ mod tests {
             display_name: "test".into(),
             board_path: BoardPath::LegacyAbove4g,
             firmware_path: "ignored".into(),
+            expected_firmware: FirmwareFingerprint {
+                file_name: "firmware.bin".into(),
+                byte_length: 4,
+                sha256: Sha256Digest::from_bytes(b"test"),
+            },
             recovery: RecoveryCapability {
                 method: RecoveryMethod::None,
                 tested_or_documented: false,
@@ -1455,6 +1476,11 @@ mod tests {
             display_name: "legacy".into(),
             board_path: BoardPath::LegacyAbove4g,
             firmware_path: "ignored".into(),
+            expected_firmware: FirmwareFingerprint {
+                file_name: "firmware.bin".into(),
+                byte_length: 4,
+                sha256: Sha256Digest::from_bytes(b"test"),
+            },
             recovery: RecoveryCapability {
                 method: RecoveryMethod::ExternalSpiProgrammer,
                 tested_or_documented: true,
@@ -1474,6 +1500,24 @@ mod tests {
                 .to_string()
                 .contains("not in built-in catalog")
         );
+    }
+
+    #[test]
+    fn profile_creation_rejects_firmware_changed_after_client_inspection() {
+        let inspected = FirmwareFingerprint {
+            file_name: "vendor.bin".into(),
+            byte_length: 4,
+            sha256: Sha256Digest::from_bytes(b"old!"),
+        };
+        let changed = FirmwareFingerprint {
+            file_name: "vendor.bin".into(),
+            byte_length: 4,
+            sha256: Sha256Digest::from_bytes(b"new!"),
+        };
+
+        let error = require_expected_firmware(&inspected, &changed).unwrap_err();
+        assert!(error.to_string().contains("changed after inspection"));
+        require_expected_firmware(&inspected, &inspected).unwrap();
     }
 
     #[test]

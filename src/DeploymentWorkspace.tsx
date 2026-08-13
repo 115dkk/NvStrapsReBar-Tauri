@@ -259,6 +259,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                         displayName,
                                         boardPath,
                                         firmwarePath,
+                                        expectedFirmware: structuredClone(firmware!),
                                         recovery: {
                                                 method: recoveryMethod,
                                                 testedOrDocumented:

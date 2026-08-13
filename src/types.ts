@@ -176,6 +176,7 @@ export type CreateProfileRequest = {
         displayName: string;
         boardPath: BoardPath;
         firmwarePath: string;
+        expectedFirmware: FirmwareFingerprint;
         recovery: RecoveryCapability;
         firmwareInstall: FirmwareInstallRoute;
         legacyPatches?: LegacyPatchProfile;
