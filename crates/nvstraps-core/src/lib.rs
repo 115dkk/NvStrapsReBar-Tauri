@@ -7,6 +7,7 @@ pub mod config;
 pub mod pci;
 pub mod registry;
 pub mod status;
+pub mod straps;
 
 pub const VARIABLE_VENDOR_GUID: u128 = 0xe3ee_4a27_e2a2_4435_bba3_184c_cad9_35a8;
 pub const VARIABLE_VENDOR_GUID_STRING: &str = "{e3ee4a27-e2a2-4435-bba3-184ccad935a8}";
