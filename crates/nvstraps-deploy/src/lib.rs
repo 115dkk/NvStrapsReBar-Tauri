@@ -16,7 +16,7 @@ use thiserror::Error;
 
 mod store;
 
-pub use store::{DeploymentStore, ProvisionedDeployment, StoreError};
+pub use store::{ArtifactKind, DeploymentStore, ProvisionedDeployment, StoreError, StoredArtifact};
 
 pub const PROFILE_SCHEMA_VERSION: u8 = 1;
 pub const PLAN_SCHEMA_VERSION: u8 = 1;

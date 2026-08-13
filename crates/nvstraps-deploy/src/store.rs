@@ -27,6 +27,35 @@ pub struct ProvisionedDeployment {
     pub original_firmware_path: PathBuf,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ArtifactKind {
+    RustDriverFfs,
+    LegacyPatchedFirmware,
+    PatchedFirmware,
+    LegacyPatchReceipt,
+}
+
+impl ArtifactKind {
+    fn file_name(self) -> &'static str {
+        match self {
+            Self::RustDriverFfs => "rust-driver.ffs",
+            Self::LegacyPatchedFirmware => "legacy-patched-firmware.bin",
+            Self::PatchedFirmware => "patched-firmware.bin",
+            Self::LegacyPatchReceipt => "legacy-patch-receipt.json",
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoredArtifact {
+    pub kind: ArtifactKind,
+    pub path: PathBuf,
+    pub byte_length: u64,
+    pub sha256: Sha256Digest,
+}
+
 impl DeploymentStore {
     pub fn new(root: impl Into<PathBuf>) -> Self {
         Self { root: root.into() }
@@ -202,12 +231,71 @@ impl DeploymentStore {
             .join("original-firmware.bin"))
     }
 
+    pub fn preserve_artifact(
+        &self,
+        profile: &MachineProfile,
+        kind: ArtifactKind,
+        bytes: &[u8],
+    ) -> Result<StoredArtifact, StoreError> {
+        profile.validate()?;
+        if bytes.is_empty() {
+            return Err(StoreError::EmptyArtifact);
+        }
+        let path = self.artifact_path(&profile.profile_id, kind)?;
+        write_bytes_once(&path, bytes)?;
+        let persisted = fs::read(&path).map_err(|source| StoreError::Io {
+            path: path.clone(),
+            source,
+        })?;
+        if persisted != bytes {
+            return Err(StoreError::ImmutableConflict(path));
+        }
+        Ok(StoredArtifact {
+            kind,
+            path,
+            byte_length: persisted.len() as u64,
+            sha256: Sha256Digest::from_bytes(&persisted),
+        })
+    }
+
+    pub fn load_artifact(
+        &self,
+        profile: &MachineProfile,
+        kind: ArtifactKind,
+    ) -> Result<(StoredArtifact, Vec<u8>), StoreError> {
+        profile.validate()?;
+        let path = self.artifact_path(&profile.profile_id, kind)?;
+        let bytes = fs::read(&path).map_err(|source| StoreError::Io {
+            path: path.clone(),
+            source,
+        })?;
+        if bytes.is_empty() {
+            return Err(StoreError::EmptyArtifact);
+        }
+        let artifact = StoredArtifact {
+            kind,
+            path,
+            byte_length: bytes.len() as u64,
+            sha256: Sha256Digest::from_bytes(&bytes),
+        };
+        Ok((artifact, bytes))
+    }
+
     fn profile_path(&self, profile_id: &str) -> Result<PathBuf, StoreError> {
         validate_profile_id(profile_id)?;
         Ok(self
             .root
             .join("profiles")
             .join(format!("{profile_id}.json")))
+    }
+
+    fn artifact_path(&self, profile_id: &str, kind: ArtifactKind) -> Result<PathBuf, StoreError> {
+        validate_profile_id(profile_id)?;
+        Ok(self
+            .root
+            .join("artifacts")
+            .join(profile_id)
+            .join(kind.file_name()))
     }
 
     fn plan_directory(&self, profile_id: &str) -> Result<PathBuf, StoreError> {
@@ -238,6 +326,8 @@ pub enum StoreError {
     MissingPlan(String),
     #[error("the source firmware changed after it was fingerprinted")]
     FirmwareChanged,
+    #[error("deployment artifacts must not be empty")]
+    EmptyArtifact,
     #[error("persisted content conflicts with an immutable deployment record: {0}")]
     ImmutableConflict(PathBuf),
     #[error("failed to access {path}: {source}")]
@@ -579,5 +669,29 @@ mod tests {
             Err(StoreError::Json { .. })
         ));
         assert_eq!(provisioned.plan.steps[0].state, StepState::Completed);
+    }
+
+    #[test]
+    fn generated_artifacts_are_immutable_and_rehashed_after_persistence() {
+        let directory = TestDirectory::new();
+        let source = directory.0.join("vendor-bios.bin");
+        fs::write(&source, b"known firmware").unwrap();
+        let profile = profile(FirmwareFingerprint::inspect(&source).unwrap());
+        let store = DeploymentStore::new(directory.0.join("store"));
+        store.provision_profile(&profile, &source).unwrap();
+
+        let first = store
+            .preserve_artifact(&profile, ArtifactKind::RustDriverFfs, b"verified FFS")
+            .unwrap();
+        assert_eq!(first.sha256, Sha256Digest::from_bytes(b"verified FFS"));
+        let (loaded, bytes) = store
+            .load_artifact(&profile, ArtifactKind::RustDriverFfs)
+            .unwrap();
+        assert_eq!(loaded, first);
+        assert_eq!(bytes, b"verified FFS");
+        assert!(matches!(
+            store.preserve_artifact(&profile, ArtifactKind::RustDriverFfs, b"different FFS"),
+            Err(StoreError::ImmutableConflict(_))
+        ));
     }
 }
