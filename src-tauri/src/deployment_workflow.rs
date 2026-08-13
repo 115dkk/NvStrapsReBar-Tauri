@@ -13,6 +13,7 @@ use crate::{
         require_recommended_deployment_config,
     },
     deployment::load_exact_deployment,
+    devices::{GpuDevice, enumerate_gpus},
     error::{ApiError, BackendError, BackendResult, CommandResult},
     firmware::{STATUS_VARIABLE_NAME, read_variable},
     status::DriverStatus,
@@ -148,12 +149,13 @@ fn save_deployment_config_command(
         .plan
         .require_active(StepId::WriteNvstrapsConfiguration)
         .map_err(BackendError::from)?;
-    require_recommended_deployment_config(&request.draft, &exact.devices)?;
+    let write_devices = enumerate_gpus()?;
+    require_unchanged_write_inventory(&exact.devices, &write_devices)?;
+    require_recommended_deployment_config(&request.draft, &write_devices)?;
 
-    // `load_exact_deployment` obtained this inventory while revalidating the complete machine.
-    // Use that same inventory for the recommendation, wire model, write, and state update so a
-    // second enumeration cannot create a split identity/configuration snapshot.
-    let save = save_config_for_devices_inner(request.draft, state, exact.devices)?;
+    // The second inventory exactly matched the preflight snapshot. Use it for the recommendation,
+    // wire model, write, and state update so no third enumeration can split the decision and write.
+    let save = save_config_for_devices_inner(request.draft, state, write_devices)?;
     let mut workflow = DeploymentWorkflow::from_plan(&exact.store, &exact.profile, exact.plan)
         .map_err(BackendError::from)?;
     workflow
@@ -167,6 +169,19 @@ fn save_deployment_config_command(
         plan: workflow.into_plan(),
         save,
     })
+}
+
+fn require_unchanged_write_inventory(
+    preflight_devices: &[GpuDevice],
+    write_devices: &[GpuDevice],
+) -> BackendResult<()> {
+    if preflight_devices != write_devices {
+        return Err(BackendError::Deployment(
+            "GPU or bridge topology changed during the guarded configuration preflight; refresh and retry"
+                .into(),
+        ));
+    }
+    Ok(())
 }
 
 fn confirm_manual_deployment_step_command(
@@ -455,6 +470,35 @@ mod tests {
     };
 
     use super::*;
+    use crate::devices::PciBridge;
+
+    fn gpu_device() -> GpuDevice {
+        GpuDevice {
+            id: "pci-01-00-0".into(),
+            name: "Test GPU".into(),
+            vendor_id: 0x10de,
+            device_id: 0x1e81,
+            subsystem_vendor_id: 0x1462,
+            subsystem_device_id: 0x3755,
+            bus: 1,
+            device: 0,
+            function: 0,
+            bridge: PciBridge {
+                vendor_id: 0x8086,
+                device_id: 0x1901,
+                bus: 0,
+                device: 1,
+                function: 0,
+            },
+            bar0_base: 0x8000_0000,
+            bar0_top: 0x80ff_ffff,
+            current_bar_size: 0x0100_0000,
+            dedicated_video_memory: 8 * 1024 * 1024 * 1024,
+            is_turing: true,
+            recommended_bar_size_selector: Some(7),
+            effective_bar_size_selector: None,
+        }
+    }
 
     fn profile() -> MachineProfile {
         MachineProfile::create(
@@ -535,6 +579,21 @@ mod tests {
         };
 
         assert_eq!(configuration_readback_evidence(&save), "1786654321000");
+    }
+
+    #[test]
+    fn configuration_write_refuses_inventory_drift_after_preflight() {
+        let preflight = vec![gpu_device()];
+        require_unchanged_write_inventory(&preflight, &preflight).unwrap();
+
+        let mut moved = gpu_device();
+        moved.bar0_base += 0x1000;
+        assert!(
+            require_unchanged_write_inventory(&preflight, &[moved])
+                .unwrap_err()
+                .to_string()
+                .contains("changed during")
+        );
     }
 
     #[test]
