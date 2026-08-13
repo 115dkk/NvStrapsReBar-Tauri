@@ -80,9 +80,15 @@ Use the smallest relevant subset while iterating, then the full applicable floor
 npm run check
 npm run test:e2e
 npm run check:rust
+npm run check:miri
 npm run check:firmware
 npm run tauri:ci
 ```
+
+`npm run check:miri` requires nightly Rust with the `miri` component. It interprets the shared
+host contracts and the real volatile BAR1 MMIO read/write boundary. Target-only UEFI protocol
+callbacks and Windows system FFI remain covered by compilation, Clippy, native tests, and QEMU;
+Miri cannot execute those external firmware or operating-system calls.
 
 `npm run test:qemu` is the isolated Linux/OVMF smoke path when QEMU and OVMF are available. The two
 ignored Rust smoke tests require real NVIDIA hardware or network access and must remain explicit,
