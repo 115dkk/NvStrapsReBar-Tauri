@@ -1826,6 +1826,7 @@ name = "nvstraps-ffs"
 version = "0.1.0"
 dependencies = [
  "oxiarc-lzma",
+ "sha2",
 ]
 
 [[package]]

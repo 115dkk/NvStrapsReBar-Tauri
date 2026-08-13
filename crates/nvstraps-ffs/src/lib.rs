@@ -1,8 +1,13 @@
 use std::fmt;
 
 mod firmware;
+mod legacy_patch;
 
 pub use firmware::{FirmwareInjection, InjectionError, inject_ffs};
+pub use legacy_patch::{
+    LegacyPatchApplication, LegacyPatchCatalog, LegacyPatchChange, LegacyPatchError,
+    LegacyPatchRule, PatchRuleId,
+};
 
 pub const DRIVER_NAME: &str = "NvStrapsReBar";
 pub const FFS_FILE_GUID: &str = "90d10790-bbfa-404b-873b-5bdb3ada3c56";

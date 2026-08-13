@@ -7,3 +7,4 @@ license.workspace = true
 
 [dependencies]
 oxiarc-lzma = "=0.3.6"
+sha2 = "0.10"
