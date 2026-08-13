@@ -2,24 +2,35 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
         DEFAULT_DRAFT,
+        type BoardPath,
         type ConfigDraft,
         type CreateProfileRequest,
         type DeploymentBundle,
+        type DeploymentConfigRecommendation,
         type DeploymentPackageReceipt,
         type DeploymentPlan,
+        type DriverVerificationReceipt,
         type FirmwareFingerprint,
         type FirmwarePreparation,
         type FirmwareSetupRebootPreview,
+        type ConfigurationRebootAccepted,
+        type ConfigurationRebootPreview,
+        type ConfigurationRebootVerificationReceipt,
         type LegacyFirmwareAnalysis,
         type LegacyPatchCatalogView,
+        type ManualDeploymentStepPreview,
+        type ManualDeploymentStepReceipt,
         type MachineIdentity,
         type MachineProfile,
         type NvidiaProfileBackupReceipt,
         type NvidiaSmiEvidence,
+        type NvidiaSmiEvidenceReceipt,
         type ProfileComparison,
         type ProfileInspectorInstallation,
         type ProfileInspectorLaunch,
         type SaveReceipt,
+        type SaveDeploymentConfigReceipt,
+        type StepId,
         type SystemSnapshot,
         type ValidationReport,
 } from "./types";
@@ -56,7 +67,31 @@ export interface Bridge {
                 preview: FirmwareSetupRebootPreview,
                 unsavedWorkConfirmed: boolean,
         ): Promise<{ profileId: string; accepted: boolean }>;
-        collectNvidiaSmiEvidence(profileId: string): Promise<NvidiaSmiEvidence>;
+        previewManualDeploymentStep(
+                profileId: string,
+        ): Promise<ManualDeploymentStepPreview>;
+        confirmManualDeploymentStep(
+                preview: ManualDeploymentStepPreview,
+        ): Promise<ManualDeploymentStepReceipt>;
+        verifyDeploymentDriver(profileId: string): Promise<DriverVerificationReceipt>;
+        getRecommendedDeploymentConfig(
+                profileId: string,
+        ): Promise<DeploymentConfigRecommendation>;
+        saveDeploymentConfig(
+                profileId: string,
+                draft: ConfigDraft,
+        ): Promise<SaveDeploymentConfigReceipt>;
+        previewConfigurationReboot(
+                profileId: string,
+        ): Promise<ConfigurationRebootPreview>;
+        rebootAfterConfiguration(
+                preview: ConfigurationRebootPreview,
+                unsavedWorkConfirmed: boolean,
+        ): Promise<ConfigurationRebootAccepted>;
+        verifyConfigurationReboot(
+                profileId: string,
+        ): Promise<ConfigurationRebootVerificationReceipt>;
+        collectNvidiaSmiEvidence(profileId: string): Promise<NvidiaSmiEvidenceReceipt>;
         installNvidiaProfileInspector(): Promise<ProfileInspectorInstallation>;
         getNvidiaProfileInspectorInstallation(): Promise<ProfileInspectorInstallation | null>;
         backupNvidiaProfiles(profileId: string): Promise<NvidiaProfileBackupReceipt>;
@@ -225,11 +260,32 @@ const previewLegacyAnalysis: LegacyFirmwareAnalysis = {
 let previewProfiles: MachineProfile[] = [];
 let previewPlans = new Map<string, DeploymentPlan>();
 let inspectorInstallation: ProfileInspectorInstallation | null = null;
+const PREVIEW_PROFILES_KEY = "nvstraps-preview-profiles";
+const previewPlanKey = (profileId: string) =>
+        `nvstraps-preview-plan:${profileId}`;
+const persistPreviewProfiles = () =>
+        sessionStorage.setItem(
+                PREVIEW_PROFILES_KEY,
+                JSON.stringify(previewProfiles),
+        );
+const restorePreviewProfiles = () => {
+        const stored = sessionStorage.getItem(PREVIEW_PROFILES_KEY);
+        if (stored) previewProfiles = JSON.parse(stored) as MachineProfile[];
+        return previewProfiles;
+};
+const persistPreviewPlan = (profileId: string, plan: DeploymentPlan) => {
+        previewPlans.set(profileId, structuredClone(plan));
+        sessionStorage.setItem(previewPlanKey(profileId), JSON.stringify(plan));
+};
 
-const planFor = (profileId: string): DeploymentPlan => ({
+const planFor = (
+        profileId: string,
+        originalFirmwareSha256: string,
+        legacy = false,
+): DeploymentPlan => ({
         schemaVersion: 1,
         profileId,
-        originalFirmwareSha256: previewFirmware.sha256,
+        originalFirmwareSha256,
         recoveryMethod: "usbFlashback",
         revision: 4,
         steps: [
@@ -237,6 +293,9 @@ const planFor = (profileId: string): DeploymentPlan => ({
                 ["confirmRecovery", "physicalConfirmation", "Confirm the pinned firmware recovery route", "completed"],
                 ["preserveOriginalFirmware", "automated", "Preserve and hash the exact original firmware image", "completed"],
                 ["prepareRustDriver", "automated", "Build and verify the Rust DXE driver", "ready"],
+                ...(legacy
+                        ? [["applyLegacyBoardPatches", "automated", "Apply the profile's legacy-board patch bundle", "pending"]]
+                        : []),
                 ["verifyPatchedArtifact", "automated", "Inject and verify the patched firmware artifact", "pending"],
                 ["flashWithVendorRoute", "firmwareManual", "Flash with the documented vendor route", "pending"],
                 ["configureFirmwareSetup", "firmwareManual", "Confirm firmware setup values", "pending"],
@@ -254,6 +313,71 @@ const planFor = (profileId: string): DeploymentPlan => ({
                 evidence: state === "completed" ? { kind: id, value: "preview-evidence" } : null,
         })),
 });
+
+const activeStepOf = (plan: DeploymentPlan) =>
+        plan.steps.find((step) => step.state === "ready") ?? null;
+const previewPlan = (profileId: string) => {
+        let plan = previewPlans.get(profileId);
+        if (!plan) {
+                const stored = sessionStorage.getItem(previewPlanKey(profileId));
+                if (stored) {
+                        plan = JSON.parse(stored) as DeploymentPlan;
+                        previewPlans.set(profileId, plan);
+                }
+        }
+        if (!plan) throw new Error("The selected deployment profile is unavailable.");
+        return plan;
+};
+const requirePreviewStep = (profileId: string, expected: StepId | StepId[]) => {
+        const plan = previewPlan(profileId);
+        const active = activeStepOf(plan);
+        const allowed = Array.isArray(expected) ? expected : [expected];
+        if (!active || !allowed.includes(active.id)) {
+                throw new Error(
+                        `This action is out of order; ${active?.title ?? "the plan is complete"}.`,
+                );
+        }
+        return { plan, active };
+};
+const advancePreviewStep = (
+        plan: DeploymentPlan,
+        stepId: StepId,
+        evidence: string,
+) => {
+        const active = activeStepOf(plan);
+        if (!active || active.id !== stepId)
+                throw new Error("The deployment step changed before this receipt was recorded.");
+        active.state = "completed";
+        active.evidence = { kind: stepId, value: evidence };
+        const index = plan.steps.indexOf(active);
+        const next = plan.steps[index + 1];
+        if (next) next.state = "ready";
+        plan.revision += 1;
+};
+const manualWarnings = (stepId: StepId, boardPath: BoardPath) => {
+        switch (stepId) {
+                case "flashWithVendorRoute":
+                        return [
+                                "Use only the pinned vendor route and exported artifact.",
+                                "Confirm only after the vendor tool reports success; this is an operator attestation, not automatic flash verification.",
+                                "Keep the pinned recovery route available and do not interrupt power during the flash.",
+                        ];
+                case "configureFirmwareSetup":
+                        return [
+                                boardPath === "legacyAbove4g"
+                                        ? "Enable Above 4G decoding and disable CSM; do not claim native motherboard ReBAR."
+                                        : "Enable native ReBAR and Above 4G decoding, and disable CSM.",
+                                "Confirm only after saving these exact firmware setup values.",
+                        ];
+                case "configureNvidiaApplications":
+                        return [
+                                "Confirm only after applying and independently reviewing the intended per-application ReBAR policy.",
+                                "Installing or launching NVIDIA Profile Inspector does not satisfy this step.",
+                        ];
+                default:
+                        throw new Error("The active step is not an operator-attested step.");
+        }
+};
 
 const backupReceipt = (profileId: string): NvidiaProfileBackupReceipt => ({
         backupPath: `C:\\ProgramData\\NvStrapsReBar\\backups\\${profileId}.nip`,
@@ -357,49 +481,82 @@ const preview: Bridge = {
                         );
                 }
                 const profileId = `nvstraps-${actualFirmware.sha256.slice(0, 16)}`;
+                const profileIdentity = structuredClone(identity);
+                if (actualFirmware.fileName === "changed-fingerprint.bin")
+                        profileIdentity.gpus[0]!.deviceId = 0x1f81;
                 const profile: MachineProfile = {
                         schemaVersion: 3,
                         profileId,
                         displayName: request.displayName,
                         boardPath: request.boardPath,
                         legacyPatches: request.legacyPatches ?? null,
-                        identity: structuredClone(identity),
+                        identity: profileIdentity,
                         originalFirmware: structuredClone(actualFirmware),
                         recovery: structuredClone(request.recovery),
                         firmwareInstall: structuredClone(request.firmwareInstall),
                 };
-                const plan = planFor(profileId);
-                previewProfiles = [profile];
-                previewPlans.set(profileId, plan);
+                const plan = planFor(
+                        profileId,
+                        actualFirmware.sha256,
+                        request.boardPath === "legacyAbove4g",
+                );
+                previewProfiles = [
+                        profile,
+                        ...restorePreviewProfiles().filter(
+                                (stored) => stored.profileId !== profile.profileId,
+                        ),
+                ];
+                persistPreviewProfiles();
+                persistPreviewPlan(profileId, plan);
                 return {
                         profile: structuredClone(profile),
                         plan: structuredClone(plan),
                         originalFirmwarePath: `C:\\ProgramData\\NvStrapsReBar\\${profileId}\\original.bin`,
                 };
         },
-        listMachineProfiles: async () => structuredClone(previewProfiles),
+        listMachineProfiles: async () => structuredClone(restorePreviewProfiles()),
         getDeploymentPlan: async (profileId) =>
-                structuredClone(previewPlans.get(profileId) ?? planFor(profileId)),
-        compareMachineProfile: async (profileId) => ({
-                profile: structuredClone(
-                        previewProfiles.find((profile) => profile.profileId === profileId)!,
-                ),
-                currentIdentity: structuredClone(identity),
-                firmware: structuredClone(previewFirmware),
-                result: { differences: [] },
-        }),
+                structuredClone(previewPlan(profileId)),
+        compareMachineProfile: async (profileId) => {
+                const profile = restorePreviewProfiles().find(
+                        (candidate) => candidate.profileId === profileId,
+                );
+                if (!profile)
+                        throw new Error(
+                                "The selected deployment profile is unavailable.",
+                        );
+                const mismatch =
+                        sessionStorage.getItem(
+                                "nvstraps-preview-profile-mismatch",
+                        ) === "bios";
+                return {
+                        profile: structuredClone(profile),
+                        currentIdentity: structuredClone(identity),
+                        firmware: structuredClone(previewFirmware),
+                        result: {
+                                differences: mismatch
+                                        ? [
+                                                  {
+                                                          kind: "biosVersion",
+                                                          expected:
+                                                                  profile.identity
+                                                                          .biosVersion,
+                                                          actual: "MISMATCH-PREVIEW",
+                                                  },
+                                          ]
+                                        : [],
+                        },
+                };
+        },
         prepareFirmwareArtifact: async (profileId) => {
-                const plan = structuredClone(previewPlans.get(profileId) ?? planFor(profileId));
-                for (const step of plan.steps) {
-                        if (["prepareRustDriver", "verifyPatchedArtifact"].includes(step.id)) {
-                                step.state = "completed";
-                                step.evidence = { kind: step.id, value: "72".repeat(32) };
-                        }
-                }
-                const flash = plan.steps.find((step) => step.id === "flashWithVendorRoute");
-                if (flash) flash.state = "ready";
-                plan.revision += 2;
-                previewPlans.set(profileId, plan);
+                const plan = structuredClone(
+                        requirePreviewStep(profileId, "prepareRustDriver").plan,
+                );
+                advancePreviewStep(plan, "prepareRustDriver", "72".repeat(32));
+                if (activeStepOf(plan)?.id === "applyLegacyBoardPatches")
+                        advancePreviewStep(plan, "applyLegacyBoardPatches", "74".repeat(32));
+                advancePreviewStep(plan, "verifyPatchedArtifact", "83".repeat(32));
+                persistPreviewPlan(profileId, plan);
                 return {
                         plan: structuredClone(plan),
                         driver: {
@@ -470,7 +627,189 @@ const preview: Bridge = {
                 if (!unsavedWorkConfirmed) throw new Error("Saved-work confirmation is required.");
                 return { profileId: previewValue.profileId, accepted: true };
         },
-        collectNvidiaSmiEvidence: async (profileId) => ({
+        previewManualDeploymentStep: async (profileId) => {
+                await new Promise((resolve) => setTimeout(resolve, 40));
+                const { plan, active } = requirePreviewStep(profileId, [
+                        "flashWithVendorRoute",
+                        "configureFirmwareSetup",
+                        "configureNvidiaApplications",
+                ]);
+                const profile = restorePreviewProfiles().find(
+                        (candidate) => candidate.profileId === profileId,
+                );
+                if (!profile)
+                        throw new Error(
+                                "The selected deployment profile is unavailable.",
+                        );
+                return {
+                        profileId,
+                        planRevision: plan.revision,
+                        stepId: active.id,
+                        title: active.title,
+                        confirmationToken: `CONFIRM-${active.id.toUpperCase()}-${profileId.slice(-16).toUpperCase()}-R${plan.revision}`,
+                        warnings: manualWarnings(active.id, profile.boardPath),
+                };
+        },
+        confirmManualDeploymentStep: async (manualPreview) => {
+                const { plan, active } = requirePreviewStep(
+                        manualPreview.profileId,
+                        manualPreview.stepId,
+                );
+                if (
+                        plan.revision !== manualPreview.planRevision ||
+                        active.id !== manualPreview.stepId
+                ) {
+                        throw new Error("The manual confirmation preview is stale.");
+                }
+                const expectedToken = `CONFIRM-${active.id.toUpperCase()}-${manualPreview.profileId.slice(-16).toUpperCase()}-R${plan.revision}`;
+                if (manualPreview.confirmationToken !== expectedToken)
+                        throw new Error(
+                                "The manual confirmation token does not match this profile, step, and plan revision.",
+                        );
+                const next = structuredClone(plan);
+                const recordedAtUnixMs = String(Date.now());
+                advancePreviewStep(next, manualPreview.stepId, `operator-attested:${recordedAtUnixMs}`);
+                persistPreviewPlan(manualPreview.profileId, next);
+                return { plan: structuredClone(next), stepId: manualPreview.stepId, recordedAtUnixMs };
+        },
+        verifyDeploymentDriver: async (profileId) => {
+                const { plan, active } = requirePreviewStep(profileId, [
+                        "rebootAfterFirmware",
+                        "verifyDriverLoaded",
+                ]);
+                const next = structuredClone(plan);
+                if (active.id === "rebootAfterFirmware")
+                        advancePreviewStep(next, "rebootAfterFirmware", `volatile-status-observed:${Date.now()}`);
+                advancePreviewStep(next, "verifyDriverLoaded", "0x0000000000000014");
+                persistPreviewPlan(profileId, next);
+                return {
+                        plan: structuredClone(next),
+                        status: structuredClone(previewSnapshot.driverStatus!),
+                };
+        },
+        getRecommendedDeploymentConfig: async (profileId) => {
+                requirePreviewStep(profileId, "writeNvstrapsConfiguration");
+                const profile = restorePreviewProfiles().find(
+                        (candidate) => candidate.profileId === profileId,
+                );
+                if (!profile)
+                        throw new Error(
+                                "The selected deployment profile is unavailable.",
+                        );
+                const unknownTuring =
+                        profile.originalFirmware.fileName ===
+                        "changed-fingerprint.bin";
+                const profileGpu = profile.identity.gpus[0]!;
+                const rules = unknownTuring
+                        ? [
+                                  {
+                                          matchScope: "location" as const,
+                                          deviceId: profileGpu.deviceId,
+                                          subsystemVendorId:
+                                                  profileGpu.subsystemVendorId,
+                                          subsystemDeviceId:
+                                                  profileGpu.subsystemDeviceId,
+                                          bus: profileGpu.location.bus,
+                                          device: profileGpu.location.device,
+                                          function: profileGpu.location.function,
+                                          barSizeSelector: 5,
+                                          overrideBarSizeMask: null,
+                                  },
+                          ]
+                        : [];
+                const malformedRecommendation =
+                        sessionStorage.getItem(
+                                "nvstraps-preview-malformed-recommendation",
+                        ) === "guarded-fields";
+                return {
+                        draft: {
+                                globalMode: 1,
+                                targetPciBarSize: malformedRecommendation
+                                        ? 1
+                                        : 0,
+                                skipS3Resume: false,
+                                overrideBarSizeMask: false,
+                                guardSetupChanges: true,
+                                rules,
+                        },
+                        turingGpuCount: 1,
+                        registryManagedGpuCount: unknownTuring ? 0 : 1,
+                        exactFallbackRuleCount: rules.length,
+                };
+        },
+        saveDeploymentConfig: async (profileId, draft) => {
+                const { plan } = requirePreviewStep(profileId, "writeNvstrapsConfiguration");
+                const save = await preview.save(draft);
+                const next = structuredClone(plan);
+                advancePreviewStep(next, "writeNvstrapsConfiguration", save.savedAtUnixMs);
+                const receiptPlan = structuredClone(next);
+                if (
+                        sessionStorage.getItem(
+                                "nvstraps-preview-malformed-receipt",
+                        ) === "profile"
+                ) {
+                        receiptPlan.profileId = "nvstraps-malformed-receipt";
+                } else if (
+                        sessionStorage.getItem(
+                                "nvstraps-preview-malformed-receipt",
+                        ) === "revision"
+                ) {
+                        receiptPlan.revision += 1;
+                } else {
+                        persistPreviewPlan(profileId, next);
+                }
+                return { plan: receiptPlan, save };
+        },
+        previewConfigurationReboot: async (profileId) => {
+                const { plan } = requirePreviewStep(profileId, "rebootAfterConfiguration");
+                return {
+                        profileId,
+                        planRevision: plan.revision,
+                        confirmationToken: `REBOOT-AFTER-CONFIGURATION-${profileId.slice(-16).toUpperCase()}-R${plan.revision}`,
+                        command: "Windows shutdown.exe",
+                        arguments: ["/r", "/t", "0"],
+                        immediate: true,
+                        forceCloseApplications: false,
+                        warnings: [
+                                "Save and close all work before confirming; Windows will restart immediately.",
+                                "The command deliberately omits /f so applications are not explicitly force-closed.",
+                                "Accepting the reboot request does not complete the plan; the next app session must prove a later Windows boot.",
+                        ],
+                };
+        },
+        rebootAfterConfiguration: async (configurationPreview, unsavedWorkConfirmed) => {
+                const { plan } = requirePreviewStep(
+                        configurationPreview.profileId,
+                        "rebootAfterConfiguration",
+                );
+                if (!unsavedWorkConfirmed)
+                        throw new Error("Saved-work confirmation is required.");
+                if (plan.revision !== configurationPreview.planRevision)
+                        throw new Error("The configuration reboot preview is stale.");
+                return {
+                        profileId: configurationPreview.profileId,
+                        accepted: true,
+                        planAdvanced: false,
+                };
+        },
+        verifyConfigurationReboot: async (profileId) => {
+                const { plan } = requirePreviewStep(profileId, "rebootAfterConfiguration");
+                const saved = plan.steps.find(
+                        (step) => step.id === "writeNvstrapsConfiguration",
+                )?.evidence?.value;
+                const bootedAtUnixMs = String(Number(saved) + 1000);
+                const next = structuredClone(plan);
+                advancePreviewStep(next, "rebootAfterConfiguration", bootedAtUnixMs);
+                persistPreviewPlan(profileId, next);
+                return {
+                        plan: structuredClone(next),
+                        configurationSavedAtUnixMs: saved!,
+                        bootedAtUnixMs,
+                };
+        },
+        collectNvidiaSmiEvidence: async (profileId) => {
+                const { plan } = requirePreviewStep(profileId, "verifyResizableBar");
+                const evidence: NvidiaSmiEvidence = {
                 profileId,
                 toolPath: "C:\\Windows\\System32\\nvidia-smi.exe",
                 tool: {
@@ -498,7 +837,12 @@ const preview: Bridge = {
                 ],
                 allProfileGpusObserved: true,
                 warnings: [],
-        }),
+                };
+                const next = structuredClone(plan);
+                advancePreviewStep(next, "verifyResizableBar", evidence.rawXmlSha256);
+                persistPreviewPlan(profileId, next);
+                return { plan: structuredClone(next), evidence };
+        },
         installNvidiaProfileInspector: async () => {
                 inspectorInstallation = {
                         installPath: "C:\\ProgramData\\NvStrapsReBar\\tools\\v3.0.2.1",
@@ -584,6 +928,37 @@ const nativeBridge: Bridge = {
                                 unsavedWorkConfirmed,
                         },
                 }),
+        previewManualDeploymentStep: (profileId) =>
+                invoke("preview_manual_deployment_step", { profileId }),
+        confirmManualDeploymentStep: (previewValue) =>
+                invoke("confirm_manual_deployment_step", {
+                        request: {
+                                profileId: previewValue.profileId,
+                                stepId: previewValue.stepId,
+                                confirmationToken: previewValue.confirmationToken,
+                                confirmed: true,
+                        },
+                }),
+        verifyDeploymentDriver: (profileId) =>
+                invoke("verify_deployment_driver", { profileId }),
+        getRecommendedDeploymentConfig: (profileId) =>
+                invoke("get_recommended_deployment_config", { profileId }),
+        saveDeploymentConfig: (profileId, draft) =>
+                invoke("save_deployment_config", {
+                        request: { profileId, draft },
+                }),
+        previewConfigurationReboot: (profileId) =>
+                invoke("preview_configuration_reboot", { profileId }),
+        rebootAfterConfiguration: (previewValue, unsavedWorkConfirmed) =>
+                invoke("reboot_after_configuration", {
+                        request: {
+                                profileId: previewValue.profileId,
+                                confirmationToken: previewValue.confirmationToken,
+                                unsavedWorkConfirmed,
+                        },
+                }),
+        verifyConfigurationReboot: (profileId) =>
+                invoke("verify_configuration_reboot", { profileId }),
         collectNvidiaSmiEvidence: (profileId) =>
                 invoke("collect_nvidia_smi_evidence", { profileId }),
         installNvidiaProfileInspector: () =>

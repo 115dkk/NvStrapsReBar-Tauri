@@ -252,6 +252,54 @@ export type DeploymentPlan = {
         revision: number;
         steps: DeploymentStep[];
 };
+export type DriverStatus = NonNullable<SystemSnapshot["driverStatus"]>;
+export type ManualDeploymentStepPreview = {
+        profileId: string;
+        planRevision: number;
+        stepId: StepId;
+        title: string;
+        confirmationToken: string;
+        warnings: string[];
+};
+export type ManualDeploymentStepReceipt = {
+        plan: DeploymentPlan;
+        stepId: StepId;
+        recordedAtUnixMs: string;
+};
+export type DriverVerificationReceipt = {
+        plan: DeploymentPlan;
+        status: DriverStatus;
+};
+export type SaveDeploymentConfigReceipt = {
+        plan: DeploymentPlan;
+        save: SaveReceipt;
+};
+export type DeploymentConfigRecommendation = {
+        draft: ConfigDraft;
+        turingGpuCount: number;
+        registryManagedGpuCount: number;
+        exactFallbackRuleCount: number;
+};
+export type ConfigurationRebootPreview = {
+        profileId: string;
+        planRevision: number;
+        confirmationToken: string;
+        command: string;
+        arguments: string[];
+        immediate: boolean;
+        forceCloseApplications: boolean;
+        warnings: string[];
+};
+export type ConfigurationRebootAccepted = {
+        profileId: string;
+        accepted: boolean;
+        planAdvanced: boolean;
+};
+export type ConfigurationRebootVerificationReceipt = {
+        plan: DeploymentPlan;
+        configurationSavedAtUnixMs: string;
+        bootedAtUnixMs: string;
+};
 export type DeploymentBundle = {
         profile: MachineProfile;
         plan: DeploymentPlan;
@@ -332,6 +380,10 @@ export type NvidiaSmiEvidence = {
         }[];
         allProfileGpusObserved: boolean;
         warnings: string[];
+};
+export type NvidiaSmiEvidenceReceipt = {
+        plan: DeploymentPlan;
+        evidence: NvidiaSmiEvidence;
 };
 export type ProfileInspectorInstallation = {
         installPath: string;
