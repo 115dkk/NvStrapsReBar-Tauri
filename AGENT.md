@@ -39,9 +39,12 @@ authoritative. Keep RIIR, deployment automation, and physical-machine proof as s
 - Evidence belongs to the owner of the claimed result. Preserve separate receipts for artifact
   preparation, manual attestation, current-boot DXE status, configuration readback, later boot,
   BAR1 observation, and NVIDIA policy review.
-- Preserve camel-case wire compatibility across Rust serde types, `src/types.ts`, `src/bridge.ts`,
-  preview fixtures, and Playwright journeys. A bridge mock may simulate a capability, but must
-  preserve ordering, stale-reply rejection, failure truth, and revision semantics.
+- Preserve camel-case wire compatibility across Rust serde types,
+  `src/deployment-workspace/contract.ts`, the Tauri adapter, preview fixtures, and Playwright
+  journeys. The deployment UI talks only to `DeploymentWorkspaceSession`; command names and
+  request DTOs stay in the Tauri adapter. Preview may select immutable plan snapshots, but must
+  not reimplement Rust transition policy. Every adapter must preserve stale-reply rejection,
+  failure truth, confirmation binding, and revision semantics.
 
 ## Frontend ownership
 

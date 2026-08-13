@@ -82,6 +82,14 @@ The bounded UEFI operation that remaps one bridge and GPU BAR0, programs BAR1 st
 both mappings their reverse-order restore. One execution Module owns that ordering; the production
 UEFI adapter and host simulation adapter only perform its individual operations.
 
+### Deployment Workspace Session
+
+The deep TypeScript Module that owns one Machine Profile and its latest Deployment Plan's
+non-authoritative client projection. Its small view/dispatch/subscribe/dispose Interface hides
+single-flight execution, stale-response rejection, receipt validation, confirmation binding, and
+active-step presentation. The Tauri and browser-preview adapters implement its deployment Seam;
+only Rust remains authoritative for durable plan transitions.
+
 ### External adapter
 
 A narrowly verified handoff to software the repository does not own. Current external adapters
@@ -102,6 +110,9 @@ are the installed `nvidia-smi.exe` and a pinned official NVIDIA Profile Inspecto
   operation cannot bypass restoration of an earlier successful remap.
 - Legacy catalog pins, risks, analysis, patch application, and receipts must all pass through the
   same Legacy catalog authority.
+- The Deployment Workspace Session may validate and project Rust receipts but never invent a
+  production plan transition. Preview persistence selects immutable fixture snapshots and cannot
+  stand in for durable or hardware evidence.
 - Every persisted artifact is read back and content-addressed; an existing different artifact is
   an immutable conflict.
 - Vendor flash, UEFI settings, NVIDIA application policy, hardware work, and physical recovery
