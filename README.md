@@ -2,6 +2,26 @@
 <p>UEFI driver to enable and test Resizable BAR on Turing graphics cards (GTX 1600, RTX 2000).</p>
 <p>This is a copy of the rather popular <a href="https://github.com/xCuri0/ReBARUEFI">ReBarUEFI</a> DXE driver. <a href="https://github.com/xCuri0/ReBARUEFI">ReBarUEFI</a> enables Resizable BAR for older motherboards and chipsets without ReBAR support from the manufacturer. NvStrapsReBar was created to test Resizable BAR support for GPUs from the RTX 2000 (and GTX 1600, Turing architecture) line. For the GTX 1000 cards (Pascal architecture) and older the tool can also enable a large BAR on the PCI bus, but it is fixed size and not resizable, so it is not the same as ReBAR. But then the NVIDIA driver for Windows shows a blue screen or resets the computer during boot if the BAR size has been changed. So GTX 1000 cards still can not enable ReBAR. The proprietary Linux driver does not crash, but does not pick up the new BAR size either (NVIDIA, could you please help fixing the Pascal driver ?)</p>
 
+## Tauri desktop client
+
+The Windows configuration utility now includes a Tauri 2 desktop client. It inventories NVIDIA
+adapters and their PCI topology, reads the existing EFI configuration and driver status, validates
+drafts against the current hardware, and only writes after an explicit confirmation. A successful
+write is read back byte-for-byte and still requires a reboot before the DXE driver can apply it.
+
+Development commands (Node.js 24+ and Rust 1.85+):
+
+```powershell
+npm ci
+npm run check
+npm run check:rust
+npm run tauri dev
+```
+
+Build the Windows executable with `npm run tauri:ci`. The result is
+`target/release/NvStrapsReBar.exe`. Run the application as Administrator only when you are
+ready to read or save UEFI variables. Disable NvStrapsReBar before changing GPU or PCI topology.
+
 ### Do I need to flash a new UEFI image on the motherboard, to enable ReBAR on the GPU ?
 Yes, this is how it works for Turing GPUs (GTX 1600 / RTX 2000).
 <!--
