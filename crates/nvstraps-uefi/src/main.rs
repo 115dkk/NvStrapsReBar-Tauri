@@ -11,12 +11,7 @@ fn main() -> Status {
         return Status::ABORTED;
     }
 
-    // The functional entry sequence is enabled only after each hardware adapter
-    // has its parity gate. Linking the library here keeps every landed adapter
-    // in the validated PE/FFS image while the original C driver remains live.
-    let _status_writer = nvstraps_uefi::status_writer::StatusWriter::new();
-
-    Status::SUCCESS
+    nvstraps_uefi::driver::initialize()
 }
 
 #[cfg(not(target_os = "uefi"))]

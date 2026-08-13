@@ -1,6 +1,7 @@
 use core::ffi::c_void;
 
 use nvstraps_core::pci::{PciAddress, boot_script_register_address};
+use nvstraps_core::status::EfiErrorLocation;
 use uefi::boot::{self, OpenProtocolAttributes, OpenProtocolParams, ScopedProtocol};
 use uefi::proto::unsafe_protocol;
 use uefi::{Status, StatusExt};
@@ -31,18 +32,27 @@ pub struct S3Script {
     protocol: Option<ScopedProtocol<S3SaveState>>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct S3InitError {
+    pub location: EfiErrorLocation,
+    pub status: Status,
+}
+
 impl S3Script {
     pub const fn disabled() -> Self {
         Self { protocol: None }
     }
 
-    pub fn initialize(enabled: bool, skip_s3_resume: bool) -> Result<Self, Status> {
+    pub fn initialize(enabled: bool, skip_s3_resume: bool) -> Result<Self, S3InitError> {
         if !enabled || skip_s3_resume {
             return Ok(Self::disabled());
         }
 
         let handle =
-            boot::get_handle_for_protocol::<S3SaveState>().map_err(|error| error.status())?;
+            boot::get_handle_for_protocol::<S3SaveState>().map_err(|error| S3InitError {
+                location: EfiErrorLocation::LocateS3SaveStateProtocol,
+                status: error.status(),
+            })?;
         // SAFETY: This is the standard PI S3 protocol GUID and the scoped
         // handle keeps the interface open for every script write.
         let protocol = unsafe {
@@ -55,7 +65,10 @@ impl S3Script {
                 OpenProtocolAttributes::GetProtocol,
             )
         }
-        .map_err(|error| error.status())?;
+        .map_err(|error| S3InitError {
+            location: EfiErrorLocation::LoadS3SaveStateProtocol,
+            status: error.status(),
+        })?;
         Ok(Self {
             protocol: Some(protocol),
         })

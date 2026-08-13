@@ -3,6 +3,7 @@
 
 extern crate alloc;
 
+pub mod driver;
 pub mod engine;
 pub mod host_bridge;
 pub mod pci;
