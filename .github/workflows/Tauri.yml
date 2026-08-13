@@ -64,6 +64,8 @@ jobs:
         run: npm ci
       - name: Enforce the Rust-only source boundary
         run: npm run check:riir
+      - name: Build the Rust UEFI resource required by the Tauri manifest
+        run: npm run build:firmware
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Lint Rust workspace
