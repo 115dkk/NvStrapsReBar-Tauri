@@ -1,6 +1,8 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use nvstraps_deploy::{BoardPath, DeploymentPlan, DeploymentWorkflow, MachineProfile, StepId};
+use nvstraps_deploy::{
+    BoardPath, BootObservation, DeploymentPlan, DeploymentWorkflow, MachineProfile, StepId,
+};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
 
@@ -210,7 +212,9 @@ fn verify_deployment_driver_command(
         workflow
             .record_step(
                 StepId::RebootAfterFirmware,
-                format!("volatile-status-observed:{}", unix_timestamp_ms()),
+                BootObservation::new(unix_timestamp_ms_u64(), exact.current_identity.clone())
+                    .and_then(|observation| observation.to_evidence_value())
+                    .map_err(BackendError::from)?,
             )
             .map_err(BackendError::from)?;
     }
@@ -253,7 +257,12 @@ fn verify_configuration_reboot_command(
     let mut workflow = DeploymentWorkflow::from_plan(&exact.store, &exact.profile, exact.plan)
         .map_err(BackendError::from)?;
     workflow
-        .record_step(StepId::RebootAfterConfiguration, booted_at.to_string())
+        .record_step(
+            StepId::RebootAfterConfiguration,
+            BootObservation::new(booted_at, exact.current_identity.clone())
+                .and_then(|observation| observation.to_evidence_value())
+                .map_err(BackendError::from)?,
+        )
         .map_err(BackendError::from)?;
     Ok(ConfigurationRebootVerificationReceipt {
         plan: workflow.into_plan(),
@@ -397,11 +406,16 @@ fn manual_step_warnings(profile: &MachineProfile, step_id: StepId) -> BackendRes
 }
 
 fn unix_timestamp_ms() -> String {
+    unix_timestamp_ms_u64().to_string()
+}
+
+fn unix_timestamp_ms_u64() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis()
-        .to_string()
+        .try_into()
+        .unwrap_or(u64::MAX)
 }
 
 fn configuration_readback_evidence(save: &SaveReceipt) -> String {

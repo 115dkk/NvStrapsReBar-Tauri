@@ -166,6 +166,53 @@ impl MachineIdentity {
         self.gpus.dedup();
         Ok(self)
     }
+
+    /// Compares every pinned identity field, including the firmware-assigned BAR0 ranges.
+    pub fn compare_exact(&self, current: &Self) -> ProfileMatch {
+        compare_machine_identity(self, current, false)
+    }
+
+    /// Compares stable machine identity while allowing firmware to relocate BAR0 during a
+    /// controlled flash or reboot boundary.
+    pub fn compare_allowing_bar0_relocation(&self, current: &Self) -> ProfileMatch {
+        compare_machine_identity(self, current, true)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BootObservation {
+    pub observed_at_unix_ms: u64,
+    pub identity: MachineIdentity,
+}
+
+impl BootObservation {
+    pub fn new(observed_at_unix_ms: u64, identity: MachineIdentity) -> Result<Self, PlanError> {
+        if observed_at_unix_ms == 0 {
+            return Err(PlanError::MalformedBootObservation);
+        }
+        let identity = identity
+            .normalized()
+            .map_err(|_| PlanError::MalformedBootObservation)?;
+        Ok(Self {
+            observed_at_unix_ms,
+            identity,
+        })
+    }
+
+    pub fn to_evidence_value(&self) -> Result<String, PlanError> {
+        serde_json::to_string(self).map_err(|_| PlanError::MalformedBootObservation)
+    }
+
+    pub fn parse(value: &str) -> Result<Self, PlanError> {
+        let decoded: Self =
+            serde_json::from_str(value).map_err(|_| PlanError::MalformedBootObservation)?;
+        let canonical = Self::new(decoded.observed_at_unix_ms, decoded.identity)?;
+        if canonical.to_evidence_value()? != value {
+            return Err(PlanError::MalformedBootObservation);
+        }
+        Ok(canonical)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -571,51 +618,7 @@ impl MachineProfile {
         current: &MachineIdentity,
         firmware: Option<&FirmwareFingerprint>,
     ) -> ProfileMatch {
-        let mut differences = Vec::new();
-        let Ok(current) = current.clone().normalized() else {
-            differences.push(ProfileDifference::InvalidCurrentIdentity);
-            return ProfileMatch { differences };
-        };
-
-        compare_field(
-            &mut differences,
-            "boardManufacturer",
-            &self.identity.board_manufacturer,
-            &current.board_manufacturer,
-        );
-        compare_field(
-            &mut differences,
-            "boardProduct",
-            &self.identity.board_product,
-            &current.board_product,
-        );
-        compare_field(
-            &mut differences,
-            "boardVersion",
-            &self.identity.board_version,
-            &current.board_version,
-        );
-        compare_field(
-            &mut differences,
-            "biosVendor",
-            &self.identity.bios_vendor,
-            &current.bios_vendor,
-        );
-        compare_field(
-            &mut differences,
-            "biosVersion",
-            &self.identity.bios_version,
-            &current.bios_version,
-        );
-        compare_field(
-            &mut differences,
-            "biosReleaseDate",
-            &self.identity.bios_release_date,
-            &current.bios_release_date,
-        );
-        if self.identity.gpus != current.gpus {
-            differences.push(ProfileDifference::GpuTopology);
-        }
+        let mut differences = self.identity.compare_exact(current).differences;
         if let Some(firmware) = firmware
             && (self.original_firmware.byte_length != firmware.byte_length
                 || self.original_firmware.sha256 != firmware.sha256)
@@ -898,6 +901,24 @@ impl DeploymentPlan {
         Ok(evidence)
     }
 
+    pub fn latest_boot_observation(&self) -> Result<Option<BootObservation>, PlanError> {
+        self.steps
+            .iter()
+            .rev()
+            .find(|step| {
+                step.state == StepState::Completed
+                    && matches!(
+                        step.id,
+                        StepId::RebootAfterFirmware | StepId::RebootAfterConfiguration
+                    )
+            })
+            .map(|step| {
+                let evidence = step.evidence.as_ref().ok_or(PlanError::MissingEvidence)?;
+                BootObservation::parse(&evidence.value)
+            })
+            .transpose()
+    }
+
     pub fn require_completed_value(
         &self,
         step_id: StepId,
@@ -1070,6 +1091,9 @@ impl DeploymentPlan {
             StepId::ConfirmRecovery if evidence.value != self.recovery_method.evidence_value() => {
                 Err(PlanError::EvidenceValueMismatch(step_id))
             }
+            StepId::RebootAfterFirmware | StepId::RebootAfterConfiguration => {
+                BootObservation::parse(&evidence.value).map(|_| ())
+            }
             _ => Ok(()),
         }
     }
@@ -1175,6 +1199,8 @@ pub enum PlanError {
     EvidenceValueMismatch(StepId),
     #[error("{0:?} evidence must be a SHA-256 digest")]
     MalformedDigest(EvidenceKind),
+    #[error("boot evidence must be a canonical observed time and machine identity")]
+    MalformedBootObservation,
 }
 
 impl RecoveryMethod {
@@ -1264,6 +1290,66 @@ fn compare_field(
             actual: actual.to_owned(),
         });
     }
+}
+
+fn compare_machine_identity(
+    expected: &MachineIdentity,
+    current: &MachineIdentity,
+    allow_bar0_relocation: bool,
+) -> ProfileMatch {
+    let mut differences = Vec::new();
+    let Ok(expected) = expected.clone().normalized() else {
+        differences.push(ProfileDifference::InvalidCurrentIdentity);
+        return ProfileMatch { differences };
+    };
+    let Ok(current) = current.clone().normalized() else {
+        differences.push(ProfileDifference::InvalidCurrentIdentity);
+        return ProfileMatch { differences };
+    };
+    for (field, expected, actual) in [
+        (
+            "boardManufacturer",
+            &expected.board_manufacturer,
+            &current.board_manufacturer,
+        ),
+        (
+            "boardProduct",
+            &expected.board_product,
+            &current.board_product,
+        ),
+        (
+            "boardVersion",
+            &expected.board_version,
+            &current.board_version,
+        ),
+        ("biosVendor", &expected.bios_vendor, &current.bios_vendor),
+        ("biosVersion", &expected.bios_version, &current.bios_version),
+        (
+            "biosReleaseDate",
+            &expected.bios_release_date,
+            &current.bios_release_date,
+        ),
+    ] {
+        compare_field(&mut differences, field, expected, actual);
+    }
+    let gpu_topology_matches = expected.gpus.len() == current.gpus.len()
+        && expected.gpus.iter().all(|expected_gpu| {
+            current.gpus.iter().any(|current_gpu| {
+                expected_gpu.vendor_id == current_gpu.vendor_id
+                    && expected_gpu.device_id == current_gpu.device_id
+                    && expected_gpu.subsystem_vendor_id == current_gpu.subsystem_vendor_id
+                    && expected_gpu.subsystem_device_id == current_gpu.subsystem_device_id
+                    && expected_gpu.location == current_gpu.location
+                    && expected_gpu.bridge_location == current_gpu.bridge_location
+                    && (allow_bar0_relocation
+                        || (expected_gpu.bar0_base == current_gpu.bar0_base
+                            && expected_gpu.bar0_top == current_gpu.bar0_top))
+            })
+        });
+    if !gpu_topology_matches {
+        differences.push(ProfileDifference::GpuTopology);
+    }
+    ProfileMatch { differences }
 }
 
 fn profile_id(
@@ -1670,6 +1756,34 @@ mod tests {
                 ProfileDifference::FirmwareImage
             ]
         );
+    }
+
+    #[test]
+    fn controlled_boot_identity_allows_only_bar0_relocation_and_is_canonical() {
+        let expected = profile(BoardPath::NativeResizableBar).identity;
+        let mut relocated = expected.clone();
+        relocated.gpus[0].bar0_base = 0x1_8000_0000;
+        relocated.gpus[0].bar0_top = 0x1_80ff_ffff;
+
+        assert!(!expected.compare_exact(&relocated).is_exact());
+        assert!(
+            expected
+                .compare_allowing_bar0_relocation(&relocated)
+                .is_exact()
+        );
+        let mut different_gpu = relocated.clone();
+        different_gpu.gpus[0].device_id ^= 1;
+        assert!(
+            !expected
+                .compare_allowing_bar0_relocation(&different_gpu)
+                .is_exact()
+        );
+
+        let observation = BootObservation::new(1_786_654_321_000, relocated).unwrap();
+        let encoded = observation.to_evidence_value().unwrap();
+        assert_eq!(BootObservation::parse(&encoded).unwrap(), observation);
+        assert!(BootObservation::parse(&format!(" {encoded}")).is_err());
+        assert!(BootObservation::new(0, expected).is_err());
     }
 
     #[test]

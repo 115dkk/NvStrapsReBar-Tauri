@@ -6,8 +6,8 @@ use std::{
 use nvstraps_deploy::{
     ArtifactKind, BoardPath, DeploymentPackageReceipt, DeploymentPlan, DeploymentStore,
     DeploymentWorkflow, FirmwareFingerprint, FirmwareInstallRoute, LegacyPatchCatalogFile,
-    LegacyPatchProfile, LegacyPatchRisk, MachineIdentity, MachineProfile, ProfileMatch,
-    RecoveryCapability, Sha256Digest, StepId, StoredArtifact,
+    LegacyPatchProfile, LegacyPatchRisk, MachineIdentity, MachineProfile, ProfileDifference,
+    ProfileMatch, RecoveryCapability, Sha256Digest, StepId, StoredArtifact,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, path::BaseDirectory};
@@ -78,6 +78,7 @@ pub(crate) struct ExactDeployment {
     pub profile: MachineProfile,
     pub plan: DeploymentPlan,
     pub devices: Vec<crate::devices::GpuDevice>,
+    pub current_identity: MachineIdentity,
 }
 
 #[derive(Clone, Copy, Debug, Serialize)]
@@ -419,7 +420,14 @@ pub(crate) fn load_exact_deployment(
         .original_firmware_path(profile_id)
         .map_err(BackendError::from)?;
     let original_fingerprint = FirmwareFingerprint::inspect(&original_path)?;
-    let comparison = profile.compare(&current_identity, Some(&original_fingerprint));
+    let mut comparison = deployment_identity_comparison(&profile, &plan, &current_identity)?;
+    if profile.original_firmware.byte_length != original_fingerprint.byte_length
+        || profile.original_firmware.sha256 != original_fingerprint.sha256
+    {
+        comparison
+            .differences
+            .push(ProfileDifference::FirmwareImage);
+    }
     if !comparison.is_exact() {
         let differences = serde_json::to_string(&comparison.differences)
             .unwrap_or_else(|_| "machine profile mismatch".into());
@@ -432,6 +440,32 @@ pub(crate) fn load_exact_deployment(
         profile,
         plan,
         devices,
+        current_identity,
+    })
+}
+
+fn deployment_identity_comparison(
+    profile: &MachineProfile,
+    plan: &DeploymentPlan,
+    current_identity: &MachineIdentity,
+) -> BackendResult<ProfileMatch> {
+    let boot_observation = plan.latest_boot_observation().map_err(BackendError::from)?;
+    let expected = boot_observation
+        .as_ref()
+        .map_or(&profile.identity, |observation| &observation.identity);
+    let allows_bar0_relocation = plan.active_step().is_some_and(|step| {
+        matches!(
+            step.id,
+            StepId::FlashWithVendorRoute
+                | StepId::ConfigureFirmwareSetup
+                | StepId::RebootAfterFirmware
+                | StepId::RebootAfterConfiguration
+        )
+    });
+    Ok(if allows_bar0_relocation {
+        expected.compare_allowing_bar0_relocation(current_identity)
+    } else {
+        expected.compare_exact(current_identity)
     })
 }
 
@@ -1180,8 +1214,9 @@ mod tests {
     };
 
     use nvstraps_deploy::{
-        FirmwareInstallMethod, GpuFingerprint, LegacyPatchCatalogFile, LegacyPatchCatalogPin,
-        LegacyPatchSelection, PciLocation, RecoveryMethod, Sha256Digest,
+        BootObservation, EvidenceKind, FirmwareInstallMethod, GpuFingerprint,
+        LegacyPatchCatalogFile, LegacyPatchCatalogPin, LegacyPatchSelection, PciLocation,
+        RecoveryMethod, Sha256Digest, StepEvidence,
     };
 
     use super::*;
@@ -1258,6 +1293,39 @@ mod tests {
             legacy_patches,
         )
         .unwrap()
+    }
+
+    fn advance_to_flash(profile: &MachineProfile, plan: &mut DeploymentPlan) {
+        for (step, kind, value) in [
+            (
+                StepId::VerifyProfile,
+                EvidenceKind::ExactProfileMatch,
+                profile.profile_id.clone(),
+            ),
+            (
+                StepId::ConfirmRecovery,
+                EvidenceKind::RecoveryRouteConfirmed,
+                profile.recovery.method.evidence_value().into(),
+            ),
+            (
+                StepId::PreserveOriginalFirmware,
+                EvidenceKind::OriginalFirmwareSha256,
+                profile.original_firmware.sha256.to_string(),
+            ),
+            (
+                StepId::PrepareRustDriver,
+                EvidenceKind::RustDriverSha256,
+                "11f2c3292601b55d09a9fd62244e1c98b49e05c92a965a296332358b5b9c4ee3".into(),
+            ),
+            (
+                StepId::VerifyPatchedArtifact,
+                EvidenceKind::PatchedFirmwareSha256,
+                "54b489b90e9ce7bd0be8514896402ead5a600618f601730d640b1d5b8546b098".into(),
+            ),
+        ] {
+            plan.complete(step, StepEvidence::new(kind, value).unwrap())
+                .unwrap();
+        }
     }
 
     fn firmware_install() -> FirmwareInstallRoute {
@@ -1421,6 +1489,59 @@ mod tests {
     fn relative_firmware_paths_are_rejected_before_file_access() {
         let error = canonical_firmware_path("relative/firmware.bin").unwrap_err();
         assert!(error.to_string().contains("must be absolute"));
+    }
+
+    #[test]
+    fn deployment_preflight_allows_bar0_only_at_controlled_handoff_boundaries() {
+        let profile = profile(
+            BoardPath::NativeResizableBar,
+            FirmwareFingerprint {
+                file_name: "vendor.bin".into(),
+                byte_length: 4,
+                sha256: Sha256Digest::from_bytes(b"test"),
+            },
+        );
+        let mut plan = DeploymentPlan::for_profile(&profile).unwrap();
+        advance_to_flash(&profile, &mut plan);
+        let mut relocated = profile.identity.clone();
+        relocated.gpus[0].bar0_base += 0x1_0000_0000;
+        relocated.gpus[0].bar0_top += 0x1_0000_0000;
+
+        assert!(
+            deployment_identity_comparison(&profile, &plan, &relocated)
+                .unwrap()
+                .is_exact()
+        );
+        plan.complete_with_value(StepId::FlashWithVendorRoute, "operator-attested:1")
+            .unwrap();
+        plan.complete_with_value(StepId::ConfigureFirmwareSetup, "operator-attested:2")
+            .unwrap();
+        assert!(
+            deployment_identity_comparison(&profile, &plan, &relocated)
+                .unwrap()
+                .is_exact()
+        );
+
+        let boot = BootObservation::new(3, relocated.clone())
+            .unwrap()
+            .to_evidence_value()
+            .unwrap();
+        plan.complete_with_value(StepId::RebootAfterFirmware, boot)
+            .unwrap();
+        plan.complete_with_value(StepId::VerifyDriverLoaded, "0x0000000000000028")
+            .unwrap();
+        let mut moved_again = relocated.clone();
+        moved_again.gpus[0].bar0_base += 0x1000;
+        assert!(
+            !deployment_identity_comparison(&profile, &plan, &moved_again)
+                .unwrap()
+                .is_exact()
+        );
+        assert!(
+            deployment_identity_comparison(&profile, &plan, &relocated)
+                .unwrap()
+                .is_exact()
+        );
     }
 
     #[test]

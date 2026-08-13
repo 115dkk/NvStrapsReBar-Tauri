@@ -363,7 +363,7 @@ fn ensure_configuration_reboot_available() -> BackendResult<std::path::PathBuf> 
 #[cfg(test)]
 mod tests {
     use nvstraps_deploy::{
-        BoardPath, DeploymentPlan, FirmwareFingerprint, FirmwareInstallMethod,
+        BoardPath, BootObservation, DeploymentPlan, FirmwareFingerprint, FirmwareInstallMethod,
         FirmwareInstallRoute, GpuFingerprint, MachineIdentity, MachineProfile, PciLocation,
         RecoveryCapability, RecoveryMethod, Sha256Digest, StepEvidence,
     };
@@ -515,7 +515,15 @@ mod tests {
                 nvstraps_deploy::EvidenceKind::ConfigurationReadback,
             ),
         ] {
-            plan.complete(step, StepEvidence::new(kind, "proof").unwrap())
+            let value = if step == StepId::RebootAfterFirmware {
+                BootObservation::new(1, profile.identity.clone())
+                    .unwrap()
+                    .to_evidence_value()
+                    .unwrap()
+            } else {
+                "proof".into()
+            };
+            plan.complete(step, StepEvidence::new(kind, value).unwrap())
                 .unwrap();
         }
 
