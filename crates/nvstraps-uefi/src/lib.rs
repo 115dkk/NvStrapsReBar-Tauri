@@ -3,6 +3,7 @@
 
 extern crate alloc;
 
+pub mod engine;
 pub mod pci;
 pub mod s3;
 pub mod setup_variable;
