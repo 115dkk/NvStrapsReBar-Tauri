@@ -32,6 +32,9 @@ jobs:
           workspaces: |
             . -> target
 
+      - name: Enforce the Rust-only source boundary
+        run: npm run check:riir
+
       - name: Test the FFS encoder and independent decoder
         run: cargo test -p nvstraps-ffs
 

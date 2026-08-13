@@ -62,6 +62,8 @@ jobs:
           workspaces: . -> target
       - name: Install dependencies
         run: npm ci
+      - name: Enforce the Rust-only source boundary
+        run: npm run check:riir
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Lint Rust workspace

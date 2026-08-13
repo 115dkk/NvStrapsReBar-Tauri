@@ -68,7 +68,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn registry_is_the_complete_c_source_snapshot() {
+    fn canonical_registry_is_complete_and_unique() {
         let entries: usize = GROUPS.iter().map(|(devices, _)| devices.len()).sum();
         assert_eq!(entries, 99);
         let mut ids = GROUPS
