@@ -173,30 +173,35 @@ pub fn validate_config(
 
 #[tauri::command]
 pub fn save_config(draft: ConfigDraft, state: State<'_, AppState>) -> CommandResult<SaveReceipt> {
+    save_config_inner(draft, &state).map_err(ApiError::from)
+}
+
+pub(crate) fn save_config_inner(
+    draft: ConfigDraft,
+    state: &AppState,
+) -> BackendResult<SaveReceipt> {
     // Re-enumerate immediately before a consequential write so a draft validated against stale
     // GPU or bridge topology cannot be persisted after a hardware change.
-    let current_devices = enumerate_gpus().map_err(ApiError::from)?;
+    let current_devices = enumerate_gpus()?;
     let mut guard = state
         .inner
         .lock()
-        .map_err(|_| ApiError::from(BackendError::StatePoisoned))?;
+        .map_err(|_| BackendError::StatePoisoned)?;
     if !guard.firmware_accessible {
-        return Err(ApiError::from(BackendError::FirmwareUnavailable {
+        return Err(BackendError::FirmwareUnavailable {
             name: CONFIG_VARIABLE_NAME,
             reason: "restart the application as administrator and try again".into(),
-        }));
+        });
     }
-    let config = config_from_draft(&draft, &current_devices).map_err(ApiError::from)?;
-    let encoded = config.encode().map_err(ApiError::from)?;
-    write_variable(CONFIG_VARIABLE_NAME, &encoded).map_err(ApiError::from)?;
-    let verified = read_variable(CONFIG_VARIABLE_NAME)
-        .map_err(ApiError::from)?
-        .unwrap_or_default();
+    let config = config_from_draft(&draft, &current_devices)?;
+    let encoded = config.encode()?;
+    write_variable(CONFIG_VARIABLE_NAME, &encoded)?;
+    let verified = read_variable(CONFIG_VARIABLE_NAME)?.unwrap_or_default();
     if verified != encoded {
-        return Err(ApiError::from(BackendError::FirmwareUnavailable {
+        return Err(BackendError::FirmwareUnavailable {
             name: CONFIG_VARIABLE_NAME,
             reason: "the value read after saving did not match the requested configuration".into(),
-        }));
+        });
     }
     guard.devices = current_devices;
     guard.config = Some(config);
