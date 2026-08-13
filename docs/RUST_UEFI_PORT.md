@@ -51,6 +51,15 @@ receipt remain under `target/qemu-smoke/`; CI uploads that directory on every Li
 Alternative OVMF paths can be supplied through `NVSTRAPS_OVMF_CODE` and
 `NVSTRAPS_OVMF_VARS`. This test never reads or writes the host machine's NVRAM.
 
+## Desktop packaging
+
+`npm run prepare:desktop` installs the stable Rust UEFI target idempotently, builds the release
+driver, packages and independently inspects its FFS, and leaves the verified artifact at
+`target/x86_64-unknown-uefi/release/NvStrapsReBar.ffs`. Tauri runs this preparation automatically
+before development and release builds and bundles the FFS under the fixed resource name
+`NvStrapsReBar.ffs`. End users therefore do not need Rust, EDK2, Python, or firmware packaging
+tools; those are build-time concerns only.
+
 ## Deletion gates for the C DXE
 
 The C firmware implementation and its EDK2 workflow must remain until all of these are true:

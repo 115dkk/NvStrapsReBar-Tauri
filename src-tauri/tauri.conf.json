@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "io.github.nvstrapsrebar.desktop",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "npm run prepare:desktop && npm run dev",
     "devUrl": "http://127.0.0.1:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run build && npm run prepare:desktop",
     "frontendDist": "../dist"
   },
   "app": {
@@ -31,6 +31,9 @@
     "active": true,
     "targets": ["nsis", "msi"],
     "icon": ["icons/icon.ico", "icons/icon.png"],
+    "resources": {
+      "../target/x86_64-unknown-uefi/release/NvStrapsReBar.ffs": "NvStrapsReBar.ffs"
+    },
     "shortDescription": "Configure NvStrapsReBar from Windows",
     "longDescription": "A Windows desktop interface for inspecting GPUs and configuring the NvStrapsReBar UEFI driver.",
     "windows": {
