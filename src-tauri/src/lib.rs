@@ -5,6 +5,7 @@ mod devices;
 mod error;
 mod firmware;
 mod machine;
+mod reboot;
 mod status;
 
 pub fn run() {
@@ -25,6 +26,8 @@ pub fn run() {
             deployment::compare_machine_profile,
             deployment::prepare_firmware_artifact,
             deployment::export_deployment_package,
+            reboot::preview_firmware_setup_reboot,
+            reboot::reboot_to_firmware_setup,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run NvStrapsReBar");
