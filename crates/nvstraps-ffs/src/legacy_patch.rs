@@ -24,12 +24,19 @@ pub struct LegacyPatchCatalog {
 
 impl LegacyPatchCatalog {
     pub fn parse(source: &str) -> Result<Self, LegacyPatchError> {
-        let source_sha256 = hex_digest(Sha256::digest(source.as_bytes()));
+        let canonical_source = source.replace("\r\n", "\n");
+        if canonical_source.contains('\r') {
+            return Err(invalid(
+                0,
+                "catalog contains a non-canonical carriage return",
+            ));
+        }
+        let source_sha256 = hex_digest(Sha256::digest(canonical_source.as_bytes()));
         let mut rules = Vec::new();
         let mut first_line_by_id = HashMap::new();
         let mut description = None;
 
-        for (index, raw_line) in source.lines().enumerate() {
+        for (index, raw_line) in canonical_source.lines().enumerate() {
             let line_number = index + 1;
             let line = raw_line.trim();
             if line.is_empty() {
@@ -537,5 +544,17 @@ mod tests {
             let catalog = LegacyPatchCatalog::parse(source).unwrap();
             assert_eq!(catalog.rules.len(), expected_rules);
         }
+    }
+
+    #[test]
+    fn catalog_digest_is_stable_across_git_line_endings() {
+        let lf = format!("# rule\n{GUID} 10 P:AABB:CCDD\n");
+        let crlf = lf.replace('\n', "\r\n");
+
+        let lf_catalog = LegacyPatchCatalog::parse(&lf).unwrap();
+        let crlf_catalog = LegacyPatchCatalog::parse(&crlf).unwrap();
+
+        assert_eq!(lf_catalog.source_sha256, crlf_catalog.source_sha256);
+        assert_eq!(lf_catalog.rules, crlf_catalog.rules);
     }
 }
