@@ -39,9 +39,10 @@ configuration readback, or evidence parsing.
 
 ### Manual gate
 
-A Deployment Plan step owned by a person, vendor firmware UI, external tool, rebooted system, or
-physical process. The application may prepare the handoff and record an explicit attestation, but
-must not infer completion from opening a UI or requesting a reboot.
+A Deployment Plan step owned by a person, vendor firmware UI, external tool, or physical process.
+The application may prepare the handoff and record an explicit attestation, but must not infer
+completion from opening a UI. A reboot is a system-observed gate instead: requesting it never
+completes it, while current-boot DXE status or a later Windows boot time may prove it.
 
 ### Firmware artifact
 
@@ -75,7 +76,8 @@ are the installed `nvidia-smi.exe` and a pinned official NVIDIA Profile Inspecto
   canonical Rust owner.
 - Every persisted artifact is read back and content-addressed; an existing different artifact is
   an immutable conflict.
-- Vendor flash, UEFI settings, reboot completion, hardware work, and physical recovery remain
-  truthful manual gates until evidence from their actual owner is recorded.
+- Vendor flash, UEFI settings, NVIDIA application policy, hardware work, and physical recovery
+  remain truthful manual gates. Reboot completion requires evidence from the rebooted system and
+  is never inferred from accepting a restart request.
 - Preview-mode browser fixtures prove only the embedded client journey. They never prove native
   dialogs, EFI writes, firmware parsing on a real image, flashing, reboot, or hardware recovery.

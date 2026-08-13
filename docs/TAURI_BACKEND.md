@@ -69,9 +69,11 @@ them; a reboot and driver-status check remain separate steps.
 | `prepare_firmware_artifact` | `{ profileId }` | Verified Rust FFS, optional legacy-patch receipt, injected output, and advanced plan revision; never a flash |
 | `export_deployment_package` | `{ request: { profileId, destinationRoot } }` | No-overwrite package receipt covering artifact, original, manifests, instructions, and checksums |
 
-`CreateProfileRequest` contains `displayName`, `boardPath`, `firmwarePath`, `recovery`,
-`firmwareInstall`, and optional `legacyPatches`. `boardPath` is `nativeResizableBar` or
-`legacyAbove4g`. The backend derives the machine identity itself; the client cannot submit one.
+`CreateProfileRequest` contains `displayName`, `boardPath`, `firmwarePath`, the mandatory
+`expectedFirmware` fingerprint returned by inspection, `recovery`, `firmwareInstall`, and optional
+`legacyPatches`. `boardPath` is `nativeResizableBar` or `legacyAbove4g`. The backend derives the
+machine identity itself, reloads and re-hashes the source, and rejects a submitted fingerprint
+that no longer matches; the client cannot submit an identity or bypass the inspection race guard.
 
 ### Legacy firmware analysis
 
@@ -106,22 +108,45 @@ selected risk. Profile creation reloads and re-hashes the source, applies the co
 in memory, and discards the output before persisting anything. This catches stale match counts,
 overlapping changes, and combinations that fail only when applied together.
 
+## Resumable workflow commands
+
+These commands are the only production path that advances the post-preparation plan. Every call
+reloads the exact profile and newest append-only revision, re-enumerates the machine, and requires
+the expected active step.
+
+| Command | Arguments | Result and owner |
+| --- | --- | --- |
+| `preview_manual_deployment_step` | `{ profileId }` | Exact active manual gate, warnings, and a token bound to profile, step, and plan revision; no completion |
+| `confirm_manual_deployment_step` | `{ request: { profileId, stepId, confirmationToken, confirmed } }` | New plan revision only for vendor flash, firmware settings, or reviewed NVIDIA application policy |
+| `verify_deployment_driver` | `{ profileId }` | Reads exactly eight status bytes and accepts only a known non-error Rust DXE status; the volatile variable also proves the current boot and may advance both boot and driver steps |
+| `save_deployment_config` | `{ request: { profileId, draft } }` | Re-enumeration, validation, EFI write, byte-for-byte readback, save receipt, and advanced plan |
+| `verify_configuration_reboot` | `{ profileId }` | Advances only when the current Windows boot time is later than the recorded configuration readback time |
+
+Manual confirmation is deliberately narrow. Opening a vendor utility, firmware UI, or Profile
+Inspector is not evidence. The token becomes stale as soon as the profile, active step, or plan
+revision changes. `RebootAfterFirmware` is not operator-attested: the status variable is
+boot-service/runtime-only rather than non-volatile, so a valid current value is stronger evidence
+that the Rust driver ran during the current boot.
+
 ## Restart and external-adapter commands
 
 | Command | Arguments | Result and owner |
 | --- | --- | --- |
 | `preview_firmware_setup_reboot` | `{ profileId }` | Current eligible plan step, exact command preview, profile-bound token, and warnings; no restart |
 | `reboot_to_firmware_setup` | `{ request: { profileId, confirmationToken, unsavedWorkConfirmed } }` | Acceptance only after revalidation; invokes `shutdown.exe /r /fw /t 0` without `/f` |
-| `collect_nvidia_smi_evidence` | `{ profileId }` | Hashed installed tool, raw XML digest, BAR1 values, and exact PCI-profile matches |
+| `preview_configuration_reboot` | `{ profileId }` | Revision-bound preview of `shutdown.exe /r /t 0`; no restart or plan transition |
+| `reboot_after_configuration` | `{ request: { profileId, confirmationToken, unsavedWorkConfirmed } }` | Restart acceptance with `planAdvanced: false`; deliberately omits `/f` |
+| `collect_nvidia_smi_evidence` | `{ profileId }` | Advanced plan plus hashed tool and XML evidence only after every profile GPU has complete BAR1 values, consistent total/used/free, an exact Windows PCI-size match, and a size above 256 MiB |
 | `install_nvidia_profile_inspector` | none | Content-addressed installation receipt for the single pinned official release |
 | `get_nvidia_profile_inspector_installation` | none | Reverified installation receipt or `null` |
 | `backup_nvidia_profiles` | `{ profileId }` | Immutable `.nip` backup and parsed-count manifest receipt |
 | `launch_nvidia_profile_inspector` | `{ request: { profileId } }` | Launch receipt only after exact-machine validation, elevation, installation verification, and backup |
 
 Restart acceptance does not prove that Windows restarted, firmware setup opened, firmware was
-flashed, or settings changed. `nvidia-smi` evidence proves only what the installed NVIDIA driver
-reported at capture time. Profile Inspector remains a verified external UI; application policy
-choices are manual.
+flashed, or settings changed. The normal restart step advances only after a later boot is observed.
+`nvidia-smi` evidence proves the applied BAR1 aperture through two independent local observations;
+it does not prove that every application uses ReBAR. Profile Inspector remains a verified external
+UI, and launching it never completes the final application-policy gate.
 
 ## Persistence, concurrency, and safety invariants
 
@@ -134,9 +159,11 @@ choices are manual.
   profile and original-firmware digest.
 - Consequential commands re-enumerate the exact machine and require the active plan step rather
   than trusting stale React state.
+- A plan revision is written before it replaces the workflow's in-memory state. A failed revision
+  write therefore cannot expose a transition that was not durably stored.
 - Legacy analysis and preparation never mutate the selected input bytes.
 - The reboot adapter deliberately omits `/f`; the user must still save work and provide the
-  profile-bound confirmation token.
+  profile- and revision-bound confirmation token. A request never records reboot completion.
 - The bridge exposes no generic shell execution, arbitrary download, firmware-variable name, or
   raw flash command.
 

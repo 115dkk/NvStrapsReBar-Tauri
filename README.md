@@ -25,14 +25,20 @@ The `Deploy` workspace provides one guarded, resumable journey:
    inject the driver into a new artifact;
 7. export the artifact, preserved original, manifests, receipts, operator instructions, and
    checksums as a deployment package;
-8. validate and save the NvStrapsReBar EFI configuration with byte-for-byte readback;
-9. request the next Windows restart into firmware setup after a saved-work confirmation;
-10. collect NVIDIA BAR1 evidence, install a pinned official NVIDIA Profile Inspector release,
-    back up customized profiles, and open the external UI.
+8. record vendor flash and firmware-setting completion only through profile-, step-, and
+   revision-bound operator confirmations;
+9. prove the returned firmware boot and Rust DXE execution from the current boot's volatile status;
+10. validate and save the NvStrapsReBar EFI configuration with byte-for-byte readback;
+11. request a normal restart without `/f`, then advance only after Windows proves a later boot;
+12. accept BAR1 evidence only when every pinned GPU has complete, consistent telemetry matching
+    the independent Windows PCI resource size and exceeding 256 MiB; and
+13. install a pinned official NVIDIA Profile Inspector release, preserve a profile backup, open
+    the external UI, and keep policy completion manual and explicit.
 
 The application hard-stops on a changed board, BIOS, topology, BAR0 range, firmware hash, legacy
-catalog, or patch match count. It reports preparation as preparation; it does not report a flash,
-firmware-setting change, reboot, or physical recovery as complete on the user's behalf.
+catalog, patch match count, stale plan revision, invalid DXE status, unproven reboot, or incomplete
+BAR1 evidence. Preparation, reboot acceptance, and external-tool launch are never reported as the
+result owned by the next system or person.
 
 ## Modern and legacy board paths
 
@@ -54,7 +60,7 @@ These steps intentionally remain outside a generic one-click action:
 - verify that the selected recovery route is documented or has actually been tested;
 - review hashes and the prepared artifact before crossing the flash boundary;
 - run the vendor flasher or physical flashback procedure;
-- change UEFI settings, wait through the update, and confirm the next successful boot;
+- change UEFI settings and wait through the update without interrupting power;
 - move a USB drive, press a rear-panel button, clear CMOS, use an SPI programmer, or change a GPU;
 - choose per-application NVIDIA policy values in Profile Inspector.
 
@@ -119,8 +125,9 @@ profile rather than trial-and-error defaults.
 ## NVIDIA evidence and application profiles
 
 The app invokes the installed `nvidia-smi.exe` read-only and records BAR1 totals matched to the
-pinned Windows PCI inventory. This proves what the installed NVIDIA driver reports; it does not
-prove that every application uses ReBAR.
+pinned Windows PCI inventory. The deployment plan advances only when all pinned GPUs are present,
+BAR1 total/used/free are available and consistent, Windows reports the same size independently,
+and the aperture is larger than 256 MiB. This does not prove that every application uses ReBAR.
 
 Per-application enablement remains in the official
 [NVIDIA Profile Inspector](https://github.com/Orbmu2k/nvidiaProfileInspector). The app downloads

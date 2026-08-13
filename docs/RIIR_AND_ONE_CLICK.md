@@ -72,10 +72,14 @@ application can perform these steps without an external build environment:
 7. export a verified package containing the flash artifact, original recovery image, manifests,
    receipts, operator instructions, and SHA-256 list;
 8. validate and write the NvStrapsReBar EFI configuration with byte-for-byte readback;
-9. preview and, after a saved-work acknowledgement, request the next Windows restart into the
-   firmware UI; and
-10. collect NVIDIA BAR1 evidence, install the pinned official Profile Inspector release, back up
-    customized profiles, and open its UI.
+9. preview and, after a saved-work acknowledgement, request either a firmware-UI restart or the
+   normal restart that applies the configuration, always without forced application closure;
+10. prove the returned patched-firmware boot and Rust DXE execution from the current boot's
+    volatile status variable, and prove the later configuration reboot from Windows boot time;
+11. require complete, internally consistent BAR1 telemetry for every pinned GPU and an exact match
+    to the independent Windows PCI resource size before advancing; and
+12. install the pinned official Profile Inspector release, back up customized profiles, and open
+    its UI without claiming that a policy was applied.
 
 Windows supports directing the next restart to the firmware UI with `shutdown /r /fw`. The adapter
 uses a zero-second timeout without `/f`: Microsoft documents that `/f` can lose unsaved data and
@@ -83,7 +87,10 @@ that a positive timeout implies `/f`. See the
 [Microsoft `shutdown` command](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/shutdown).
 
 NVIDIA documents BAR1 total, used, and free memory in `nvidia-smi -q`; this is evidence reported by
-the installed driver, not proof that every application uses ReBAR. See the
+the installed driver. The application accepts it as the ReBAR plan receipt only when all values
+are present, used plus free equals total, Windows independently reports the same resource size,
+and the aperture exceeds the legacy 256 MiB window. This is still not proof that every application
+uses ReBAR. See the
 [NVIDIA System Management Interface documentation](https://docs.nvidia.com/deploy/nvidia-smi/index.html).
 
 ### Still manual or physical
@@ -100,6 +107,11 @@ No generic application can truthfully or safely collapse the following steps int
 - press a rear-panel button, move a USB drive, clear CMOS, attach an SPI programmer, or change a
   GPU; and
 - recover a machine that no longer reaches POST.
+
+The plan records vendor flash, saved firmware settings, and reviewed NVIDIA application policy as
+explicit operator attestations tied to the exact profile, active step, and plan revision. It does
+not ask the operator to attest to a boot that software can prove: the current-boot DXE status and
+post-configuration Windows boot time close those gates automatically.
 
 For the detected MSI PRO Z690-A DDR4 (MS-7D25), the vendor-documented route is M-FLASH and the
 documented recovery-capable physical route is the Flash BIOS Button. MSI requires the flashback
@@ -123,6 +135,8 @@ installed file, records a manifest, exports a backup, and launches it. It does n
 per-game policies. The official tool documents its import/export command line and advanced-setting
 risks in the
 [NVIDIA Profile Inspector repository](https://github.com/Orbmu2k/nvidiaProfileInspector).
+Installation, backup, or launch is never treated as policy completion. The final plan step remains
+open until the operator reviews and confirms the intended per-application settings.
 
 ### Product definition
 
@@ -134,8 +148,9 @@ manual UEFI change, or hiding the recovery boundary.
 The safest maximum for this machine is therefore:
 
 `select official image -> confirm detected profile/recovery -> prepare and export -> reboot to
-firmware UI -> perform vendor flash/settings -> boot Windows -> verify status and BAR1 -> open
-backed-up Profile Inspector`
+firmware UI -> perform and attest vendor flash/settings -> boot Windows -> verify volatile DXE
+status -> write/read back config -> reboot -> verify later boot and BAR1 -> open backed-up Profile
+Inspector -> attest reviewed application policy`
 
 Every mismatch is a hard stop. Manual gates stay visible in the plan until evidence from their
 actual owner exists.
