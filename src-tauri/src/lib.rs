@@ -22,6 +22,7 @@ pub fn run() {
             app::request_elevation,
             app::get_machine_identity,
             deployment::inspect_firmware_image,
+            deployment::analyze_legacy_firmware,
             deployment::list_legacy_patch_catalogs,
             deployment::create_machine_profile,
             deployment::list_machine_profiles,

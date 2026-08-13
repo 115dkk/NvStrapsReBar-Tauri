@@ -147,6 +147,7 @@ pub enum LegacyPatchPathReceipt {
 }
 
 const LEGACY_PATCH_UPSTREAM_COMMIT: &str = "9c80fdb2cd3db94bdd19c58bd00d5ecf822f6430";
+const MAX_FIRMWARE_IMAGE_BYTES: u64 = 512 * 1024 * 1024;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -164,6 +165,43 @@ pub struct LegacyPatchRuleView {
     pub description: Option<String>,
     pub section_type: u8,
     pub required_risks: Vec<LegacyPatchRisk>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LegacyFirmwareAnalysisView {
+    pub firmware: FirmwareFingerprint,
+    pub upstream_commit: &'static str,
+    pub catalogs: Vec<LegacyFirmwareCatalogAnalysisView>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LegacyFirmwareCatalogAnalysisView {
+    pub catalog: LegacyPatchCatalogFile,
+    pub source_sha256: String,
+    pub rules: Vec<LegacyFirmwareRuleAnalysisView>,
+}
+
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum LegacyFirmwareRuleStatus {
+    Applicable,
+    Absent,
+    Blocked,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LegacyFirmwareRuleAnalysisView {
+    pub rule_id: String,
+    pub description: Option<String>,
+    pub section_type: u8,
+    pub required_risks: Vec<LegacyPatchRisk>,
+    pub status: LegacyFirmwareRuleStatus,
+    pub expected_matches: Option<u16>,
+    pub blocked_reason: Option<String>,
+    pub recommended: bool,
 }
 
 struct BuiltinLegacyCatalog {
@@ -207,24 +245,46 @@ pub fn inspect_firmware_image(path: String) -> CommandResult<FirmwareFingerprint
 }
 
 #[tauri::command]
-pub fn create_machine_profile(
+pub async fn analyze_legacy_firmware(path: String) -> CommandResult<LegacyFirmwareAnalysisView> {
+    tauri::async_runtime::spawn_blocking(move || analyze_legacy_firmware_path(&path))
+        .await
+        .map_err(|error| {
+            ApiError::from(BackendError::Deployment(format!(
+                "legacy firmware analysis worker failed: {error}"
+            )))
+        })?
+        .map_err(ApiError::from)
+}
+
+#[tauri::command]
+pub async fn create_machine_profile(
     app: AppHandle,
     request: CreateProfileRequest,
 ) -> CommandResult<DeploymentBundle> {
-    let firmware_path = canonical_firmware_path(&request.firmware_path).map_err(ApiError::from)?;
-    let firmware = FirmwareFingerprint::inspect(&firmware_path)
-        .map_err(BackendError::from)
-        .map_err(ApiError::from)?;
-    let devices = enumerate_gpus().map_err(ApiError::from)?;
-    let identity = collect_machine_identity(&devices).map_err(ApiError::from)?;
-    let profile = build_profile(request, identity, firmware).map_err(ApiError::from)?;
-    let provisioned = store(&app)
-        .and_then(|store| {
-            store
-                .provision_profile(&profile, &firmware_path)
-                .map_err(BackendError::from)
-        })
-        .map_err(ApiError::from)?;
+    tauri::async_runtime::spawn_blocking(move || create_profile_command(&app, request))
+        .await
+        .map_err(|error| {
+            ApiError::from(BackendError::Deployment(format!(
+                "machine profile worker failed: {error}"
+            )))
+        })?
+        .map_err(ApiError::from)
+}
+
+fn create_profile_command(
+    app: &AppHandle,
+    request: CreateProfileRequest,
+) -> BackendResult<DeploymentBundle> {
+    let firmware_path = canonical_firmware_path(&request.firmware_path)?;
+    let firmware = FirmwareFingerprint::inspect(&firmware_path)?;
+    let devices = enumerate_gpus()?;
+    let identity = collect_machine_identity(&devices)?;
+    let profile = build_profile(request, identity, firmware)?;
+    if profile.legacy_patches.is_some() {
+        let original = read_firmware_image(&firmware_path, &profile.original_firmware)?;
+        verify_legacy_profile_application(&profile, &original)?;
+    }
+    let provisioned = store(app)?.provision_profile(&profile, &firmware_path)?;
     Ok(DeploymentBundle {
         profile: provisioned.profile,
         plan: provisioned.plan,
@@ -973,6 +1033,130 @@ fn required_risks(
     risks
 }
 
+fn analyze_legacy_firmware_path(path: &str) -> BackendResult<LegacyFirmwareAnalysisView> {
+    let path = canonical_firmware_path(path)?;
+    let firmware = FirmwareFingerprint::inspect(&path)?;
+    let bytes = read_firmware_image(&path, &firmware)?;
+    analyze_legacy_firmware_bytes(firmware, &bytes)
+}
+
+fn analyze_legacy_firmware_bytes(
+    firmware: FirmwareFingerprint,
+    bytes: &[u8],
+) -> BackendResult<LegacyFirmwareAnalysisView> {
+    let catalogs = builtin_legacy_catalogs()?
+        .into_iter()
+        .map(|catalog| {
+            let analysis =
+                nvstraps_ffs::analyze_legacy_firmware(bytes, &catalog.parsed).map_err(|error| {
+                    BackendError::Deployment(format!(
+                        "legacy firmware analysis failed for catalog {:?}: {error}",
+                        catalog.catalog
+                    ))
+                })?;
+            let rules = analysis
+                .rules
+                .into_iter()
+                .map(|analysis_rule| {
+                    let rule = catalog
+                        .parsed
+                        .rule(&analysis_rule.rule_id)
+                        .expect("analysis rules originate from the same parsed catalog");
+                    let required_risks =
+                        required_risks(catalog.catalog, rule.description.as_deref());
+                    let (status, expected_matches, blocked_reason) = match analysis_rule.disposition
+                    {
+                        nvstraps_ffs::LegacyFirmwareRuleDisposition::Applicable {
+                            expected_matches,
+                        } => match u16::try_from(expected_matches) {
+                            Ok(expected_matches) => (
+                                LegacyFirmwareRuleStatus::Applicable,
+                                Some(expected_matches),
+                                None,
+                            ),
+                            Err(_) => (
+                                LegacyFirmwareRuleStatus::Blocked,
+                                None,
+                                Some("match count exceeds the deployment profile limit".into()),
+                            ),
+                        },
+                        nvstraps_ffs::LegacyFirmwareRuleDisposition::Absent => {
+                            (LegacyFirmwareRuleStatus::Absent, None, None)
+                        }
+                        nvstraps_ffs::LegacyFirmwareRuleDisposition::Blocked { reason } => {
+                            (LegacyFirmwareRuleStatus::Blocked, None, Some(reason))
+                        }
+                    };
+                    let recommended = matches!(status, LegacyFirmwareRuleStatus::Applicable)
+                        && required_risks.is_empty();
+                    LegacyFirmwareRuleAnalysisView {
+                        rule_id: analysis_rule.rule_id.as_str().to_owned(),
+                        description: rule.description.clone(),
+                        section_type: rule.section_type,
+                        required_risks,
+                        status,
+                        expected_matches,
+                        blocked_reason,
+                        recommended,
+                    }
+                })
+                .collect();
+            Ok(LegacyFirmwareCatalogAnalysisView {
+                catalog: catalog.catalog,
+                source_sha256: analysis.catalog_sha256,
+                rules,
+            })
+        })
+        .collect::<BackendResult<Vec<_>>>()?;
+    Ok(LegacyFirmwareAnalysisView {
+        firmware,
+        upstream_commit: LEGACY_PATCH_UPSTREAM_COMMIT,
+        catalogs,
+    })
+}
+
+fn read_firmware_image(path: &Path, expected: &FirmwareFingerprint) -> BackendResult<Vec<u8>> {
+    let length = path
+        .metadata()
+        .map_err(|error| {
+            BackendError::Deployment(format!(
+                "firmware image metadata failed at {}: {error}",
+                path.display()
+            ))
+        })?
+        .len();
+    if length > MAX_FIRMWARE_IMAGE_BYTES {
+        return Err(BackendError::Deployment(format!(
+            "firmware image is {length} bytes; the analysis limit is {MAX_FIRMWARE_IMAGE_BYTES} bytes"
+        )));
+    }
+    let bytes = fs::read(path).map_err(|error| {
+        BackendError::Deployment(format!(
+            "firmware image could not be read at {}: {error}",
+            path.display()
+        ))
+    })?;
+    if bytes.len() as u64 != expected.byte_length
+        || Sha256Digest::from_bytes(&bytes) != expected.sha256
+    {
+        return Err(BackendError::Deployment(
+            "firmware image changed while it was being analyzed".into(),
+        ));
+    }
+    Ok(bytes)
+}
+
+fn verify_legacy_profile_application(
+    profile: &MachineProfile,
+    original: &[u8],
+) -> BackendResult<()> {
+    if profile.legacy_patches.is_none() {
+        return Ok(());
+    }
+    let _ = apply_builtin_legacy_patches(profile, original)?;
+    Ok(())
+}
+
 fn inspect_firmware_path(path: &str) -> BackendResult<FirmwareFingerprint> {
     let path = canonical_firmware_path(path)?;
     FirmwareFingerprint::inspect(path).map_err(BackendError::from)
@@ -1289,6 +1473,70 @@ mod tests {
                 .unwrap_err()
                 .to_string()
                 .contains("not in built-in catalog")
+        );
+    }
+
+    #[test]
+    fn legacy_analysis_recommends_only_exact_zero_risk_matches() {
+        let bytes = synthetic_legacy_firmware();
+        let firmware = FirmwareFingerprint {
+            file_name: "legacy.bin".into(),
+            byte_length: bytes.len() as u64,
+            sha256: Sha256Digest::from_bytes(&bytes),
+        };
+
+        let analysis = analyze_legacy_firmware_bytes(firmware.clone(), &bytes).unwrap();
+        assert_eq!(analysis.firmware, firmware);
+        assert_eq!(analysis.catalogs.len(), 5);
+        let applicable: Vec<_> = analysis
+            .catalogs
+            .iter()
+            .flat_map(|catalog| {
+                catalog.rules.iter().filter_map(move |rule| {
+                    matches!(rule.status, LegacyFirmwareRuleStatus::Applicable)
+                        .then_some((catalog.catalog, rule))
+                })
+            })
+            .collect();
+        assert_eq!(applicable.len(), 1);
+        assert_eq!(applicable[0].0, LegacyPatchCatalogFile::General);
+        assert_eq!(applicable[0].1.expected_matches, Some(1));
+        assert!(applicable[0].1.required_risks.is_empty());
+        assert!(applicable[0].1.recommended);
+    }
+
+    #[test]
+    fn legacy_profile_creation_dry_run_rejects_stale_match_counts() {
+        let bytes = synthetic_legacy_firmware();
+        let firmware = FirmwareFingerprint {
+            file_name: "legacy.bin".into(),
+            byte_length: bytes.len() as u64,
+            sha256: Sha256Digest::from_bytes(&bytes),
+        };
+        let valid = profile(BoardPath::LegacyAbove4g, firmware.clone());
+        verify_legacy_profile_application(&valid, &bytes).unwrap();
+
+        let mut stale_legacy = valid_builtin_legacy_profile();
+        stale_legacy.selections[0].expected_matches = 2;
+        let stale = MachineProfile::create_with_legacy(
+            "legacy stale count",
+            BoardPath::LegacyAbove4g,
+            identity(),
+            firmware,
+            RecoveryCapability {
+                method: RecoveryMethod::UsbFlashback,
+                tested_or_documented: true,
+                note: "documented recovery".into(),
+            },
+            firmware_install(),
+            Some(stale_legacy),
+        )
+        .unwrap();
+        assert!(
+            verify_legacy_profile_application(&stale, &bytes)
+                .unwrap_err()
+                .to_string()
+                .contains("matched 1 times instead of the required 2")
         );
     }
 
