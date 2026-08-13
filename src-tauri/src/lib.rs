@@ -5,6 +5,7 @@ mod devices;
 mod error;
 mod firmware;
 mod machine;
+mod nvidia_smi;
 mod reboot;
 mod status;
 
@@ -28,6 +29,7 @@ pub fn run() {
             deployment::export_deployment_package,
             reboot::preview_firmware_setup_reboot,
             reboot::reboot_to_firmware_setup,
+            nvidia_smi::collect_nvidia_smi_evidence,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run NvStrapsReBar");

@@ -76,6 +76,7 @@ pub(crate) struct ExactDeployment {
     pub store: DeploymentStore,
     pub profile: MachineProfile,
     pub plan: DeploymentPlan,
+    pub devices: Vec<crate::devices::GpuDevice>,
 }
 
 #[derive(Clone, Copy, Debug, Serialize)]
@@ -368,6 +369,7 @@ pub(crate) fn load_exact_deployment(
         store,
         profile,
         plan,
+        devices,
     })
 }
 

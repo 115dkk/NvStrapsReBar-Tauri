@@ -22,6 +22,7 @@ tauri-build = { version = "2", features = [] }
 nvstraps-core = { path = "../crates/nvstraps-core" }
 nvstraps-deploy = { path = "../crates/nvstraps-deploy" }
 nvstraps-ffs = { path = "../crates/nvstraps-ffs" }
+quick-xml = { version = "0.41.0", features = ["serialize"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2.11.5", features = [] }
