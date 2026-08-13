@@ -18,7 +18,7 @@ mod store;
 
 pub use store::{ArtifactKind, DeploymentStore, ProvisionedDeployment, StoreError, StoredArtifact};
 
-pub const PROFILE_SCHEMA_VERSION: u8 = 1;
+pub const PROFILE_SCHEMA_VERSION: u8 = 2;
 pub const PLAN_SCHEMA_VERSION: u8 = 1;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
@@ -170,6 +170,180 @@ pub enum BoardPath {
     LegacyAbove4g,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum LegacyPatchCatalogFile {
+    General,
+    HaswellAbove4g,
+    IvyBridgeUsb3,
+    HaswellUsb3,
+    BroadwellUsb3,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LegacyPatchCatalogPin {
+    pub catalog: LegacyPatchCatalogFile,
+    pub source_sha256: Sha256Digest,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LegacyPatchSelection {
+    pub catalog: LegacyPatchCatalogFile,
+    pub rule_id: String,
+    pub expected_matches: u16,
+    pub required_risks: Vec<LegacyPatchRisk>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum LegacyPatchRisk {
+    DsdtModification,
+    NvramWhitelist,
+    UsbControllerBlacklist,
+    ExperimentalX79,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LegacyRiskAcknowledgement {
+    pub risk: LegacyPatchRisk,
+    pub note: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LegacyPatchProfile {
+    pub upstream_commit: String,
+    pub catalogs: Vec<LegacyPatchCatalogPin>,
+    pub selections: Vec<LegacyPatchSelection>,
+    pub acknowledgements: Vec<LegacyRiskAcknowledgement>,
+}
+
+impl LegacyPatchProfile {
+    pub fn create(
+        upstream_commit: impl Into<String>,
+        catalogs: Vec<LegacyPatchCatalogPin>,
+        selections: Vec<LegacyPatchSelection>,
+        acknowledgements: Vec<LegacyRiskAcknowledgement>,
+    ) -> Result<Self, ProfileError> {
+        Self {
+            upstream_commit: upstream_commit.into(),
+            catalogs,
+            selections,
+            acknowledgements,
+        }
+        .normalized()
+    }
+
+    pub fn validate(&self) -> Result<(), ProfileError> {
+        if self.clone().normalized()? != *self {
+            return Err(ProfileError::LegacyPatchProfileNotCanonical);
+        }
+        Ok(())
+    }
+
+    fn normalized(mut self) -> Result<Self, ProfileError> {
+        self.upstream_commit = self.upstream_commit.trim().to_ascii_lowercase();
+        if self.upstream_commit.len() != 40
+            || !self
+                .upstream_commit
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit())
+        {
+            return Err(ProfileError::InvalidUpstreamCommit);
+        }
+        if self.catalogs.is_empty() || self.selections.is_empty() {
+            return Err(ProfileError::EmptyLegacyPatchBundle);
+        }
+        self.catalogs.sort_by_key(|pin| pin.catalog);
+        if self
+            .catalogs
+            .windows(2)
+            .any(|pair| pair[0].catalog == pair[1].catalog)
+        {
+            return Err(ProfileError::DuplicateLegacyPatchCatalog);
+        }
+
+        for selection in &mut self.selections {
+            selection.rule_id = selection.rule_id.trim().to_ascii_lowercase();
+            if selection.rule_id.len() != 64
+                || !selection
+                    .rule_id
+                    .bytes()
+                    .all(|byte| byte.is_ascii_hexdigit())
+            {
+                return Err(ProfileError::InvalidLegacyRuleId);
+            }
+            if selection.expected_matches == 0 {
+                return Err(ProfileError::InvalidLegacyExpectedMatches);
+            }
+            selection.required_risks.sort();
+            selection.required_risks.dedup();
+            if !self
+                .catalogs
+                .iter()
+                .any(|pin| pin.catalog == selection.catalog)
+            {
+                return Err(ProfileError::MissingLegacyPatchCatalog);
+            }
+        }
+        self.selections.sort_by(|left, right| {
+            (left.catalog, &left.rule_id).cmp(&(right.catalog, &right.rule_id))
+        });
+        if self
+            .selections
+            .windows(2)
+            .any(|pair| pair[0].catalog == pair[1].catalog && pair[0].rule_id == pair[1].rule_id)
+        {
+            return Err(ProfileError::DuplicateLegacyPatchSelection);
+        }
+        if self.catalogs.iter().any(|pin| {
+            !self
+                .selections
+                .iter()
+                .any(|selection| selection.catalog == pin.catalog)
+        }) {
+            return Err(ProfileError::UnusedLegacyPatchCatalog);
+        }
+
+        for acknowledgement in &mut self.acknowledgements {
+            acknowledgement.note = required_text(
+                "legacy patch risk acknowledgement",
+                acknowledgement.note.clone(),
+            )?;
+        }
+        self.acknowledgements.sort();
+        if self
+            .acknowledgements
+            .windows(2)
+            .any(|pair| pair[0].risk == pair[1].risk)
+        {
+            return Err(ProfileError::DuplicateLegacyRiskAcknowledgement);
+        }
+        for selection in &self.selections {
+            if selection.required_risks.iter().any(|risk| {
+                !self
+                    .acknowledgements
+                    .iter()
+                    .any(|acknowledgement| acknowledgement.risk == *risk)
+            }) {
+                return Err(ProfileError::LegacyRiskNotAcknowledged);
+            }
+        }
+        if self.acknowledgements.iter().any(|acknowledgement| {
+            !self
+                .selections
+                .iter()
+                .any(|selection| selection.required_risks.contains(&acknowledgement.risk))
+        }) {
+            return Err(ProfileError::UnusedLegacyRiskAcknowledgement);
+        }
+        Ok(self)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum RecoveryMethod {
@@ -195,6 +369,8 @@ pub struct MachineProfile {
     pub profile_id: String,
     pub display_name: String,
     pub board_path: BoardPath,
+    #[serde(default)]
+    pub legacy_patches: Option<LegacyPatchProfile>,
     pub identity: MachineIdentity,
     pub original_firmware: FirmwareFingerprint,
     pub recovery: RecoveryCapability,
@@ -205,8 +381,26 @@ impl MachineProfile {
         display_name: impl Into<String>,
         board_path: BoardPath,
         identity: MachineIdentity,
+        original_firmware: FirmwareFingerprint,
+        recovery: RecoveryCapability,
+    ) -> Result<Self, ProfileError> {
+        Self::create_with_legacy(
+            display_name,
+            board_path,
+            identity,
+            original_firmware,
+            recovery,
+            None,
+        )
+    }
+
+    pub fn create_with_legacy(
+        display_name: impl Into<String>,
+        board_path: BoardPath,
+        identity: MachineIdentity,
         mut original_firmware: FirmwareFingerprint,
         mut recovery: RecoveryCapability,
+        legacy_patches: Option<LegacyPatchProfile>,
     ) -> Result<Self, ProfileError> {
         let display_name = required_text("profile display name", display_name.into())?;
         let identity = identity.normalized()?;
@@ -219,13 +413,29 @@ impl MachineProfile {
             return Err(ProfileError::RecoveryNotEstablished);
         }
         recovery.note = required_text("recovery note", recovery.note)?;
+        match (board_path, &legacy_patches) {
+            (BoardPath::LegacyAbove4g, None) => {
+                return Err(ProfileError::LegacyPatchProfileRequired);
+            }
+            (BoardPath::NativeResizableBar, Some(_)) => {
+                return Err(ProfileError::LegacyPatchProfileForbidden);
+            }
+            (_, Some(legacy)) => legacy.validate()?,
+            _ => {}
+        }
 
-        let profile_id = profile_id(board_path, &identity, &original_firmware);
+        let profile_id = profile_id(
+            board_path,
+            &identity,
+            &original_firmware,
+            legacy_patches.as_ref(),
+        );
         let profile = Self {
             schema_version: PROFILE_SCHEMA_VERSION,
             profile_id,
             display_name,
             board_path,
+            legacy_patches,
             identity,
             original_firmware,
             recovery,
@@ -235,7 +445,7 @@ impl MachineProfile {
     }
 
     pub fn validate(&self) -> Result<(), ProfileError> {
-        if self.schema_version != PROFILE_SCHEMA_VERSION {
+        if !matches!(self.schema_version, 1 | PROFILE_SCHEMA_VERSION) {
             return Err(ProfileError::UnsupportedSchema(self.schema_version));
         }
         required_text("profile display name", self.display_name.clone())?;
@@ -254,7 +464,25 @@ impl MachineProfile {
             return Err(ProfileError::RecoveryNotEstablished);
         }
         required_text("recovery note", self.recovery.note.clone())?;
-        let expected = profile_id(self.board_path, &self.identity, &self.original_firmware);
+        match (self.board_path, &self.legacy_patches) {
+            (BoardPath::LegacyAbove4g, Some(legacy)) => legacy.validate()?,
+            (BoardPath::LegacyAbove4g, None) => {
+                return Err(ProfileError::LegacyPatchProfileRequired);
+            }
+            (BoardPath::NativeResizableBar, Some(_)) => {
+                return Err(ProfileError::LegacyPatchProfileForbidden);
+            }
+            (BoardPath::NativeResizableBar, None) => {}
+        }
+        if self.schema_version == 1 && self.legacy_patches.is_some() {
+            return Err(ProfileError::UnsupportedSchema(self.schema_version));
+        }
+        let expected = profile_id(
+            self.board_path,
+            &self.identity,
+            &self.original_firmware,
+            self.legacy_patches.as_ref(),
+        );
         if self.profile_id != expected {
             return Err(ProfileError::ProfileIdMismatch);
         }
@@ -736,6 +964,34 @@ pub enum ProfileError {
     IdentityNotCanonical,
     #[error("profile ID does not match its pinned contents")]
     ProfileIdMismatch,
+    #[error("legacy-board profiles require a pinned patch bundle")]
+    LegacyPatchProfileRequired,
+    #[error("native-ReBAR profiles cannot contain a legacy patch bundle")]
+    LegacyPatchProfileForbidden,
+    #[error("legacy patch upstream commit must contain exactly 40 hexadecimal characters")]
+    InvalidUpstreamCommit,
+    #[error("legacy patch bundles require at least one catalog and one selected rule")]
+    EmptyLegacyPatchBundle,
+    #[error("legacy patch catalogs must be unique")]
+    DuplicateLegacyPatchCatalog,
+    #[error("legacy patch rule IDs must contain exactly 64 hexadecimal characters")]
+    InvalidLegacyRuleId,
+    #[error("legacy patch expected match counts must be positive")]
+    InvalidLegacyExpectedMatches,
+    #[error("every selected legacy patch rule must have a pinned catalog")]
+    MissingLegacyPatchCatalog,
+    #[error("legacy patch rules cannot be selected more than once")]
+    DuplicateLegacyPatchSelection,
+    #[error("legacy patch catalog pins must be used by a selected rule")]
+    UnusedLegacyPatchCatalog,
+    #[error("legacy patch risks cannot be acknowledged more than once")]
+    DuplicateLegacyRiskAcknowledgement,
+    #[error("every selected legacy patch risk must be acknowledged")]
+    LegacyRiskNotAcknowledged,
+    #[error("legacy patch risk acknowledgements must correspond to a selected rule")]
+    UnusedLegacyRiskAcknowledgement,
+    #[error("legacy patch profile must be normalized, sorted, and deduplicated")]
+    LegacyPatchProfileNotCanonical,
 }
 
 #[derive(Debug, Error)]
@@ -842,6 +1098,7 @@ fn profile_id(
     board_path: BoardPath,
     identity: &MachineIdentity,
     firmware: &FirmwareFingerprint,
+    legacy_patches: Option<&LegacyPatchProfile>,
 ) -> String {
     let mut hasher = Sha256::new();
     hash_field(
@@ -877,8 +1134,45 @@ fn profile_id(
         hash_field(&mut hasher, &gpu.bar0_base.to_le_bytes());
         hash_field(&mut hasher, &gpu.bar0_top.to_le_bytes());
     }
+    if let Some(legacy) = legacy_patches {
+        hash_field(&mut hasher, legacy.upstream_commit.as_bytes());
+        for pin in &legacy.catalogs {
+            hash_field(&mut hasher, &[legacy_catalog_code(pin.catalog)]);
+            hash_field(&mut hasher, pin.source_sha256.as_str().as_bytes());
+        }
+        for selection in &legacy.selections {
+            hash_field(&mut hasher, &[legacy_catalog_code(selection.catalog)]);
+            hash_field(&mut hasher, selection.rule_id.as_bytes());
+            hash_field(&mut hasher, &selection.expected_matches.to_le_bytes());
+            for risk in &selection.required_risks {
+                hash_field(&mut hasher, &[legacy_risk_code(*risk)]);
+            }
+        }
+        for acknowledgement in &legacy.acknowledgements {
+            hash_field(&mut hasher, &[legacy_risk_code(acknowledgement.risk)]);
+        }
+    }
     let digest = hasher.finalize();
     format!("nvstraps-{}", hex(&digest[..12]))
+}
+
+const fn legacy_catalog_code(catalog: LegacyPatchCatalogFile) -> u8 {
+    match catalog {
+        LegacyPatchCatalogFile::General => 1,
+        LegacyPatchCatalogFile::HaswellAbove4g => 2,
+        LegacyPatchCatalogFile::IvyBridgeUsb3 => 3,
+        LegacyPatchCatalogFile::HaswellUsb3 => 4,
+        LegacyPatchCatalogFile::BroadwellUsb3 => 5,
+    }
+}
+
+const fn legacy_risk_code(risk: LegacyPatchRisk) -> u8 {
+    match risk {
+        LegacyPatchRisk::DsdtModification => 1,
+        LegacyPatchRisk::NvramWhitelist => 2,
+        LegacyPatchRisk::UsbControllerBlacklist => 3,
+        LegacyPatchRisk::ExperimentalX79 => 4,
+    }
 }
 
 fn hash_field(hasher: &mut Sha256, value: &[u8]) {
@@ -940,8 +1234,27 @@ mod tests {
         }
     }
 
+    fn legacy_patch_profile() -> LegacyPatchProfile {
+        LegacyPatchProfile::create(
+            "9c80fdb2cd3db94bdd19c58bd00d5ecf822f6430",
+            vec![LegacyPatchCatalogPin {
+                catalog: LegacyPatchCatalogFile::General,
+                source_sha256: Sha256Digest::from_bytes(b"general catalog"),
+            }],
+            vec![LegacyPatchSelection {
+                catalog: LegacyPatchCatalogFile::General,
+                rule_id: "ab".repeat(32),
+                expected_matches: 1,
+                required_risks: vec![],
+            }],
+            vec![],
+        )
+        .unwrap()
+    }
+
     fn profile(path: BoardPath) -> MachineProfile {
-        MachineProfile::create(
+        let legacy = (path == BoardPath::LegacyAbove4g).then(legacy_patch_profile);
+        MachineProfile::create_with_legacy(
             "Z690 test machine",
             path,
             identity(vec![gpu(0x1e81, 1)]),
@@ -951,6 +1264,7 @@ mod tests {
                 tested_or_documented: true,
                 note: "Rear-panel Flash BIOS button with a known-good USB drive".into(),
             },
+            legacy,
         )
         .unwrap()
     }
@@ -1012,6 +1326,61 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(error, ProfileError::RecoveryNotEstablished));
+    }
+
+    #[test]
+    fn legacy_patch_bundle_is_required_and_part_of_machine_identity() {
+        let recovery = RecoveryCapability {
+            method: RecoveryMethod::ExternalSpiProgrammer,
+            tested_or_documented: true,
+            note: "verified SPI restore".into(),
+        };
+        let missing = MachineProfile::create(
+            "legacy machine",
+            BoardPath::LegacyAbove4g,
+            identity(vec![gpu(0x1e81, 1)]),
+            firmware(),
+            recovery.clone(),
+        )
+        .unwrap_err();
+        assert!(matches!(missing, ProfileError::LegacyPatchProfileRequired));
+
+        let forbidden = MachineProfile::create_with_legacy(
+            "modern machine",
+            BoardPath::NativeResizableBar,
+            identity(vec![gpu(0x1e81, 1)]),
+            firmware(),
+            recovery.clone(),
+            Some(legacy_patch_profile()),
+        )
+        .unwrap_err();
+        assert!(matches!(
+            forbidden,
+            ProfileError::LegacyPatchProfileForbidden
+        ));
+
+        let first = profile(BoardPath::LegacyAbove4g);
+        let mut changed_bundle = legacy_patch_profile();
+        changed_bundle.selections[0].expected_matches = 2;
+        let second = MachineProfile::create_with_legacy(
+            "legacy machine",
+            BoardPath::LegacyAbove4g,
+            identity(vec![gpu(0x1e81, 1)]),
+            firmware(),
+            recovery,
+            Some(changed_bundle),
+        )
+        .unwrap();
+        assert_ne!(first.profile_id, second.profile_id);
+    }
+
+    #[test]
+    fn native_schema_one_profiles_remain_loadable() {
+        let mut legacy_schema = profile(BoardPath::NativeResizableBar);
+        legacy_schema.schema_version = 1;
+
+        legacy_schema.validate().unwrap();
+        DeploymentPlan::for_profile(&legacy_schema).unwrap();
     }
 
     #[test]

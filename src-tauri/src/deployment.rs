@@ -5,8 +5,8 @@ use std::{
 
 use nvstraps_deploy::{
     ArtifactKind, BoardPath, DeploymentPlan, DeploymentStore, EvidenceKind, FirmwareFingerprint,
-    MachineIdentity, MachineProfile, ProfileMatch, RecoveryCapability, StepEvidence, StepId,
-    StepState, StoredArtifact,
+    LegacyPatchProfile, MachineIdentity, MachineProfile, ProfileMatch, RecoveryCapability,
+    StepEvidence, StepId, StepState, StoredArtifact,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, path::BaseDirectory};
@@ -24,6 +24,7 @@ pub struct CreateProfileRequest {
     pub board_path: BoardPath,
     pub firmware_path: String,
     pub recovery: RecoveryCapability,
+    pub legacy_patches: Option<LegacyPatchProfile>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -363,12 +364,13 @@ fn build_profile(
     identity: MachineIdentity,
     firmware: FirmwareFingerprint,
 ) -> BackendResult<MachineProfile> {
-    MachineProfile::create(
+    MachineProfile::create_with_legacy(
         request.display_name,
         request.board_path,
         identity,
         firmware,
         request.recovery,
+        request.legacy_patches,
     )
     .map_err(BackendError::from)
 }
@@ -416,7 +418,10 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use nvstraps_deploy::{GpuFingerprint, PciLocation, RecoveryMethod, Sha256Digest};
+    use nvstraps_deploy::{
+        GpuFingerprint, LegacyPatchCatalogFile, LegacyPatchCatalogPin, LegacyPatchSelection,
+        PciLocation, RecoveryMethod, Sha256Digest,
+    };
 
     use super::*;
 
@@ -477,7 +482,24 @@ mod tests {
     }
 
     fn profile(path: BoardPath, firmware: FirmwareFingerprint) -> MachineProfile {
-        MachineProfile::create(
+        let legacy_patches = (path == BoardPath::LegacyAbove4g).then(|| {
+            LegacyPatchProfile::create(
+                "9c80fdb2cd3db94bdd19c58bd00d5ecf822f6430",
+                vec![LegacyPatchCatalogPin {
+                    catalog: LegacyPatchCatalogFile::General,
+                    source_sha256: Sha256Digest::from_bytes(b"catalog"),
+                }],
+                vec![LegacyPatchSelection {
+                    catalog: LegacyPatchCatalogFile::General,
+                    rule_id: "ab".repeat(32),
+                    expected_matches: 1,
+                    required_risks: vec![],
+                }],
+                vec![],
+            )
+            .unwrap()
+        });
+        MachineProfile::create_with_legacy(
             "test machine",
             path,
             identity(),
@@ -487,6 +509,7 @@ mod tests {
                 tested_or_documented: true,
                 note: "documented recovery".into(),
             },
+            legacy_patches,
         )
         .unwrap()
     }
@@ -551,6 +574,7 @@ mod tests {
                 tested_or_documented: false,
                 note: String::new(),
             },
+            legacy_patches: None,
         };
         let firmware = FirmwareFingerprint {
             file_name: "firmware.bin".into(),
