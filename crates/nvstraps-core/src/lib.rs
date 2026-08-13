@@ -6,6 +6,7 @@ extern crate alloc;
 pub mod config;
 pub mod pci;
 pub mod registry;
+pub mod setup_crc;
 pub mod status;
 pub mod straps;
 
