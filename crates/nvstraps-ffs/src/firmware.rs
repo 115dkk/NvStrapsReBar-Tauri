@@ -3,9 +3,10 @@ use std::{collections::HashSet, fmt};
 use oxiarc_lzma::{LzmaLevel, compress as lzma_compress, decompress_bytes as lzma_decompress};
 
 use super::{
-    FFS_ATTRIBUTE_CHECKSUM, FFS_FILE_GUID_BYTES, FFS_FILE_STATE_VALID, FFS_HEADER_SIZE,
-    LegacyPatchCatalog, LegacyPatchChange, LegacyPatchError, LegacyPatchRule, MAX_STANDARD_SIZE,
-    PackError, PatchRuleId, checksum8, inspect_ffs, write_u24,
+    EfiCompression, FFS_ATTRIBUTE_CHECKSUM, FFS_FILE_GUID_BYTES, FFS_FILE_STATE_VALID,
+    FFS_HEADER_SIZE, LegacyPatchCatalog, LegacyPatchChange, LegacyPatchError, LegacyPatchRule,
+    MAX_STANDARD_SIZE, PackError, PatchRuleId, checksum8, efi_compress, efi_decompress,
+    inspect_ffs, write_u24,
 };
 
 const FV_SIGNATURE: &[u8; 4] = b"_FVH";
@@ -125,6 +126,9 @@ pub enum LegacyFirmwarePatchPath {
     },
     LzmaPayload,
     UncompressedPayload,
+    EfiCompressedPayload {
+        compression: EfiCompression,
+    },
 }
 
 #[derive(Debug)]
@@ -436,43 +440,61 @@ fn patch_section_content(
             }
             let declared_size = read_u32(&output, 0)? as usize;
             let compression_type = output[4];
-            if compression_type != 0 {
-                return Err(LegacyFirmwarePatchError::UnsupportedTargetFile {
-                    rule_id: rule.id.clone(),
-                    file_offset: current_file_offset(path),
-                    reason: "EFI/Tiano compression requires the Rust compressor",
-                });
-            }
-            let payload = &output[5..];
-            if declared_size != payload.len() {
-                return Err(InjectionError::InvalidFirmware(
-                    "uncompressed section size does not match its payload",
-                )
-                .into());
-            }
-            let mut payload_path = path.to_vec();
-            payload_path.push(LegacyFirmwarePatchPath::UncompressedPayload);
-            let (patched, mut nested_changes) = patch_section_stream(
-                payload,
-                rule,
-                target_file,
-                volume_container,
-                &payload_path,
-                depth + 1,
-            )?;
-            if !nested_changes.is_empty() {
-                output.truncate(5);
-                output[..4].copy_from_slice(
-                    &u32::try_from(patched.len())
-                        .map_err(|_| {
-                            InjectionError::InvalidFirmware(
-                                "uncompressed section size exceeds 32 bits",
-                            )
-                        })?
-                        .to_le_bytes(),
-                );
-                output.extend_from_slice(&patched);
-                changes.append(&mut nested_changes);
+            match compression_type {
+                0 => {
+                    let payload = &output[5..];
+                    if declared_size != payload.len() {
+                        return Err(InjectionError::InvalidFirmware(
+                            "uncompressed section size does not match its payload",
+                        )
+                        .into());
+                    }
+                    let mut payload_path = path.to_vec();
+                    payload_path.push(LegacyFirmwarePatchPath::UncompressedPayload);
+                    let (patched, mut nested_changes) = patch_decoded_payload(
+                        payload,
+                        rule,
+                        target_file,
+                        volume_container,
+                        &payload_path,
+                        depth + 1,
+                    )?;
+                    if !nested_changes.is_empty() {
+                        output.truncate(5);
+                        output[..4].copy_from_slice(
+                            &u32::try_from(patched.len())
+                                .map_err(|_| {
+                                    InjectionError::InvalidFirmware(
+                                        "uncompressed section size exceeds 32 bits",
+                                    )
+                                })?
+                                .to_le_bytes(),
+                        );
+                        output.extend_from_slice(&patched);
+                        changes.append(&mut nested_changes);
+                    }
+                }
+                1 => {
+                    let (patched, mut nested_changes) = patch_efi_compressed_payload(
+                        &output,
+                        declared_size,
+                        rule,
+                        target_file,
+                        volume_container,
+                        path,
+                        depth,
+                    )?;
+                    if !nested_changes.is_empty() {
+                        output = patched;
+                        changes.append(&mut nested_changes);
+                    }
+                }
+                _ => {
+                    return Err(InjectionError::InvalidFirmware(
+                        "compression section uses an unknown compression type",
+                    )
+                    .into());
+                }
             }
         }
         SECTION_TYPE_GUID_DEFINED if target_file || volume_container => {
@@ -552,18 +574,14 @@ fn patch_guided_section_payload(
         lzma_decompress(lzma).map_err(|error| InjectionError::Compression(error.to_string()))?;
     let mut payload_path = path.to_vec();
     payload_path.push(LegacyFirmwarePatchPath::LzmaPayload);
-    let (patched_payload, mut changes) = if !top_level_firmware_volumes(&decompressed)?.is_empty() {
-        patch_rule_in_firmware(&decompressed, rule, &payload_path, depth + 1)?
-    } else {
-        patch_section_stream(
-            &decompressed,
-            rule,
-            target_file,
-            volume_container,
-            &payload_path,
-            depth + 1,
-        )?
-    };
+    let (patched_payload, mut changes) = patch_decoded_payload(
+        &decompressed,
+        rule,
+        target_file,
+        volume_container,
+        &payload_path,
+        depth + 1,
+    )?;
     if changes.is_empty() {
         return Ok((content.to_vec(), changes));
     }
@@ -581,6 +599,130 @@ fn patch_guided_section_payload(
     let mut output = content[..payload_offset].to_vec();
     output.extend_from_slice(&recompressed);
     Ok((output, std::mem::take(&mut changes)))
+}
+
+fn patch_efi_compressed_payload(
+    content: &[u8],
+    declared_size: usize,
+    rule: &LegacyPatchRule,
+    target_file: bool,
+    volume_container: bool,
+    path: &[LegacyFirmwarePatchPath],
+    depth: usize,
+) -> Result<(Vec<u8>, Vec<LegacyFirmwarePatchChange>), LegacyFirmwarePatchError> {
+    struct Candidate {
+        compression: EfiCompression,
+        decoded: Vec<u8>,
+        patched: Vec<u8>,
+        changes: Vec<LegacyFirmwarePatchChange>,
+        exactly_reencodes_original: bool,
+    }
+
+    let compressed = &content[5..];
+    let mut candidates = Vec::new();
+    let mut first_structure_error = None;
+    for compression in [EfiCompression::EfiStandard, EfiCompression::Tiano] {
+        let Ok(decoded) = efi_decompress(compressed, compression) else {
+            continue;
+        };
+        if decoded.len() != declared_size {
+            continue;
+        }
+        let mut payload_path = path.to_vec();
+        payload_path.push(LegacyFirmwarePatchPath::EfiCompressedPayload { compression });
+        let (patched, changes) = match patch_decoded_payload(
+            &decoded,
+            rule,
+            target_file,
+            volume_container,
+            &payload_path,
+            depth + 1,
+        ) {
+            Ok(result) => result,
+            Err(error) => {
+                first_structure_error.get_or_insert(error);
+                continue;
+            }
+        };
+        let exactly_reencodes_original =
+            efi_compress(&decoded, compression).is_ok_and(|encoded| encoded == compressed);
+        candidates.push(Candidate {
+            compression,
+            decoded,
+            patched,
+            changes,
+            exactly_reencodes_original,
+        });
+    }
+
+    if candidates.is_empty() {
+        if let Some(error) = first_structure_error {
+            return Err(error);
+        }
+        return Err(LegacyFirmwarePatchError::UnsupportedTargetFile {
+            rule_id: rule.id.clone(),
+            file_offset: current_file_offset(path),
+            reason: "neither EFI nor Tiano decoding produced a valid section tree",
+        });
+    }
+    let exact_count = candidates
+        .iter()
+        .filter(|candidate| candidate.exactly_reencodes_original)
+        .count();
+    let selected = if candidates.len() == 1 {
+        candidates.pop().expect("one candidate")
+    } else if exact_count == 1 {
+        let index = candidates
+            .iter()
+            .position(|candidate| candidate.exactly_reencodes_original)
+            .expect("exact candidate was counted");
+        candidates.swap_remove(index)
+    } else {
+        return Err(LegacyFirmwarePatchError::UnsupportedTargetFile {
+            rule_id: rule.id.clone(),
+            file_offset: current_file_offset(path),
+            reason: "EFI and Tiano compression variants are ambiguous",
+        });
+    };
+
+    if selected.changes.is_empty() {
+        return Ok((content.to_vec(), selected.changes));
+    }
+    let recompressed = efi_compress(&selected.patched, selected.compression)
+        .map_err(|error| InjectionError::Compression(error.to_string()))?;
+    let round_trip = efi_decompress(&recompressed, selected.compression)
+        .map_err(|error| InjectionError::Compression(error.to_string()))?;
+    if round_trip != selected.patched || selected.decoded.len() != declared_size {
+        return Err(InjectionError::InvalidFirmware(
+            "recompressed EFI/Tiano section failed its round trip",
+        )
+        .into());
+    }
+    let mut output = content[..5].to_vec();
+    output[..4].copy_from_slice(
+        &u32::try_from(selected.patched.len())
+            .map_err(|_| {
+                InjectionError::InvalidFirmware("compressed section size exceeds 32 bits")
+            })?
+            .to_le_bytes(),
+    );
+    output.extend_from_slice(&recompressed);
+    Ok((output, selected.changes))
+}
+
+fn patch_decoded_payload(
+    payload: &[u8],
+    rule: &LegacyPatchRule,
+    target_file: bool,
+    volume_container: bool,
+    path: &[LegacyFirmwarePatchPath],
+    depth: usize,
+) -> Result<(Vec<u8>, Vec<LegacyFirmwarePatchChange>), LegacyFirmwarePatchError> {
+    if !top_level_firmware_volumes(payload)?.is_empty() {
+        patch_rule_in_firmware(payload, rule, path, depth)
+    } else {
+        patch_section_stream(payload, rule, target_file, volume_container, path, depth)
+    }
 }
 
 fn top_level_firmware_volumes(firmware: &[u8]) -> Result<Vec<FirmwareVolume>, InjectionError> {
@@ -1664,6 +1806,57 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn patches_and_round_trips_efi_and_tiano_compression_sections() {
+        let catalog = synthetic_legacy_catalog();
+        let rule = &catalog.rules[0];
+        let selected = LegacyPatchSelection {
+            rule_id: rule.id.clone(),
+            expected_matches: 1,
+        };
+        let target_stream = synthetic_section(0x10, &[0xaa, 0xbb]);
+
+        for compression in [EfiCompression::EfiStandard, EfiCompression::Tiano] {
+            let target_file =
+                synthetic_efi_compressed_file(rule.file_guid, 0x06, &target_stream, compression);
+            let firmware = synthetic_firmware_with_file(&target_file);
+            let (patched, report) =
+                patch_legacy_firmware(&firmware, &catalog, std::slice::from_ref(&selected))
+                    .unwrap();
+            assert!(
+                report.applications[0].changes[0]
+                    .path
+                    .contains(&LegacyFirmwarePatchPath::EfiCompressedPayload { compression })
+            );
+            assert!(matches!(
+                patch_legacy_firmware(&patched, &catalog, std::slice::from_ref(&selected)),
+                Err(LegacyFirmwarePatchError::InvalidRule(
+                    LegacyPatchError::MatchCount { actual: 0, .. }
+                ))
+            ));
+        }
+
+        let inner = synthetic_legacy_firmware(rule, 0x10, &[0xaa, 0xbb]);
+        let nested_stream = synthetic_section(SECTION_TYPE_FIRMWARE_VOLUME_IMAGE, &inner);
+        let volume_file = synthetic_efi_compressed_file(
+            [0x44; 16],
+            FFS_FILE_TYPE_FIRMWARE_VOLUME_IMAGE,
+            &nested_stream,
+            EfiCompression::Tiano,
+        );
+        let firmware = synthetic_firmware_with_file(&volume_file);
+        let (_, report) =
+            patch_legacy_firmware(&firmware, &catalog, std::slice::from_ref(&selected)).unwrap();
+        assert_eq!(
+            report.applications[0].changes[0]
+                .path
+                .iter()
+                .filter(|part| matches!(part, LegacyFirmwarePatchPath::FirmwareVolume { .. }))
+                .count(),
+            2
+        );
+    }
+
     fn synthetic_firmware(with_dxe_core: bool, with_pad: bool) -> Vec<u8> {
         let length = 0x2_0000_usize;
         let mut firmware = vec![0xff; length];
@@ -1787,6 +1980,29 @@ mod tests {
         header[..16].copy_from_slice(&file_guid);
         header[18] = file_type;
         let mut file = build_generic_file(&header, &section).unwrap();
+        file[23] = !FFS_FILE_STATE_VALID;
+        file
+    }
+
+    fn synthetic_efi_compressed_file(
+        file_guid: [u8; 16],
+        file_type: u8,
+        decompressed: &[u8],
+        compression: EfiCompression,
+    ) -> Vec<u8> {
+        let compressed = efi_compress(decompressed, compression).unwrap();
+        let mut content = Vec::with_capacity(5 + compressed.len());
+        content.extend_from_slice(&(decompressed.len() as u32).to_le_bytes());
+        content.push(1);
+        content.extend_from_slice(&compressed);
+        let mut sections = synthetic_section(SECTION_TYPE_COMPRESSION, &content);
+        sections.resize(align_up(sections.len(), 4).unwrap(), 0);
+        sections.extend(synthetic_section(0x15, b"sentinel"));
+
+        let mut header = vec![0_u8; FFS_HEADER_SIZE];
+        header[..16].copy_from_slice(&file_guid);
+        header[18] = file_type;
+        let mut file = build_generic_file(&header, &sections).unwrap();
         file[23] = !FFS_FILE_STATE_VALID;
         file
     }
