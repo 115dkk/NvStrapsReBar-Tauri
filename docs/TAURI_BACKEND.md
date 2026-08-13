@@ -16,6 +16,7 @@ commands with `@tauri-apps/api/core`'s `invoke` function.
 | `list_machine_profiles` | none | Lists all validated local deployment profiles |
 | `get_deployment_plan` | `{ profileId }` | Loads the newest validated revision from an append-only plan history |
 | `compare_machine_profile` | `{ request }` | Re-enumerates the machine and optionally re-hashes a source image before reporting pinned mismatches |
+| `prepare_firmware_artifact` | `{ profileId }` | Revalidates the pinned machine, verifies the bundled Rust FFS, and creates a new immutable patched image without flashing it |
 
 `ConfigDraft` uses camel-case JSON fields:
 

@@ -1834,6 +1834,7 @@ version = "0.1.0"
 dependencies = [
  "nvstraps-core",
  "nvstraps-deploy",
+ "nvstraps-ffs",
  "serde",
  "serde_json",
  "tauri",
