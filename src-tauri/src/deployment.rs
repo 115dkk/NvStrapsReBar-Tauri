@@ -322,12 +322,14 @@ pub fn compare_machine_profile(
     app: AppHandle,
     request: CompareProfileRequest,
 ) -> CommandResult<ProfileComparison> {
-    let profile = store(&app)
-        .and_then(|store| {
-            store
-                .load_profile(&request.profile_id)
-                .map_err(BackendError::from)
-        })
+    let store = store(&app).map_err(ApiError::from)?;
+    let profile = store
+        .load_profile(&request.profile_id)
+        .map_err(BackendError::from)
+        .map_err(ApiError::from)?;
+    let plan = store
+        .load_plan(&profile)
+        .map_err(BackendError::from)
         .map_err(ApiError::from)?;
     let devices = enumerate_gpus().map_err(ApiError::from)?;
     let current_identity = collect_machine_identity(&devices).map_err(ApiError::from)?;
@@ -337,7 +339,14 @@ pub fn compare_machine_profile(
         .map(inspect_firmware_path)
         .transpose()
         .map_err(ApiError::from)?;
-    let result = profile.compare(&current_identity, firmware.as_ref());
+    let mut result = deployment_identity_comparison(&profile, &plan, &current_identity)
+        .map_err(ApiError::from)?;
+    if firmware.as_ref().is_some_and(|firmware| {
+        profile.original_firmware.byte_length != firmware.byte_length
+            || profile.original_firmware.sha256 != firmware.sha256
+    }) {
+        result.differences.push(ProfileDifference::FirmwareImage);
+    }
     Ok(ProfileComparison {
         profile,
         current_identity,

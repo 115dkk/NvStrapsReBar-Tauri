@@ -65,7 +65,7 @@ them; a reboot and driver-status check remain separate steps.
 | `create_machine_profile` | `{ request }` | Immutable profile, preserved/re-hashed original, and initial append-only plan |
 | `list_machine_profiles` | none | All validated profiles in the application data store |
 | `get_deployment_plan` | `{ profileId }` | Newest validated revision from the append-only plan history |
-| `compare_machine_profile` | `{ request: { profileId, firmwarePath? } }` | Fresh identity and optional source-image comparison against the pinned profile |
+| `compare_machine_profile` | `{ request: { profileId, firmwarePath? } }` | Fresh identity comparison against the newest pinned boot observation (or initial profile), plus optional preserved source-image comparison |
 | `prepare_firmware_artifact` | `{ profileId }` | Verified Rust FFS, optional legacy-patch receipt, injected output, and advanced plan revision; never a flash |
 | `export_deployment_package` | `{ request: { profileId, destinationRoot } }` | No-overwrite package receipt covering artifact, original, manifests, instructions, and checksums |
 
