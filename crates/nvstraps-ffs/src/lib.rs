@@ -3,7 +3,11 @@ use std::fmt;
 mod firmware;
 mod legacy_patch;
 
-pub use firmware::{FirmwareInjection, InjectionError, inject_ffs};
+pub use firmware::{
+    FirmwareInjection, InjectionError, LegacyFirmwarePatch, LegacyFirmwarePatchApplication,
+    LegacyFirmwarePatchChange, LegacyFirmwarePatchError, LegacyPatchSelection, inject_ffs,
+    patch_legacy_firmware,
+};
 pub use legacy_patch::{
     LegacyPatchApplication, LegacyPatchCatalog, LegacyPatchChange, LegacyPatchError,
     LegacyPatchRule, PatchRuleId,

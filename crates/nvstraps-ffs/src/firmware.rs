@@ -1,10 +1,11 @@
-use std::fmt;
+use std::{collections::HashSet, fmt};
 
 use oxiarc_lzma::{LzmaLevel, compress as lzma_compress, decompress_bytes as lzma_decompress};
 
 use super::{
     FFS_ATTRIBUTE_CHECKSUM, FFS_FILE_GUID_BYTES, FFS_FILE_STATE_VALID, FFS_HEADER_SIZE,
-    MAX_STANDARD_SIZE, PackError, checksum8, inspect_ffs, write_u24,
+    LegacyPatchCatalog, LegacyPatchChange, LegacyPatchError, LegacyPatchRule, MAX_STANDARD_SIZE,
+    PackError, PatchRuleId, checksum8, inspect_ffs, write_u24,
 };
 
 const FV_SIGNATURE: &[u8; 4] = b"_FVH";
@@ -25,7 +26,9 @@ const FFS_LARGE_FILE_ATTRIBUTE: u8 = 0x01;
 const FFS_FILE_TYPE_DXE_CORE: u8 = 0x05;
 const FFS_FILE_TYPE_FIRMWARE_VOLUME_IMAGE: u8 = 0x0b;
 const FFS_FILE_TYPE_PAD: u8 = 0xf0;
+const SECTION_TYPE_COMPRESSION: u8 = 0x01;
 const SECTION_TYPE_GUID_DEFINED: u8 = 0x02;
+const SECTION_TYPE_FIRMWARE_VOLUME_IMAGE: u8 = 0x17;
 const LZMA_GUID_BYTES: [u8; 16] = [
     0x98, 0x58, 0x4e, 0xee, 0x14, 0x39, 0x59, 0x42, 0x9d, 0x6e, 0xdc, 0x7b, 0xd7, 0x94, 0x03, 0xcf,
 ];
@@ -81,6 +84,94 @@ impl From<PackError> for InjectionError {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LegacyPatchSelection {
+    pub rule_id: PatchRuleId,
+    pub expected_matches: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LegacyFirmwarePatch {
+    pub catalog_sha256: String,
+    pub applications: Vec<LegacyFirmwarePatchApplication>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LegacyFirmwarePatchApplication {
+    pub rule_id: PatchRuleId,
+    pub expected_matches: usize,
+    pub changes: Vec<LegacyFirmwarePatchChange>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LegacyFirmwarePatchChange {
+    pub firmware_volume_offset: usize,
+    pub file_offset: usize,
+    pub section_offset: usize,
+    pub firmware_offset: usize,
+    pub change: LegacyPatchChange,
+}
+
+#[derive(Debug)]
+pub enum LegacyFirmwarePatchError {
+    InvalidFirmware(InjectionError),
+    InvalidRule(LegacyPatchError),
+    EmptySelection,
+    DuplicateSelection(PatchRuleId),
+    UnknownRule(PatchRuleId),
+    UnsupportedTargetFile {
+        rule_id: PatchRuleId,
+        file_offset: usize,
+        reason: &'static str,
+    },
+}
+
+impl fmt::Display for LegacyFirmwarePatchError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidFirmware(error) => error.fmt(formatter),
+            Self::InvalidRule(error) => error.fmt(formatter),
+            Self::EmptySelection => {
+                formatter.write_str("at least one legacy patch must be selected")
+            }
+            Self::DuplicateSelection(rule_id) => {
+                write!(
+                    formatter,
+                    "legacy patch rule {rule_id} was selected more than once"
+                )
+            }
+            Self::UnknownRule(rule_id) => {
+                write!(
+                    formatter,
+                    "legacy patch rule {rule_id} is not in the pinned catalog"
+                )
+            }
+            Self::UnsupportedTargetFile {
+                rule_id,
+                file_offset,
+                reason,
+            } => write!(
+                formatter,
+                "legacy patch rule {rule_id} targets unsupported FFS file {file_offset:#x}: {reason}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for LegacyFirmwarePatchError {}
+
+impl From<InjectionError> for LegacyFirmwarePatchError {
+    fn from(error: InjectionError) -> Self {
+        Self::InvalidFirmware(error)
+    }
+}
+
+impl From<LegacyPatchError> for LegacyFirmwarePatchError {
+    fn from(error: LegacyPatchError) -> Self {
+        Self::InvalidRule(error)
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 struct FirmwareVolume {
     start: usize,
@@ -103,6 +194,157 @@ pub fn inject_ffs(
     driver_ffs: &[u8],
 ) -> Result<(Vec<u8>, FirmwareInjection), InjectionError> {
     inject_ffs_at_depth(firmware, driver_ffs, 0)
+}
+
+pub fn patch_legacy_firmware(
+    firmware: &[u8],
+    catalog: &LegacyPatchCatalog,
+    selections: &[LegacyPatchSelection],
+) -> Result<(Vec<u8>, LegacyFirmwarePatch), LegacyFirmwarePatchError> {
+    if selections.is_empty() {
+        return Err(LegacyFirmwarePatchError::EmptySelection);
+    }
+    let mut selected = HashSet::new();
+    let mut output = firmware.to_vec();
+    let mut applications = Vec::with_capacity(selections.len());
+
+    for selection in selections {
+        if selection.expected_matches == 0 {
+            return Err(LegacyPatchError::ExpectedMatchesMustBePositive {
+                rule_id: selection.rule_id.clone(),
+            }
+            .into());
+        }
+        if !selected.insert(selection.rule_id.clone()) {
+            return Err(LegacyFirmwarePatchError::DuplicateSelection(
+                selection.rule_id.clone(),
+            ));
+        }
+        let rule = catalog
+            .rule(&selection.rule_id)
+            .ok_or_else(|| LegacyFirmwarePatchError::UnknownRule(selection.rule_id.clone()))?;
+        let (patched, changes) = patch_direct_sections(&output, rule)?;
+        if changes.len() != selection.expected_matches {
+            return Err(LegacyPatchError::MatchCount {
+                rule_id: rule.id.clone(),
+                expected: selection.expected_matches,
+                actual: changes.len(),
+            }
+            .into());
+        }
+        output = patched;
+        applications.push(LegacyFirmwarePatchApplication {
+            rule_id: rule.id.clone(),
+            expected_matches: selection.expected_matches,
+            changes,
+        });
+    }
+
+    Ok((
+        output,
+        LegacyFirmwarePatch {
+            catalog_sha256: catalog.source_sha256.clone(),
+            applications,
+        },
+    ))
+}
+
+fn patch_direct_sections(
+    firmware: &[u8],
+    rule: &LegacyPatchRule,
+) -> Result<(Vec<u8>, Vec<LegacyFirmwarePatchChange>), LegacyFirmwarePatchError> {
+    let volumes = find_firmware_volumes(firmware)?;
+    let top_level: Vec<_> = volumes
+        .iter()
+        .copied()
+        .filter(|candidate| {
+            !volumes.iter().any(|container| {
+                container.start < candidate.start && candidate.end <= container.end
+            })
+        })
+        .collect();
+    let mut output = firmware.to_vec();
+    let mut changes = Vec::new();
+
+    for volume in top_level {
+        for record in firmware_files(&output, volume)? {
+            if !record.is_live || output[record.offset..record.offset + 16] != rule.file_guid {
+                continue;
+            }
+            if record.header_size != FFS_HEADER_SIZE {
+                return Err(LegacyFirmwarePatchError::UnsupportedTargetFile {
+                    rule_id: rule.id.clone(),
+                    file_offset: record.offset,
+                    reason: "large-file headers are not yet supported",
+                });
+            }
+            let mut normalized = output[record.offset..record.offset + record.size].to_vec();
+            if volume.erase_polarity {
+                normalized[23] = !normalized[23];
+            }
+            verify_generic_file(&normalized)?;
+            let sections = parse_firmware_sections(&normalized, record.header_size)?;
+            if sections.iter().any(|section| {
+                matches!(
+                    section.section_type,
+                    SECTION_TYPE_COMPRESSION
+                        | SECTION_TYPE_GUID_DEFINED
+                        | SECTION_TYPE_FIRMWARE_VOLUME_IMAGE
+                )
+            }) {
+                return Err(LegacyFirmwarePatchError::UnsupportedTargetFile {
+                    rule_id: rule.id.clone(),
+                    file_offset: record.offset,
+                    reason: "an encapsulated section must be decoded before exact matching",
+                });
+            }
+
+            let mut file_changes = Vec::new();
+            for section in sections
+                .iter()
+                .filter(|section| section.section_type == rule.section_type)
+            {
+                let section_body = &normalized[section.content_start..section.end];
+                let matches = rule.matching_offsets(section_body);
+                if matches.is_empty() {
+                    continue;
+                }
+                let (patched_body, application) = rule.apply_exact(section_body, matches.len())?;
+                normalized[section.content_start..section.end].copy_from_slice(&patched_body);
+                for change in application.changes {
+                    file_changes.push(LegacyFirmwarePatchChange {
+                        firmware_volume_offset: volume.start,
+                        file_offset: record.offset,
+                        section_offset: record.offset + section.offset,
+                        firmware_offset: record.offset + section.content_start + change.offset,
+                        change,
+                    });
+                }
+            }
+            if file_changes.is_empty() {
+                continue;
+            }
+
+            let rebuilt = build_generic_file(
+                &normalized[..record.header_size],
+                &normalized[record.header_size..],
+            )?;
+            if rebuilt.len() != record.size {
+                return Err(LegacyFirmwarePatchError::UnsupportedTargetFile {
+                    rule_id: rule.id.clone(),
+                    file_offset: record.offset,
+                    reason: "same-length pattern patch unexpectedly changed the FFS file size",
+                });
+            }
+            let mut stored = rebuilt;
+            if volume.erase_polarity {
+                stored[23] = !stored[23];
+            }
+            output[record.offset..record.offset + record.size].copy_from_slice(&stored);
+            changes.extend(file_changes);
+        }
+    }
+    Ok((output, changes))
 }
 
 fn inject_ffs_at_depth(
@@ -751,6 +993,72 @@ fn update_used_size(
     Ok(())
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct FirmwareSectionRecord {
+    offset: usize,
+    end: usize,
+    content_start: usize,
+    section_type: u8,
+}
+
+fn parse_firmware_sections(
+    file: &[u8],
+    file_header_size: usize,
+) -> Result<Vec<FirmwareSectionRecord>, InjectionError> {
+    if file_header_size > file.len() || !file_header_size.is_multiple_of(4) {
+        return Err(InjectionError::InvalidFirmware(
+            "FFS section area starts at an invalid offset",
+        ));
+    }
+    let mut sections = Vec::new();
+    let mut offset = file_header_size;
+    while offset < file.len() {
+        let remaining = file.len() - offset;
+        if remaining < 4 {
+            return Err(InjectionError::InvalidFirmware(
+                "truncated bytes follow the final FFS section",
+            ));
+        }
+        let standard_size = read_u24(file, offset)? as usize;
+        let section_type = file[offset + 3];
+        let (header_size, size) = if standard_size == MAX_STANDARD_SIZE {
+            if remaining < 8 {
+                return Err(InjectionError::InvalidFirmware(
+                    "extended FFS section header is truncated",
+                ));
+            }
+            (8, read_u32(file, offset + 4)? as usize)
+        } else {
+            (4, standard_size)
+        };
+        if size < header_size || size > remaining {
+            return Err(InjectionError::InvalidFirmware(
+                "FFS section extends beyond its file",
+            ));
+        }
+        let end = offset + size;
+        sections.push(FirmwareSectionRecord {
+            offset,
+            end,
+            content_start: offset + header_size,
+            section_type,
+        });
+        if end == file.len() {
+            offset = end;
+        } else {
+            offset = align_up(end, 4).ok_or(InjectionError::InvalidFirmware(
+                "FFS section alignment overflow",
+            ))?;
+            if offset > file.len() {
+                return Err(InjectionError::InvalidFirmware(
+                    "FFS section padding extends beyond its file",
+                ));
+            }
+        }
+    }
+    Ok(sections)
+}
+
 fn header_checksum_is_valid(header: &[u8]) -> bool {
     header
         .chunks_exact(2)
@@ -805,8 +1113,8 @@ fn align_volume_offset(volume_start: usize, absolute: usize) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::build_ffs;
     use crate::tests::synthetic_driver_image;
+    use crate::{LegacyPatchCatalog, build_ffs};
 
     #[test]
     fn injects_into_erased_space_after_a_dxe_core() {
@@ -928,6 +1236,80 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn applies_selected_rules_to_exact_uncompressed_ffs_sections() {
+        let catalog = synthetic_legacy_catalog();
+        let rule = &catalog.rules[0];
+        let firmware = synthetic_legacy_firmware(rule, 0x10, &[0x00, 0xaa, 0xbb, 0x00]);
+        let selection = LegacyPatchSelection {
+            rule_id: rule.id.clone(),
+            expected_matches: 1,
+        };
+
+        let (patched, report) =
+            patch_legacy_firmware(&firmware, &catalog, std::slice::from_ref(&selection)).unwrap();
+
+        assert_eq!(report.catalog_sha256, catalog.source_sha256);
+        assert_eq!(report.applications.len(), 1);
+        assert_eq!(report.applications[0].changes.len(), 1);
+        let change = &report.applications[0].changes[0];
+        assert_eq!(change.firmware_volume_offset, 0);
+        assert_eq!(change.file_offset, 72);
+        assert_eq!(change.section_offset, 96);
+        assert_eq!(change.firmware_offset, 101);
+        assert_eq!(change.change.before, [0xaa, 0xbb]);
+        assert_eq!(change.change.after, [0xcc, 0xdd]);
+        assert_eq!(&patched[101..103], &[0xcc, 0xdd]);
+        assert_eq!(&firmware[101..103], &[0xaa, 0xbb]);
+
+        assert!(matches!(
+            patch_legacy_firmware(&patched, &catalog, &[selection]),
+            Err(LegacyFirmwarePatchError::InvalidRule(
+                LegacyPatchError::MatchCount {
+                    expected: 1,
+                    actual: 0,
+                    ..
+                }
+            ))
+        ));
+    }
+
+    #[test]
+    fn rejects_zero_duplicate_and_unsupported_legacy_selections() {
+        let catalog = synthetic_legacy_catalog();
+        let rule = &catalog.rules[0];
+        let firmware = synthetic_legacy_firmware(rule, 0x10, &[0xaa, 0xbb]);
+        let zero = LegacyPatchSelection {
+            rule_id: rule.id.clone(),
+            expected_matches: 0,
+        };
+        assert!(matches!(
+            patch_legacy_firmware(&firmware, &catalog, &[zero]),
+            Err(LegacyFirmwarePatchError::InvalidRule(
+                LegacyPatchError::ExpectedMatchesMustBePositive { .. }
+            ))
+        ));
+
+        let selected = LegacyPatchSelection {
+            rule_id: rule.id.clone(),
+            expected_matches: 1,
+        };
+        assert!(matches!(
+            patch_legacy_firmware(&firmware, &catalog, &[selected.clone(), selected]),
+            Err(LegacyFirmwarePatchError::DuplicateSelection(_))
+        ));
+
+        let encapsulated = synthetic_legacy_firmware(rule, SECTION_TYPE_COMPRESSION, &[0; 8]);
+        let selected = LegacyPatchSelection {
+            rule_id: rule.id.clone(),
+            expected_matches: 1,
+        };
+        assert!(matches!(
+            patch_legacy_firmware(&encapsulated, &catalog, &[selected]),
+            Err(LegacyFirmwarePatchError::UnsupportedTargetFile { .. })
+        ));
+    }
+
     fn synthetic_firmware(with_dxe_core: bool, with_pad: bool) -> Vec<u8> {
         let length = 0x2_0000_usize;
         let mut firmware = vec![0xff; length];
@@ -1000,5 +1382,33 @@ mod tests {
         outer[72..].fill(0xff);
         outer[72..72 + guided_file.len()].copy_from_slice(&guided_file);
         outer
+    }
+
+    fn synthetic_legacy_catalog() -> LegacyPatchCatalog {
+        LegacyPatchCatalog::parse("8D6756B9-E55E-4D6A-A3A5-5E4D72DDF772 10 P:AABB:CCDD\n").unwrap()
+    }
+
+    fn synthetic_legacy_firmware(
+        rule: &LegacyPatchRule,
+        section_type: u8,
+        section_body: &[u8],
+    ) -> Vec<u8> {
+        let mut section = vec![0_u8; 4];
+        let section_size = u32::try_from(section.len() + section_body.len()).unwrap();
+        write_u24(&mut section[..3], section_size);
+        section[3] = section_type;
+        section.extend_from_slice(section_body);
+
+        let mut header = vec![0_u8; FFS_HEADER_SIZE];
+        header[..16].copy_from_slice(&rule.file_guid);
+        header[18] = 0x06;
+        header[19] = FFS_ATTRIBUTE_CHECKSUM;
+        let mut file = build_generic_file(&header, &section).unwrap();
+        file[23] = !FFS_FILE_STATE_VALID;
+
+        let mut firmware = synthetic_firmware(false, false);
+        firmware[72..].fill(0xff);
+        firmware[72..72 + file.len()].copy_from_slice(&file);
+        firmware
     }
 }
