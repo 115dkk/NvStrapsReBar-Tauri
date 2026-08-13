@@ -5,12 +5,13 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
-use serde::{Serialize, de::DeserializeOwned};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use thiserror::Error;
 
 use crate::{
-    DeploymentPlan, EvidenceKind, MachineProfile, PlanError, ProfileError, Sha256Digest,
-    StepEvidence, StepId,
+    BoardPath, DeploymentPlan, EvidenceKind, FirmwareFingerprint, FirmwareInstallRoute,
+    MachineIdentity, MachineProfile, PlanError, ProfileError, RecoveryCapability, Sha256Digest,
+    StepEvidence, StepId, StepState,
 };
 
 static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
@@ -54,6 +55,51 @@ pub struct StoredArtifact {
     pub path: PathBuf,
     pub byte_length: u64,
     pub sha256: Sha256Digest,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PackageFilePurpose {
+    PatchedFirmware,
+    OriginalRecoveryFirmware,
+    MachineProfile,
+    DeploymentPlan,
+    LegacyPatchReceipt,
+    OperatorInstructions,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeploymentPackageFile {
+    pub relative_path: String,
+    pub purpose: PackageFilePurpose,
+    pub byte_length: u64,
+    pub sha256: Sha256Digest,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeploymentPackageManifest {
+    pub schema_version: u8,
+    pub profile_id: String,
+    pub board_path: BoardPath,
+    pub machine: MachineIdentity,
+    pub original_firmware: FirmwareFingerprint,
+    pub patched_firmware: FirmwareFingerprint,
+    pub recovery: RecoveryCapability,
+    pub firmware_install: FirmwareInstallRoute,
+    pub plan_revision: u32,
+    pub files: Vec<DeploymentPackageFile>,
+    pub manual_gates: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeploymentPackageReceipt {
+    pub package_path: PathBuf,
+    pub manifest: DeploymentPackageManifest,
+    pub manifest_sha256: Sha256Digest,
+    pub checksums_sha256: Sha256Digest,
 }
 
 impl DeploymentStore {
@@ -281,6 +327,211 @@ impl DeploymentStore {
         Ok((artifact, bytes))
     }
 
+    pub fn export_deployment_package(
+        &self,
+        profile: &MachineProfile,
+        plan: &DeploymentPlan,
+        destination_root: impl AsRef<Path>,
+    ) -> Result<DeploymentPackageReceipt, StoreError> {
+        profile.validate()?;
+        plan.validate_for(profile)?;
+        let firmware_install = profile
+            .firmware_install
+            .clone()
+            .ok_or(StoreError::PackageRequiresPinnedInstallRoute)?;
+        let (patched_artifact, patched_bytes) =
+            self.load_artifact(profile, ArtifactKind::PatchedFirmware)?;
+        let patched_evidence = plan
+            .steps
+            .iter()
+            .find(|step| step.id == StepId::VerifyPatchedArtifact)
+            .filter(|step| step.state == StepState::Completed)
+            .and_then(|step| step.evidence.as_ref());
+        if patched_evidence.is_none_or(|evidence| {
+            evidence.kind != EvidenceKind::PatchedFirmwareSha256
+                || evidence.value != patched_artifact.sha256.as_str()
+        }) {
+            return Err(StoreError::PatchedArtifactNotVerified);
+        }
+
+        let original_path = self.original_firmware_path(&profile.profile_id)?;
+        let original_bytes = fs::read(&original_path).map_err(|source| StoreError::Io {
+            path: original_path.clone(),
+            source,
+        })?;
+        let original_fingerprint = FirmwareFingerprint::inspect(&original_path)?;
+        if original_fingerprint.byte_length != profile.original_firmware.byte_length
+            || original_fingerprint.sha256 != profile.original_firmware.sha256
+        {
+            return Err(StoreError::FirmwareChanged);
+        }
+
+        let legacy_receipt = if profile.board_path == BoardPath::LegacyAbove4g {
+            let receipt = self
+                .load_artifact(profile, ArtifactKind::LegacyPatchReceipt)
+                .map_err(|error| match error {
+                    StoreError::Io { source, .. } if source.kind() == io::ErrorKind::NotFound => {
+                        StoreError::MissingLegacyPatchReceipt
+                    }
+                    other => other,
+                })?;
+            let evidence = plan
+                .steps
+                .iter()
+                .find(|step| step.id == StepId::ApplyLegacyBoardPatches)
+                .filter(|step| step.state == StepState::Completed)
+                .and_then(|step| step.evidence.as_ref());
+            if evidence.is_none_or(|evidence| {
+                evidence.kind != EvidenceKind::LegacyPatchReceipt
+                    || evidence.value != receipt.0.sha256.as_str()
+            }) {
+                return Err(StoreError::LegacyPatchReceiptNotVerified);
+            }
+            Some(receipt)
+        } else {
+            None
+        };
+
+        let destination_root = destination_root.as_ref();
+        if !destination_root.is_absolute() {
+            return Err(StoreError::PackageDestinationMustBeAbsolute);
+        }
+        let destination_root =
+            fs::canonicalize(destination_root).map_err(|source| StoreError::Io {
+                path: destination_root.to_owned(),
+                source,
+            })?;
+        if !destination_root.is_dir() {
+            return Err(StoreError::PackageDestinationNotDirectory(destination_root));
+        }
+        let profile_suffix = profile
+            .profile_id
+            .strip_prefix("nvstraps-")
+            .expect("validated profile IDs always have the nvstraps prefix");
+        let package_path = destination_root.join(format!("NvStrapsReBar-{profile_suffix}"));
+        if package_path.exists() {
+            return Err(StoreError::PackageAlreadyExists(package_path));
+        }
+        let staging_path = destination_root.join(format!(
+            ".NvStrapsReBar-{}-{}-{}.tmp",
+            profile_suffix,
+            std::process::id(),
+            TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir(&staging_path).map_err(|source| StoreError::Io {
+            path: staging_path.clone(),
+            source,
+        })?;
+
+        let result = (|| {
+            let mut files = Vec::new();
+            files.push(write_package_file(
+                &staging_path,
+                &format!("flash/{}", firmware_install.artifact_file_name),
+                PackageFilePurpose::PatchedFirmware,
+                &patched_bytes,
+            )?);
+            files.push(write_package_file(
+                &staging_path,
+                "recovery/original-firmware.bin",
+                PackageFilePurpose::OriginalRecoveryFirmware,
+                &original_bytes,
+            )?);
+
+            let profile_relative = "receipts/machine-profile.json";
+            let profile_bytes = json_bytes(&staging_path.join(profile_relative), profile)?;
+            files.push(write_package_file(
+                &staging_path,
+                profile_relative,
+                PackageFilePurpose::MachineProfile,
+                &profile_bytes,
+            )?);
+            let plan_relative = "receipts/deployment-plan.json";
+            let plan_bytes = json_bytes(&staging_path.join(plan_relative), plan)?;
+            files.push(write_package_file(
+                &staging_path,
+                plan_relative,
+                PackageFilePurpose::DeploymentPlan,
+                &plan_bytes,
+            )?);
+            if let Some((_, receipt_bytes)) = legacy_receipt.as_ref() {
+                files.push(write_package_file(
+                    &staging_path,
+                    "receipts/legacy-patch-receipt.json",
+                    PackageFilePurpose::LegacyPatchReceipt,
+                    receipt_bytes,
+                )?);
+            }
+
+            let manual_gates = manual_gates(profile);
+            let instructions = operator_instructions(profile, &firmware_install, &manual_gates);
+            files.push(write_package_file(
+                &staging_path,
+                "DEPLOYMENT.txt",
+                PackageFilePurpose::OperatorInstructions,
+                instructions.as_bytes(),
+            )?);
+            files.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
+
+            let manifest = DeploymentPackageManifest {
+                schema_version: 1,
+                profile_id: profile.profile_id.clone(),
+                board_path: profile.board_path,
+                machine: profile.identity.clone(),
+                original_firmware: profile.original_firmware.clone(),
+                patched_firmware: FirmwareFingerprint {
+                    file_name: firmware_install.artifact_file_name.clone(),
+                    byte_length: patched_artifact.byte_length,
+                    sha256: patched_artifact.sha256.clone(),
+                },
+                recovery: profile.recovery.clone(),
+                firmware_install,
+                plan_revision: plan.revision,
+                files,
+                manual_gates,
+            };
+            let manifest_relative = "deployment-manifest.json";
+            let manifest_bytes = json_bytes(&staging_path.join(manifest_relative), &manifest)?;
+            write_bytes_once(&staging_path.join(manifest_relative), &manifest_bytes)?;
+            let manifest_sha256 = Sha256Digest::from_bytes(&manifest_bytes);
+
+            let mut checksums = String::new();
+            for file in &manifest.files {
+                use std::fmt::Write as _;
+                writeln!(checksums, "{} *{}", file.sha256, file.relative_path)
+                    .expect("writing checksums to a string cannot fail");
+            }
+            use std::fmt::Write as _;
+            writeln!(checksums, "{} *{manifest_relative}", manifest_sha256)
+                .expect("writing checksums to a string cannot fail");
+            let checksums_bytes = checksums.into_bytes();
+            write_bytes_once(&staging_path.join("SHA256SUMS.txt"), &checksums_bytes)?;
+            let checksums_sha256 = Sha256Digest::from_bytes(&checksums_bytes);
+
+            verify_package_files(
+                &staging_path,
+                &manifest,
+                &manifest_sha256,
+                &checksums_sha256,
+            )?;
+            fs::rename(&staging_path, &package_path).map_err(|source| StoreError::Io {
+                path: package_path.clone(),
+                source,
+            })?;
+            Ok(DeploymentPackageReceipt {
+                package_path: package_path.clone(),
+                manifest,
+                manifest_sha256,
+                checksums_sha256,
+            })
+        })();
+
+        if result.is_err() && staging_path.exists() {
+            let _ = fs::remove_dir_all(&staging_path);
+        }
+        result
+    }
+
     fn profile_path(&self, profile_id: &str) -> Result<PathBuf, StoreError> {
         validate_profile_id(profile_id)?;
         Ok(self
@@ -310,6 +561,131 @@ impl DeploymentStore {
     }
 }
 
+fn write_package_file(
+    root: &Path,
+    relative_path: &str,
+    purpose: PackageFilePurpose,
+    bytes: &[u8],
+) -> Result<DeploymentPackageFile, StoreError> {
+    let relative = Path::new(relative_path);
+    if relative.is_absolute()
+        || relative
+            .components()
+            .any(|component| !matches!(component, std::path::Component::Normal(_)))
+    {
+        return Err(StoreError::InvalidPackageRelativePath(
+            relative_path.to_owned(),
+        ));
+    }
+    let path = root.join(relative);
+    write_bytes_once(&path, bytes)?;
+    let persisted = fs::read(&path).map_err(|source| StoreError::Io {
+        path: path.clone(),
+        source,
+    })?;
+    if persisted != bytes {
+        return Err(StoreError::PackageVerificationFailed(relative_path.into()));
+    }
+    Ok(DeploymentPackageFile {
+        relative_path: relative_path.to_owned(),
+        purpose,
+        byte_length: persisted.len() as u64,
+        sha256: Sha256Digest::from_bytes(&persisted),
+    })
+}
+
+fn json_bytes(path: &Path, value: &impl Serialize) -> Result<Vec<u8>, StoreError> {
+    let mut bytes = serde_json::to_vec_pretty(value).map_err(|source| StoreError::Json {
+        path: path.to_owned(),
+        source,
+    })?;
+    bytes.push(b'\n');
+    Ok(bytes)
+}
+
+fn manual_gates(profile: &MachineProfile) -> Vec<String> {
+    vec![
+        "Confirm that the live board, BIOS, GPU topology, and source image still match the machine profile before flashing.".into(),
+        "Use only the pinned vendor install route; never bypass capsule signatures or vendor integrity checks.".into(),
+        format!(
+            "Keep the documented recovery route ready before flashing: {}",
+            profile.recovery.note
+        ),
+        match profile.board_path {
+            BoardPath::NativeResizableBar => {
+                "In firmware setup, enable native Resizable BAR and Above 4G decoding, and disable CSM.".into()
+            }
+            BoardPath::LegacyAbove4g => {
+                "In firmware setup, enable Above 4G decoding and disable CSM.".into()
+            }
+        },
+        "Do not interrupt power. Treat the vendor flash completion and the first successful reboot as physical confirmations.".into(),
+    ]
+}
+
+fn operator_instructions(
+    profile: &MachineProfile,
+    firmware_install: &FirmwareInstallRoute,
+    manual_gates: &[String],
+) -> String {
+    let mut output = format!(
+        "NvStrapsReBar verified deployment package\n\nProfile: {}\nBoard: {} {}\nBIOS: {} {} ({})\nPatched image: flash/{}\nInstall method: {:?}\nOfficial instructions: {}\nInstall note: {}\nRecovery method: {:?}\nRecovery image: recovery/original-firmware.bin\nRecovery note: {}\n\nVerify every file with SHA256SUMS.txt before use.\n\nManual gates:\n",
+        profile.profile_id,
+        profile.identity.board_manufacturer,
+        profile.identity.board_product,
+        profile.identity.bios_vendor,
+        profile.identity.bios_version,
+        profile.identity.bios_release_date,
+        firmware_install.artifact_file_name,
+        firmware_install.method,
+        firmware_install.official_instructions_url,
+        firmware_install.note,
+        profile.recovery.method,
+        profile.recovery.note,
+    );
+    for (index, gate) in manual_gates.iter().enumerate() {
+        use std::fmt::Write as _;
+        writeln!(output, "{}. {gate}", index + 1)
+            .expect("writing instructions to a string cannot fail");
+    }
+    output
+}
+
+fn verify_package_files(
+    root: &Path,
+    manifest: &DeploymentPackageManifest,
+    manifest_sha256: &Sha256Digest,
+    checksums_sha256: &Sha256Digest,
+) -> Result<(), StoreError> {
+    for file in &manifest.files {
+        let path = root.join(&file.relative_path);
+        let bytes = fs::read(&path).map_err(|source| StoreError::Io {
+            path: path.clone(),
+            source,
+        })?;
+        if bytes.len() as u64 != file.byte_length || Sha256Digest::from_bytes(&bytes) != file.sha256
+        {
+            return Err(StoreError::PackageVerificationFailed(
+                file.relative_path.clone(),
+            ));
+        }
+    }
+    for (relative_path, expected) in [
+        ("deployment-manifest.json", manifest_sha256),
+        ("SHA256SUMS.txt", checksums_sha256),
+    ] {
+        let path = root.join(relative_path);
+        let bytes = fs::read(&path).map_err(|source| StoreError::Io {
+            path: path.clone(),
+            source,
+        })?;
+        if Sha256Digest::from_bytes(&bytes) != *expected {
+            return Err(StoreError::PackageVerificationFailed(relative_path.into()));
+        }
+    }
+    Ok(())
+}
+
 #[derive(Debug, Error)]
 pub enum StoreError {
     #[error(transparent)]
@@ -330,6 +706,24 @@ pub enum StoreError {
     EmptyArtifact,
     #[error("persisted content conflicts with an immutable deployment record: {0}")]
     ImmutableConflict(PathBuf),
+    #[error("deployment packages require a schema-3 profile with a pinned install route")]
+    PackageRequiresPinnedInstallRoute,
+    #[error("the patched firmware artifact has not been verified by the deployment plan")]
+    PatchedArtifactNotVerified,
+    #[error("the legacy patch receipt required by this profile is missing")]
+    MissingLegacyPatchReceipt,
+    #[error("the legacy patch receipt does not match the deployment plan evidence")]
+    LegacyPatchReceiptNotVerified,
+    #[error("the deployment package destination must be an absolute path")]
+    PackageDestinationMustBeAbsolute,
+    #[error("the deployment package destination is not a directory: {0}")]
+    PackageDestinationNotDirectory(PathBuf),
+    #[error("a deployment package already exists and will not be overwritten: {0}")]
+    PackageAlreadyExists(PathBuf),
+    #[error("deployment package relative path is unsafe: {0}")]
+    InvalidPackageRelativePath(String),
+    #[error("deployment package file failed read-back verification: {0}")]
+    PackageVerificationFailed(String),
     #[error("failed to access {path}: {source}")]
     Io {
         path: PathBuf,
@@ -700,6 +1094,121 @@ mod tests {
         assert!(matches!(
             store.preserve_artifact(&profile, ArtifactKind::RustDriverFfs, b"different FFS"),
             Err(StoreError::ImmutableConflict(_))
+        ));
+    }
+
+    #[test]
+    fn verified_package_is_complete_reproducible_and_never_overwritten() {
+        let directory = TestDirectory::new();
+        let source = directory.0.join("vendor-bios.bin");
+        fs::write(&source, b"known vendor firmware image").unwrap();
+        let profile = profile(FirmwareFingerprint::inspect(&source).unwrap());
+        let store = DeploymentStore::new(directory.0.join("store"));
+        let mut plan = store.provision_profile(&profile, &source).unwrap().plan;
+
+        let driver = store
+            .preserve_artifact(&profile, ArtifactKind::RustDriverFfs, b"verified Rust FFS")
+            .unwrap();
+        plan.complete(
+            StepId::PrepareRustDriver,
+            StepEvidence::new(EvidenceKind::RustDriverSha256, driver.sha256.to_string()).unwrap(),
+        )
+        .unwrap();
+        store.save_plan(&profile, &plan).unwrap();
+        let patched = store
+            .preserve_artifact(
+                &profile,
+                ArtifactKind::PatchedFirmware,
+                b"verified patched firmware image",
+            )
+            .unwrap();
+        plan.complete(
+            StepId::VerifyPatchedArtifact,
+            StepEvidence::new(
+                EvidenceKind::PatchedFirmwareSha256,
+                patched.sha256.to_string(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        store.save_plan(&profile, &plan).unwrap();
+
+        let destination = directory.0.join("usb");
+        fs::create_dir(&destination).unwrap();
+        let receipt = store
+            .export_deployment_package(&profile, &plan, &destination)
+            .unwrap();
+        assert_eq!(
+            fs::read(receipt.package_path.join("flash/vendor-bios.bin")).unwrap(),
+            b"verified patched firmware image"
+        );
+        assert_eq!(
+            fs::read(receipt.package_path.join("recovery/original-firmware.bin")).unwrap(),
+            b"known vendor firmware image"
+        );
+        let persisted_manifest: DeploymentPackageManifest = serde_json::from_slice(
+            &fs::read(receipt.package_path.join("deployment-manifest.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(persisted_manifest, receipt.manifest);
+        assert_eq!(persisted_manifest.files.len(), 5);
+        assert_eq!(
+            Sha256Digest::from_bytes(
+                fs::read(receipt.package_path.join("deployment-manifest.json")).unwrap()
+            ),
+            receipt.manifest_sha256
+        );
+        assert!(receipt.package_path.join("SHA256SUMS.txt").is_file());
+        assert!(receipt.package_path.join("DEPLOYMENT.txt").is_file());
+        assert!(matches!(
+            store.export_deployment_package(&profile, &plan, &destination),
+            Err(StoreError::PackageAlreadyExists(_))
+        ));
+    }
+
+    #[test]
+    fn package_export_refuses_unverified_artifacts_and_relative_destinations() {
+        let directory = TestDirectory::new();
+        let source = directory.0.join("vendor-bios.bin");
+        fs::write(&source, b"known firmware").unwrap();
+        let profile = profile(FirmwareFingerprint::inspect(&source).unwrap());
+        let store = DeploymentStore::new(directory.0.join("store"));
+        let plan = store.provision_profile(&profile, &source).unwrap().plan;
+        store
+            .preserve_artifact(&profile, ArtifactKind::PatchedFirmware, b"unverified")
+            .unwrap();
+        assert!(matches!(
+            store.export_deployment_package(&profile, &plan, &directory.0),
+            Err(StoreError::PatchedArtifactNotVerified)
+        ));
+
+        let mut verified = plan;
+        let driver = store
+            .preserve_artifact(&profile, ArtifactKind::RustDriverFfs, b"driver")
+            .unwrap();
+        verified
+            .complete(
+                StepId::PrepareRustDriver,
+                StepEvidence::new(EvidenceKind::RustDriverSha256, driver.sha256.to_string())
+                    .unwrap(),
+            )
+            .unwrap();
+        let (_, patched_bytes) = store
+            .load_artifact(&profile, ArtifactKind::PatchedFirmware)
+            .unwrap();
+        verified
+            .complete(
+                StepId::VerifyPatchedArtifact,
+                StepEvidence::new(
+                    EvidenceKind::PatchedFirmwareSha256,
+                    Sha256Digest::from_bytes(patched_bytes).to_string(),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        assert!(matches!(
+            store.export_deployment_package(&profile, &verified, "relative-usb"),
+            Err(StoreError::PackageDestinationMustBeAbsolute)
         ));
     }
 }
