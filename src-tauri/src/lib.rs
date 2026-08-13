@@ -6,6 +6,7 @@ mod error;
 mod firmware;
 mod machine;
 mod nvidia_smi;
+mod profile_inspector;
 mod reboot;
 mod status;
 
@@ -30,6 +31,8 @@ pub fn run() {
             reboot::preview_firmware_setup_reboot,
             reboot::reboot_to_firmware_setup,
             nvidia_smi::collect_nvidia_smi_evidence,
+            profile_inspector::install_nvidia_profile_inspector,
+            profile_inspector::get_nvidia_profile_inspector_installation,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run NvStrapsReBar");
