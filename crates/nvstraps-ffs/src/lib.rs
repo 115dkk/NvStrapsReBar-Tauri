@@ -1,5 +1,9 @@
 use std::fmt;
 
+mod firmware;
+
+pub use firmware::{FirmwareInjection, InjectionError, inject_ffs};
+
 pub const DRIVER_NAME: &str = "NvStrapsReBar";
 pub const FFS_FILE_GUID: &str = "90d10790-bbfa-404b-873b-5bdb3ada3c56";
 pub const FFS_FILE_GUID_BYTES: [u8; 16] = [
@@ -416,7 +420,7 @@ mod tests {
         assert!(inspect_ffs(&ffs).is_err());
     }
 
-    fn synthetic_driver_image() -> Vec<u8> {
+    pub(crate) fn synthetic_driver_image() -> Vec<u8> {
         let mut image = vec![0_u8; 0x200];
         image[..2].copy_from_slice(DOS_MAGIC);
         image[0x3c..0x40].copy_from_slice(&0x80_u32.to_le_bytes());

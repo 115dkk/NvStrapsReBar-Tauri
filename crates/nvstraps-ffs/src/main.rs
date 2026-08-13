@@ -1,5 +1,6 @@
 use std::env;
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::path::Path;
 use std::process::ExitCode;
 
@@ -42,11 +43,33 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             let inspection = nvstraps_ffs::inspect_ffs(&fs::read(&input)?)?;
             println!("{inspection:#?}");
         }
+        "inject" => {
+            let ffs_path = arguments.next().ok_or(usage())?;
+            let output = arguments.next().ok_or(usage())?;
+            if arguments.next().is_some() {
+                return Err(usage().into());
+            }
+            let firmware = fs::read(&input)?;
+            let ffs = fs::read(&ffs_path)?;
+            let (patched, report) = nvstraps_ffs::inject_ffs(&firmware, &ffs)?;
+            let mut output_file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&output)?;
+            output_file.write_all(&patched)?;
+            println!(
+                "wrote {}: FV {:#x}, file {:#x}, replaced_pad={}",
+                Path::new(&output).display(),
+                report.firmware_volume_offset,
+                report.file_offset,
+                report.replaced_pad_file
+            );
+        }
         _ => return Err(usage().into()),
     }
     Ok(())
 }
 
 fn usage() -> &'static str {
-    "usage: nvstraps-ffs pack <NvStrapsReBar.efi> <NvStrapsReBar.ffs> | inspect <NvStrapsReBar.ffs>"
+    "usage: nvstraps-ffs pack <NvStrapsReBar.efi> <NvStrapsReBar.ffs> | inspect <NvStrapsReBar.ffs> | inject <firmware.fd> <NvStrapsReBar.ffs> <patched.fd>"
 }
