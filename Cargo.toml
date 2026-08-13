@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/nvstraps-core",
+    "crates/nvstraps-deploy",
     "crates/nvstraps-ffs",
     "crates/nvstraps-uefi",
     "src-tauri",
