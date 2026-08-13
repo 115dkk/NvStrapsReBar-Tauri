@@ -1,0 +1,68 @@
+name: Rust UEFI validation
+
+on:
+  push:
+    branches: ["master"]
+  pull_request:
+    branches: ["master"]
+
+permissions:
+  contents: read
+
+jobs:
+  validate-rust-uefi:
+    name: Validate Rust DXE port (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-uefi
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+
+      - name: Enforce the Rust-only source boundary
+        run: npm run check:riir
+
+      - name: Test the portable Rust modules
+        run: cargo test -p nvstraps-core -p nvstraps-deploy -p nvstraps-ffs -p nvstraps-uefi --all-targets
+
+      - name: Build, validate, and wrap the Rust boot-service driver
+        run: npm run build:firmware
+
+      - name: Reject warnings in host-side firmware tooling
+        run: cargo clippy -p nvstraps-ffs -p nvstraps-uefi --all-targets -- -D warnings
+
+      - name: Reject warnings in the UEFI target
+        run: cargo clippy -p nvstraps-uefi --release --target x86_64-unknown-uefi -- -D warnings
+
+      - name: Install OVMF and QEMU
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install --yes ovmf qemu-system-x86
+
+      - name: Prove automatic dispatch and host-bridge hook installation
+        if: runner.os == 'Linux'
+        run: npm run test:qemu
+
+      - name: Upload QEMU evidence
+        if: runner.os == 'Linux' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-uefi-qemu-evidence
+          path: target/qemu-smoke/
+          if-no-files-found: error

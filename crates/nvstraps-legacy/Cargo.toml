@@ -1,0 +1,16 @@
+[package]
+name = "nvstraps-legacy"
+version = "0.1.0"
+description = "Pinned legacy firmware catalog authority for NvStrapsReBar"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+test-support = []
+
+[dependencies]
+nvstraps-deploy = { path = "../nvstraps-deploy" }
+nvstraps-ffs = { path = "../nvstraps-ffs" }
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"

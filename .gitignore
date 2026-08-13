@@ -28,3 +28,12 @@ out/
 build/
 build-*/
 compile_commands.json
+
+# Tauri / Web frontend
+node_modules/
+dist/
+target/
+playwright-report/
+test-results/
+*.tsbuildinfo
+.superloopy/evidence/

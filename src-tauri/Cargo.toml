@@ -1,0 +1,53 @@
+[package]
+name = "nvstraps-rebar"
+version = "0.1.0"
+description = "Tauri configuration utility for NvStrapsReBar"
+authors = ["NvStrapsReBar contributors"]
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+
+[lib]
+name = "nvstraps_rebar_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "NvStrapsReBar"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+nvstraps-core = { path = "../crates/nvstraps-core" }
+nvstraps-deploy = { path = "../crates/nvstraps-deploy" }
+nvstraps-ffs = { path = "../crates/nvstraps-ffs" }
+nvstraps-legacy = { path = "../crates/nvstraps-legacy" }
+quick-xml = { version = "0.41.0", features = ["serialize"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2.11.5", features = [] }
+tauri-plugin-dialog = "2.7.2"
+thiserror = "2"
+zip = { version = "7.2.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55.0"
+windows = { version = "0.62.2", features = [
+  "Win32_Graphics_Dxgi",
+  "Win32_Graphics_Dxgi_Common",
+] }
+windows-sys = { version = "0.61.2", features = [
+  "Win32_Devices_DeviceAndDriverInstallation",
+  "Win32_Devices_Properties",
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_System_SystemInformation",
+  "Win32_System_Threading",
+  "Win32_System_WindowsProgramming",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
+[dev-dependencies]
+nvstraps-legacy = { path = "../crates/nvstraps-legacy", features = ["test-support"] }

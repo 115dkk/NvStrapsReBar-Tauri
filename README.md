@@ -1,97 +1,161 @@
-<h1 align="center">NvStrapsReBar</h1>
-<p>UEFI driver to enable and test Resizable BAR on Turing graphics cards (GTX 1600, RTX 2000).</p>
-<p>This is a copy of the rather popular <a href="https://github.com/xCuri0/ReBARUEFI">ReBarUEFI</a> DXE driver. <a href="https://github.com/xCuri0/ReBARUEFI">ReBarUEFI</a> enables Resizable BAR for older motherboards and chipsets without ReBAR support from the manufacturer. NvStrapsReBar was created to test Resizable BAR support for GPUs from the RTX 2000 (and GTX 1600, Turing architecture) line. For the GTX 1000 cards (Pascal architecture) and older the tool can also enable a large BAR on the PCI bus, but it is fixed size and not resizable, so it is not the same as ReBAR. But then the NVIDIA driver for Windows shows a blue screen or resets the computer during boot if the BAR size has been changed. So GTX 1000 cards still can not enable ReBAR. The proprietary Linux driver does not crash, but does not pick up the new BAR size either (NVIDIA, could you please help fixing the Pascal driver ?)</p>
+# NvStrapsReBar
 
-### Do I need to flash a new UEFI image on the motherboard, to enable ReBAR on the GPU ?
-Yes, this is how it works for Turing GPUs (GTX 1600 / RTX 2000).
-<!--
-(some ideas to get it working without UEFI modding have circulated, but may not be technically possible and nothing is implemented.) -->
+NvStrapsReBar is a Rust/Tauri toolchain for enabling and validating Resizable BAR on NVIDIA
+Turing GPUs (GTX 1600 and RTX 2000). It includes a stable-Rust UEFI driver, firmware preparation,
+an exact-machine deployment plan, Windows EFI-variable configuration, and post-boot evidence.
 
-It's ususally the video BIOS (vBIOS) that should enable ReBAR, but the vBIOS is digitally signed (NVIDIA vBIOS is also encrypted) and can not be modified by modders and end-users (is locked-down). The motherboard UEFI image can also be signed or have integrity checks, but in general it is thankfully not as locked down, and users and UEFI modders often still have a way to modify it.
+> **Physical deployment is not yet hardware-verified.** The Rust driver and firmware tooling are
+> covered by host tests and an isolated OVMF/QEMU boot test. No recoverable trial has yet proved a
+> prepared vendor image on the pinned physical machine. The application never flashes firmware,
+> never overwrites the selected source image, and never bypasses vendor signatures.
 
-For older boards without ReBAR, adding ReBAR functionality depends on the Above 4G Decoding option in your UEFI setup, which must be turned on in advance, and CSM must be disabled.
+Pascal and older NVIDIA GPUs are not supported. Their Windows driver does not accept the changed
+BAR behavior required by this project.
 
-### Usage
-Download latest release from the [Releases](https://github.com/terminatorul/NvStrapsReBar/releases) page, or build the project using the  [build](https://github.com/terminatorul/NvStrapsReBar/wiki/Building-(Windows-only)) instructions. This should produce two files:
-* `NvStrapsReBar.ffs` UEFI DXE driver
-* `NvStrapsReBar.exe` Windows executable
+## What is automated
 
-After download or build you need to go through the following steps:
-* update the motherbord UEFI image to add the new `NvStrapsReBar.ffs` driver (see below)
-* enable ReBAR in UEFI Setup if the motherboard supports it. Otherwise enable "Above 4G Decoding" and disable CSM
-* run `NvStrapsReBar.exe` as Administrator to enable the new BAR size, by following the text-mode menus. If you have a recent motherboard, you only need to input `E` to Enable ReBAR for Turing GPUs, then input `S` to save the new driver configuration to EFI variable. For older motherboards without ReBAR, you also need to input `P` and set BAR size on the PCI side (motherboard side).
-* reboot after saving the menu options.
-* if you make changes in UEFI Setup, `NvStrapsReBar` will be disabled automatically and you need to re-enable it. Same if you manually set back the current year in UEFI Setup (can be used to disable NvStrapsReBar without booting to Windows).
-* if you make hardware changes like adding or changing a GPU: you have to disable ReBAR first. The reason is NvStrapsReBar depends on the GPU BAR0 address to enable ReBAR, and system firmware changes the allocated address for BAR0 when hardware is changed or settings in UEFI Setup are changed.
+The `Deploy` workspace provides one guarded, resumable journey:
 
-### Warning
-* Disable NvStrapsReBar before making hardware changes like adding a second GPU.
-* NvStrapsReBar will be disabled automatically if you make changes in UEFI Setup. Re-enable it afterwards.
+1. inventory the exact board, BIOS, GPU, bridge, and BAR0 topology;
+2. select and SHA-256 fingerprint an official vendor firmware image;
+3. choose the modern native-ReBAR path or analyze an older image for pinned legacy patches;
+4. pin the recovery and vendor-install routes in an immutable `MachineProfile`;
+5. re-check the current machine and source image before every consequential operation;
+6. build and verify the bundled Rust DXE FFS, apply selected legacy patches when required, and
+   inject the driver into a new artifact;
+7. export the artifact, preserved original, manifests, receipts, operator instructions, and
+   checksums as a deployment package;
+8. record vendor flash and firmware-setting completion only through profile-, step-, and
+   revision-bound operator confirmations;
+9. prove the returned firmware boot and Rust DXE execution from the current boot's volatile status;
+10. derive a guarded configuration from the current Turing inventory, using the canonical registry
+    plus exact-location fallback rules, then validate and save it with byte-for-byte readback;
+11. request a normal restart without `/f`, then advance only after Windows proves a later boot;
+12. accept BAR1 evidence only when every pinned GPU has complete, consistent telemetry matching
+    the independent Windows PCI resource size and exceeding 256 MiB; and
+13. install a pinned official NVIDIA Profile Inspector release, preserve a profile backup, open
+    the external UI, and keep policy completion manual and explicit.
 
-![image](https://github.com/terminatorul/NvStrapsReBar/assets/378924/21da2dc9-82be-4ac6-8e60-2f61bd619f0a)
+The application hard-stops on an unapproved identity change, firmware hash, legacy catalog, patch
+match count, stale plan revision, invalid DXE status, unproven reboot, or incomplete BAR1 evidence.
+Only the controlled post-flash handoff may change BIOS version/release date and BAR0, and only the
+configuration reboot may relocate BAR0; each proven boot immediately re-pins the complete current
+identity. Preparation, reboot acceptance, and external-tool launch are never reported as the
+result owned by the next system or person.
 
+## Modern and legacy board paths
 
-Credits go to the bellow github users, as I integrated and coded their findings and results:
-* [envytools](https://github.com/envytools/envytools) project for the original effort on reverse-engineering the register interface for the GPUs, a very long time ago, for use by the [nouveau](https://nouveau.freedesktop.org/) open-source driver in Linux. Amazing how this old documentation could still help us today !
-* [@mupuf](https://github.com/mupuf) from [envytools](https://github.com/envytools/envytools) project for bringing up the idea and the exact (low level) registers from the documentation, that enable resizable BAR
-* [@Xelafic](https://github.com/Xelafic) for the first code samples (written in assembly!) and the first test for using the GPU STRAPS bits, documented by envytools, to select the BAR size during PCIe bring-up in UEFI code.
-* [@xCuri0](https://github.com/xCuri0/ReBARUEFI") for great support and for the ReBarUEFI DXE driver that enables ReBAR on the motherboard side, and allows intercepting and hooking into the PCIe enumeration phases in UEFI code on the motherboard.
+| Board path | Application work | Required firmware work |
+| --- | --- | --- |
+| Native ReBAR | Inject the Rust driver and use system-default PCI sizing | Enable ReBAR and Above 4G Decoding; disable CSM if the vendor requires it |
+| Legacy Above 4G | Read-only scan of the exact image, authoritative match counts, selected pinned patches, then driver injection | Enable Above 4G Decoding, disable CSM, and use the documented vendor flash/recovery route |
 
-## Working GPUs
-Check issue https://github.com/terminatorul/NvStrapsReBar/issues/1 for a list of known working GPUs (and motherboards).
-<!--
-If you get Resizable BAR working on your Turing (or earlier) GPU, please post your system information on issue https://github.com/terminatorul/NvStrapsReBar/issues/1 here on github,
-in the below format
+Legacy analysis classifies every pinned rule as `applicable`, `absent`, or `blocked`. Only exact
+applicable matches can be selected. Zero-risk matches may be recommended; chipset-specific or
+DSDT changes require an explicit risk acknowledgment. Profile creation repeats the complete patch
+operation in memory, so stale counts or incompatible combinations cannot be stored.
 
-* CPU:
-* Motherboard model:
-* Motherboard chipset:
-* Graphics card model:
-* GPU chipset:
-* GPU PCI VendorID:DeviceID (check GPU-Z):
-* GPU PCI subsystem IDs (check GPU-Z):
-* VRAM size:
-* New BAR size (GPU-Z):
-* New BAR size (nvidia-smi):
-* driver version:
+## Manual and physical boundary
 
-Use command `nvidia-smi -q -d memory` to check the new BAR size reported by the Windows/Linux driver.
+These steps intentionally remain outside a generic one-click action:
 
-It maybe easier and more informative to post GPU-Z screenshots with the main GPU page + ReBAR page, and CPU-X with the CPU page and motherboard page screenshots, plus the output from nvidia-smi command. If you needed to apply more changes to make ReBAR work, please post about them as well.
--->
+- obtain the exact official image for the exact motherboard and revision;
+- verify that the selected recovery route is documented or has actually been tested;
+- review hashes and the prepared artifact before crossing the flash boundary;
+- run the vendor flasher or physical flashback procedure;
+- change UEFI settings and wait through the update without interrupting power;
+- move a USB drive, press a rear-panel button, clear CMOS, use an SPI programmer, or change a GPU;
+- choose per-application NVIDIA policy values in Profile Inspector.
 
-## Updating UEFI image
+For the specifically detected MSI PRO Z690-A DDR4 (MS-7D25), the application can prefill the
+documented M-FLASH route and Flash BIOS Button recovery route. It still requires the operator to
+confirm the exact model, image, recovery capability, and physical actions. A different identity is
+not treated as equivalent.
 
-You can download the latest release of NvStrapsReBar from the [Releases](https://github.com/terminatorul/NvStrapsReBar/releases) page, or build the UEFI DXE driver and the Windows executable using the instructions on the [building](https://github.com/terminatorul/NvStrapsReBar/wiki/Building-(Windows-only)) page.
+Before any GPU, PCI, or relevant UEFI-setting change, disable NvStrapsReBar, save the disabled
+configuration, reboot, power down, and only then alter the topology. After the change, boot,
+refresh inventory, validate the new topology, re-enable, save, and reboot again. BAR0 addresses
+are allocated by firmware and must never be assumed stable across those changes.
 
-The resulting `NvStrapsReBar.ffs` file needs to be included in the motherboard UEFI image (downloaded from the montherboard manufacturer, usually under "BIOS update"), and the resulting image should be flashed onto the motherboard as if it were a new firmware version for that board.
-See the original project [ReBarUEFI](https://github.com/xCuri0/ReBarUEFI/) for the instructions to update motherboard UEFI. Replace "ReBarUEFI.ffs" with "NvStrapsReBar.ffs" where appropriate.
+See [RIIR and one-click deployment boundaries](docs/RIIR_AND_ONE_CLICK.md) for the complete
+separation between source replacement, in-app automation, external adapters, and physical gates.
 
-<p>So you will still have to check the README page from the original project: <ul><li><a href="https://github.com/xCuri0/ReBarUEFI">https://github.com/xCuri0/ReBarUEFI</a></li></ul> for all the details and instructions on working with the UEFI image, and patching it if necessary (for older motherboards and chipsets). </p>
+## Build and run
 
-## Enable ReBAR and choose BAR size
-After flashing the motherboard with the new UEFI image, you need to enable ReBAR in UEFI Setup. For older motherboards without ReBAR, enable "Above 4G Decoding" and disable CSM. Then you need to run `NvStrapsReBar.exe` as Administrator.
+Requirements for developers are Node.js 24+, stable Rust with `rustfmt` and `clippy`, and the
+`x86_64-unknown-uefi` Rust target. End users of a packaged build do not need Rust, EDK2, Python,
+BaseTools, a C/C++ compiler, or a separate firmware-volume editor.
 
-`NvStrapsReBar.exe` prompts you with a small text-based menu. You can configure 2 values for the BAR size with this tool:
-* GPU-side BAR size
-* PCI BAR size (for older motherboards without ReBAR)
+```powershell
+npm ci
+npm run check
+npm run check:rust
+npm run tauri dev
+```
 
-Newer boards with ReBAR support from the manufacturer can auto-configure PCI BAR size, so you only need to set the GPU-side value for the BAR size. If not, you should try and experiment with both of them, as needed.
+Build the Windows executable and bundled Rust FFS with:
 
-### Warning
-* Disable NvStrapsReBar before making hardware changes like adding a second GPU.
-* NvStrapsReBar will be disabled automatically if you make changes in UEFI Setup. Re-enable it afterwards.
+```powershell
+npm run tauri:ci
+```
 
-![image](https://github.com/terminatorul/NvStrapsReBar/assets/378924/a960adff-665f-4fbb-92ba-a8a4114996ca)
+The outputs are `target/release/NvStrapsReBar.exe` and
+`target/x86_64-unknown-uefi/release/NvStrapsReBar.ffs`. The Tauri build embeds the verified FFS.
 
+Additional gates:
 
-Most people should choose the first menu option and press `E` to Enable auto-settings BAR size for Turing GPUs. Depending on your board, you may need to also input `P` at the menu prompt, to choose Target PCI BAR size, and select value 64 (for the option to configure PCI BAR for selected GPUs only). Before quitting the menu, input `S` to save the changes you made to the EFI variable store, for the UEFI DXE driver to read them.
+```powershell
+npm run test:e2e
+npm run check:firmware
+npm run check:riir
+```
 
-If you choose a GPU BAR size of 8 GiB for example, and a Target PCI BAR size of 4 GiB, you will get a 4 GiB BAR.
+On Linux with QEMU and OVMF installed, `npm run test:qemu` boots an injected copy of OVMF with an
+isolated copied variable store. It never accesses host NVRAM.
 
-For older boards without ReBAR support from the manufacturer, you can select other values for Target PCI BAR size, to also configure other GPUs for example. Or to limit the BAR size to smaller values even if the GPU supports higher values. Depending on the motherboard UEFI, for some boards you may need to use lower values, to limit BAR size to 4 GB or 2GB for example. Even a 2 GB BAR size still gives you the benefits of Resizable BAR in most titles, and NVIDIA tends to use 1.5 GB as the default size in the Profile Inspector. There are exceptions to this 'though (for some titles that can still see improvements with the higher BAR sizes).
+## Windows configuration
 
-If later you want to make further changes in UEFI Setup, or hardware changes like adding a new GPU, you have to disable NvStrapsReBar first. Because NvStrapsReBar depends on the GPU BAR0 address allocated by system firmware, and that changes with UEFI Setup changes or with hardware changes.
+The `Configure` workspace inventories NVIDIA adapters, reads the existing EFI configuration and
+driver status, validates drafts against the current topology, and writes only after explicit
+confirmation. A successful write is read back byte-for-byte and still requires a reboot before
+the DXE driver can apply it. Administrator elevation is requested only for the privileged UEFI
+variable boundary.
 
-## Using large BAR sizes
-Remember you need to use the [Profile Inspector](https://github.com/Orbmu2k/nvidiaProfileInspector) because it enables ReBAR per-application, and that overrides the global value reported by the PCI bus. There appears to be a fake site for the Profile Inspector, so always downloaded it from github, or use the link above.
+Newer boards normally use GPU-side Turing auto-configuration and system-default PCI sizing. Older
+boards may also need an explicit PCI target size, but this must follow the exact analyzed board
+profile rather than trial-and-error defaults.
+
+The `Deploy` workspace does not submit a browser constant. At the configuration step, Rust
+re-enumerates the exact machine and derives a guarded draft: registry mode `1`, system-default PCI
+sizing, setup-change protection, and exact-location 2 GiB fallback rules only for unlisted Turing
+devices. The recommendation is rederived and must match the submitted draft at the privileged
+write boundary before the wire model is built and validated again.
+
+## NVIDIA evidence and application profiles
+
+The app invokes the installed `nvidia-smi.exe` read-only and records BAR1 totals matched to the
+pinned Windows PCI inventory. The deployment plan advances only when all pinned GPUs are present,
+BAR1 total/used/free are available and consistent, Windows reports the same size independently,
+and the aperture is larger than 256 MiB. This does not prove that every application uses ReBAR.
+
+Per-application enablement remains in the official
+[NVIDIA Profile Inspector](https://github.com/Orbmu2k/nvidiaProfileInspector). The app downloads
+one pinned release from its official GitHub repository, verifies its archive and installed files,
+exports an immutable backup, and then launches the UI. It never silently chooses game profiles.
+
+## Implementation and contracts
+
+- [Rust UEFI implementation status](docs/RUST_UEFI_PORT.md)
+- [Tauri backend contract](docs/TAURI_BACKEND.md)
+- [RIIR and one-click deployment boundaries](docs/RIIR_AND_ONE_CLICK.md)
+
+The repository-owned runtime and build path are Rust, TypeScript, shell, and data. CI rejects
+tracked C/C++ and the removed C/EDK2 build trees. Windows, WebView2, vendor firmware, motherboard
+flash logic, the NVIDIA driver, GPU vBIOS, QEMU/OVMF, and optional third-party tools remain
+external owners rather than being misrepresented as rewritten code.
+
+## Credits
+
+This work builds on findings from [envytools](https://github.com/envytools/envytools), @mupuf,
+@Xelafic, and the original [ReBarUEFI](https://github.com/xCuri0/ReBarUEFI) project. The pinned
+legacy patch catalogs retain their upstream provenance and hashes.

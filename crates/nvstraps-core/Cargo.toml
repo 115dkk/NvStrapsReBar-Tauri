@@ -1,0 +1,13 @@
+[package]
+name = "nvstraps-core"
+version = "0.1.0"
+description = "Shared no_std contracts and policy for NvStrapsReBar"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+default = ["std"]
+std = []
+
+[dependencies]

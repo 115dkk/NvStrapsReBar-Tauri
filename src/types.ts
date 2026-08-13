@@ -1,0 +1,119 @@
+export type MatchScope = "device" | "subsystem" | "location";
+export type GpuRule = {
+        matchScope: MatchScope;
+        deviceId: number;
+        subsystemVendorId: number;
+        subsystemDeviceId: number;
+        bus: number;
+        device: number;
+        function: number;
+        barSizeSelector: number | null;
+        overrideBarSizeMask: boolean | null;
+};
+export type ConfigDraft = {
+        globalMode: 0 | 1 | 2;
+        targetPciBarSize: number;
+        skipS3Resume: boolean;
+        overrideBarSizeMask: boolean;
+        guardSetupChanges: boolean;
+        rules: GpuRule[];
+};
+export type GpuDevice = {
+        id: string;
+        name: string;
+        vendorId: number;
+        deviceId: number;
+        subsystemVendorId: number;
+        subsystemDeviceId: number;
+        bus: number;
+        device: number;
+        function: number;
+        bar0Base: string;
+        bar0Top: string;
+        currentBarSize: string;
+        dedicatedVideoMemory: string;
+        isTuring: boolean;
+        recommendedBarSizeSelector: number | null;
+        effectiveBarSizeSelector: number | null;
+};
+export type ApiError = { code: string; message: string; recoverable: boolean };
+
+export type PciLocation = { bus: number; device: number; function: number };
+export type GpuFingerprint = {
+        vendorId: number;
+        deviceId: number;
+        subsystemVendorId: number;
+        subsystemDeviceId: number;
+        location: PciLocation;
+        bridgeLocation: PciLocation;
+        bar0Base: number;
+        bar0Top: number;
+};
+export type MachineIdentity = {
+        boardManufacturer: string;
+        boardProduct: string;
+        boardVersion: string;
+        biosVendor: string;
+        biosVersion: string;
+        biosReleaseDate: string;
+        gpus: GpuFingerprint[];
+};
+export type SystemSnapshot = {
+        schemaVersion: number;
+        platform: {
+                operatingSystem: string;
+                architecture: string;
+                supported: boolean;
+                uefi: boolean;
+                elevated: boolean;
+        };
+        firmware: {
+                accessible: boolean;
+                privilegeEnabled: boolean;
+                configVariablePresent: boolean | null;
+                accessError: ApiError | null;
+        };
+        driverStatus: {
+                raw: string;
+                code: number;
+                kind: string;
+                label: string;
+                severity: string;
+                pciLocation: string | null;
+        } | null;
+        config: {
+                draft: ConfigDraft;
+                rawSize: number;
+                setupFingerprintPresent: boolean;
+                setupCrc: string;
+        } | null;
+        devices: GpuDevice[];
+        machineIdentity: MachineIdentity | null;
+        notices: { kind: string; message: string }[];
+};
+export type ValidationReport = {
+        valid: boolean;
+        errors: string[];
+        warnings: string[];
+        changed: boolean;
+        variableWillExist: boolean;
+        encodedSize: number;
+        affectedGpuIds: string[];
+        rebootRequired: boolean;
+};
+export type SaveReceipt = {
+        savedAtUnixMs: string;
+        bytesWritten: number;
+        variablePresent: boolean;
+        rebootRequired: boolean;
+        draft: ConfigDraft;
+};
+
+export const DEFAULT_DRAFT: ConfigDraft = {
+        globalMode: 0,
+        targetPciBarSize: 0,
+        skipS3Resume: false,
+        overrideBarSizeMask: false,
+        guardSetupChanges: true,
+        rules: [],
+};
