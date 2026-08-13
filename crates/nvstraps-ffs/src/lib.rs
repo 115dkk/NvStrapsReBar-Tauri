@@ -6,10 +6,11 @@ mod legacy_patch;
 
 pub use efi_compression::{EfiCompression, EfiCompressionError, efi_compress, efi_decompress};
 pub use firmware::{
-    FirmwareEnvelope, FirmwareInjection, InjectionError, LegacyFirmwarePatch,
-    LegacyFirmwarePatchApplication, LegacyFirmwarePatchChange, LegacyFirmwarePatchError,
-    LegacyFirmwarePatchPath, LegacyPatchSelection, UefiCapsuleHeader, inject_ffs,
-    inspect_firmware_envelope, patch_legacy_firmware,
+    FirmwareEnvelope, FirmwareInjection, InjectionError, LegacyFirmwareCatalogAnalysis,
+    LegacyFirmwarePatch, LegacyFirmwarePatchApplication, LegacyFirmwarePatchChange,
+    LegacyFirmwarePatchError, LegacyFirmwarePatchPath, LegacyFirmwareRuleAnalysis,
+    LegacyFirmwareRuleDisposition, LegacyPatchSelection, UefiCapsuleHeader,
+    analyze_legacy_firmware, inject_ffs, inspect_firmware_envelope, patch_legacy_firmware,
 };
 pub use legacy_patch::{
     LegacyPatchApplication, LegacyPatchCatalog, LegacyPatchChange, LegacyPatchError,

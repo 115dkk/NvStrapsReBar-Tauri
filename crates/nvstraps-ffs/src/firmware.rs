@@ -164,6 +164,25 @@ pub struct LegacyFirmwarePatchApplication {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LegacyFirmwareCatalogAnalysis {
+    pub catalog_sha256: String,
+    pub rules: Vec<LegacyFirmwareRuleAnalysis>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LegacyFirmwareRuleAnalysis {
+    pub rule_id: PatchRuleId,
+    pub disposition: LegacyFirmwareRuleDisposition,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum LegacyFirmwareRuleDisposition {
+    Applicable { expected_matches: usize },
+    Absent,
+    Blocked { reason: String },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LegacyFirmwarePatchChange {
     pub path: Vec<LegacyFirmwarePatchPath>,
     pub change: LegacyPatchChange,
@@ -327,6 +346,42 @@ pub fn patch_legacy_firmware(
             applications,
         },
     ))
+}
+
+pub fn analyze_legacy_firmware(
+    firmware: &[u8],
+    catalog: &LegacyPatchCatalog,
+) -> Result<LegacyFirmwareCatalogAnalysis, LegacyFirmwarePatchError> {
+    reject_uefi_capsule(firmware)?;
+    // Refuse a non-firmware input before turning individual scan failures into rule-level results.
+    // A blocked rule means that its target could not be proved safe, not that the image itself was
+    // accepted without a parseable top-level firmware volume.
+    top_level_firmware_volumes(firmware)?;
+
+    let rules = catalog
+        .rules
+        .iter()
+        .map(|rule| {
+            let disposition = match patch_rule_in_firmware(firmware, rule, &[], 0) {
+                Ok((_, changes)) if changes.is_empty() => LegacyFirmwareRuleDisposition::Absent,
+                Ok((_, changes)) => LegacyFirmwareRuleDisposition::Applicable {
+                    expected_matches: changes.len(),
+                },
+                Err(error) => LegacyFirmwareRuleDisposition::Blocked {
+                    reason: error.to_string(),
+                },
+            };
+            LegacyFirmwareRuleAnalysis {
+                rule_id: rule.id.clone(),
+                disposition,
+            }
+        })
+        .collect();
+
+    Ok(LegacyFirmwareCatalogAnalysis {
+        catalog_sha256: catalog.source_sha256.clone(),
+        rules,
+    })
 }
 
 fn reject_uefi_capsule(firmware: &[u8]) -> Result<(), InjectionError> {
@@ -1813,6 +1868,47 @@ mod tests {
                     ..
                 }
             ))
+        ));
+    }
+
+    #[test]
+    fn analyzes_legacy_matches_without_mutating_and_reports_unprovable_rules() {
+        let catalog = synthetic_legacy_catalog();
+        let rule = &catalog.rules[0];
+        let firmware = synthetic_legacy_firmware(rule, 0x10, &[0x00, 0xaa, 0xbb, 0x00]);
+
+        let analysis = analyze_legacy_firmware(&firmware, &catalog).unwrap();
+        assert_eq!(analysis.catalog_sha256, catalog.source_sha256);
+        assert_eq!(
+            analysis.rules[0].disposition,
+            LegacyFirmwareRuleDisposition::Applicable {
+                expected_matches: 1
+            }
+        );
+        assert_eq!(&firmware[101..103], &[0xaa, 0xbb]);
+
+        let (patched, _) = patch_legacy_firmware(
+            &firmware,
+            &catalog,
+            &[LegacyPatchSelection {
+                rule_id: rule.id.clone(),
+                expected_matches: 1,
+            }],
+        )
+        .unwrap();
+        assert_eq!(
+            analyze_legacy_firmware(&patched, &catalog).unwrap().rules[0].disposition,
+            LegacyFirmwareRuleDisposition::Absent
+        );
+
+        let unsupported =
+            synthetic_legacy_firmware(rule, SECTION_TYPE_COMPRESSION, &[0, 0, 0, 0, 1, 0]);
+        assert!(matches!(
+            analyze_legacy_firmware(&unsupported, &catalog)
+                .unwrap()
+                .rules[0]
+                .disposition,
+            LegacyFirmwareRuleDisposition::Blocked { .. }
         ));
     }
 
