@@ -1,5 +1,6 @@
 use nvstraps_core::pci::{
-    self, DeviceHeader, PciAddress, REBAR_CAPABILITY_OFFSET, REBAR_CONTROL_OFFSET,
+    self, BridgeSavedConfig, DeviceHeader, DeviceSavedConfig, PciAddress, REBAR_CAPABILITY_OFFSET,
+    REBAR_CONTROL_OFFSET, RemapError,
 };
 use nvstraps_core::status::EfiErrorLocation;
 use uefi::boot::{self, OpenProtocolAttributes, OpenProtocolParams, ScopedProtocol};
@@ -7,11 +8,19 @@ use uefi::proto::pci::PciIoAddress;
 use uefi::proto::pci::root_bridge::PciRootBridgeIo;
 use uefi::{Handle, Status};
 
+use crate::s3::S3Script;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PciFailure {
     pub location: EfiErrorLocation,
     pub status: Status,
     pub address: Option<PciAddress>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MappingFailure {
+    InvalidConfiguration(RemapError),
+    Firmware(PciFailure),
 }
 
 pub fn open_root_bridge(handle: Handle) -> Result<ScopedProtocol<PciRootBridgeIo>, Status> {
@@ -194,6 +203,190 @@ impl<'root> PciAccess<'root> {
         Ok(true)
     }
 
+    pub fn save_and_remap_bridge(
+        &mut self,
+        address: PciAddress,
+        base_address: u64,
+        inclusive_top_address: u64,
+        target_io_base_limit: u64,
+        resume: &mut S3Script,
+    ) -> Result<BridgeSavedConfig, MappingFailure> {
+        let saved = BridgeSavedConfig {
+            command: self
+                .read_u32(address, pci::COMMAND_OFFSET)
+                .map_err(|status| {
+                    MappingFailure::Firmware(bridge_config_failure(address, status))
+                })?,
+            io_base_limit: self.read_u32(address, pci::BRIDGE_IO_BASE_OFFSET).map_err(
+                |status| MappingFailure::Firmware(bridge_config_failure(address, status)),
+            )?,
+            memory_base_limit: self
+                .read_u32(address, pci::BRIDGE_MEMORY_BASE_OFFSET)
+                .map_err(|status| {
+                    MappingFailure::Firmware(bridge_config_failure(address, status))
+                })?,
+        };
+        let bus_configuration = self
+            .read_u32(address, pci::BRIDGE_BUS_OFFSET)
+            .map_err(|status| MappingFailure::Firmware(bridge_config_failure(address, status)))?;
+        let remap = pci::bridge_remap(
+            saved.command,
+            saved.io_base_limit,
+            base_address,
+            inclusive_top_address,
+            target_io_base_limit,
+        )
+        .map_err(MappingFailure::InvalidConfiguration)?;
+
+        let apply_result = (|| {
+            self.write_u32(
+                address,
+                pci::BRIDGE_MEMORY_BASE_OFFSET,
+                remap.memory_base_limit,
+            )
+            .map_err(|status| bridge_config_failure(address, status))?;
+            self.write_u32(address, pci::BRIDGE_IO_BASE_OFFSET, remap.io_base_limit)
+                .map_err(|status| bridge_config_failure(address, status))?;
+            self.write_u32(address, pci::COMMAND_OFFSET, remap.command)
+                .map_err(|status| bridge_config_failure(address, status))?;
+
+            resume
+                .pci_config_read_write_u32(
+                    address,
+                    pci::BRIDGE_BUS_OFFSET,
+                    bus_configuration & 0x00ff_ffff,
+                    0xff00_0000,
+                )
+                .map_err(|status| s3_failure(address, status))?;
+            resume
+                .pci_config_write_u32(
+                    address,
+                    pci::BRIDGE_MEMORY_BASE_OFFSET,
+                    remap.memory_base_limit,
+                )
+                .map_err(|status| s3_failure(address, status))?;
+            resume
+                .pci_config_read_write_u32(
+                    address,
+                    pci::BRIDGE_IO_BASE_OFFSET,
+                    remap.io_base_limit & 0x0000_ffff,
+                    0xffff_0000,
+                )
+                .map_err(|status| s3_failure(address, status))?;
+            resume
+                .pci_config_read_write_u32(
+                    address,
+                    pci::COMMAND_OFFSET,
+                    pci::REQUIRED_COMMAND_BITS,
+                    !pci::REQUIRED_COMMAND_BITS,
+                )
+                .map_err(|status| s3_failure(address, status))?;
+            Ok(())
+        })();
+
+        if let Err(failure) = apply_result {
+            if let Err(restore_failure) = self.restore_bridge(address, saved) {
+                return Err(MappingFailure::Firmware(restore_failure));
+            }
+            return Err(MappingFailure::Firmware(failure));
+        }
+        Ok(saved)
+    }
+
+    pub fn restore_bridge(
+        &mut self,
+        address: PciAddress,
+        saved: BridgeSavedConfig,
+    ) -> Result<(), PciFailure> {
+        let mut first_error = None;
+        for (offset, value) in [
+            (pci::COMMAND_OFFSET, saved.command),
+            (pci::BRIDGE_IO_BASE_OFFSET, saved.io_base_limit),
+            (pci::BRIDGE_MEMORY_BASE_OFFSET, saved.memory_base_limit),
+        ] {
+            if let Err(status) = self.write_u32(address, offset, value) {
+                first_error.get_or_insert(status);
+            }
+        }
+        first_error.map_or(Ok(()), |status| {
+            Err(PciFailure {
+                location: EfiErrorLocation::PciBridgeRestore,
+                status,
+                address: Some(address),
+            })
+        })
+    }
+
+    pub fn save_and_remap_device_bar0(
+        &mut self,
+        address: PciAddress,
+        base_address: u64,
+        resume: &mut S3Script,
+    ) -> Result<DeviceSavedConfig, MappingFailure> {
+        let saved = DeviceSavedConfig {
+            command: self
+                .read_u32(address, pci::COMMAND_OFFSET)
+                .map_err(|status| {
+                    MappingFailure::Firmware(device_config_failure(address, status))
+                })?,
+            bar0: self.read_u32(address, pci::BAR0_OFFSET).map_err(|status| {
+                MappingFailure::Firmware(device_config_failure(address, status))
+            })?,
+        };
+        let remap = pci::device_remap(saved.command, base_address)
+            .map_err(MappingFailure::InvalidConfiguration)?;
+
+        let apply_result = (|| {
+            self.write_u32(address, pci::BAR0_OFFSET, remap.bar0)
+                .map_err(|status| device_config_failure(address, status))?;
+            self.write_u32(address, pci::COMMAND_OFFSET, remap.command)
+                .map_err(|status| device_config_failure(address, status))?;
+            resume
+                .pci_config_write_u32(address, pci::BAR0_OFFSET, remap.bar0)
+                .map_err(|status| s3_failure(address, status))?;
+            resume
+                .pci_config_read_write_u32(
+                    address,
+                    pci::COMMAND_OFFSET,
+                    pci::REQUIRED_COMMAND_BITS,
+                    !pci::REQUIRED_COMMAND_BITS,
+                )
+                .map_err(|status| s3_failure(address, status))?;
+            Ok(())
+        })();
+
+        if let Err(failure) = apply_result {
+            if let Err(restore_failure) = self.restore_device_bar0(address, saved) {
+                return Err(MappingFailure::Firmware(restore_failure));
+            }
+            return Err(MappingFailure::Firmware(failure));
+        }
+        Ok(saved)
+    }
+
+    pub fn restore_device_bar0(
+        &mut self,
+        address: PciAddress,
+        saved: DeviceSavedConfig,
+    ) -> Result<(), PciFailure> {
+        let mut first_error = None;
+        for (offset, value) in [
+            (pci::COMMAND_OFFSET, saved.command),
+            (pci::BAR0_OFFSET, saved.bar0),
+        ] {
+            if let Err(status) = self.write_u32(address, offset, value) {
+                first_error.get_or_insert(status);
+            }
+        }
+        first_error.map_or(Ok(()), |status| {
+            Err(PciFailure {
+                location: EfiErrorLocation::PciDeviceBarRestore,
+                status,
+                address: Some(address),
+            })
+        })
+    }
+
     fn rebar_bar_offset(
         &mut self,
         address: PciAddress,
@@ -210,6 +403,30 @@ impl<'root> PciAccess<'root> {
             capability_offset = capability_offset.saturating_add(8);
         }
         Ok(None)
+    }
+}
+
+fn bridge_config_failure(address: PciAddress, status: Status) -> PciFailure {
+    PciFailure {
+        location: EfiErrorLocation::PciBridgeConfig,
+        status,
+        address: Some(address),
+    }
+}
+
+fn device_config_failure(address: PciAddress, status: Status) -> PciFailure {
+    PciFailure {
+        location: EfiErrorLocation::PciDeviceBarConfig,
+        status,
+        address: Some(address),
+    }
+}
+
+fn s3_failure(address: PciAddress, status: Status) -> PciFailure {
+    PciFailure {
+        location: EfiErrorLocation::WriteS3SaveStateProtocol,
+        status,
+        address: Some(address),
     }
 }
 

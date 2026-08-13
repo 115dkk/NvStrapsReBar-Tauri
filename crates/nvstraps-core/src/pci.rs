@@ -84,6 +84,19 @@ pub struct DeviceRemap {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct BridgeSavedConfig {
+    pub command: u32,
+    pub io_base_limit: u32,
+    pub memory_base_limit: u32,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DeviceSavedConfig {
+    pub command: u32,
+    pub bar0: u32,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RemapError {
     AddressAboveFourGiB,
     InvalidRange,
