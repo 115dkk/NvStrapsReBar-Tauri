@@ -646,6 +646,7 @@ impl StepEvidence {
             kind,
             EvidenceKind::OriginalFirmwareSha256
                 | EvidenceKind::RustDriverSha256
+                | EvidenceKind::LegacyPatchReceipt
                 | EvidenceKind::PatchedFirmwareSha256
         ) {
             value = Sha256Digest::parse(value)

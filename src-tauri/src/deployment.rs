@@ -57,6 +57,9 @@ pub struct ProfileComparison {
 pub struct FirmwarePreparation {
     pub plan: DeploymentPlan,
     pub driver: StoredArtifact,
+    pub legacy_patched_firmware: Option<StoredArtifact>,
+    pub legacy_patch_receipt: Option<StoredArtifact>,
+    pub legacy_patch: Option<LegacyPatchReceipt>,
     pub patched_firmware: Option<StoredArtifact>,
     pub injection: Option<InjectionReceipt>,
 }
@@ -70,6 +73,62 @@ pub struct InjectionReceipt {
     pub erase_polarity: bool,
     pub encapsulated_volume_image: bool,
     pub recompressed_guided_section: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LegacyPatchReceipt {
+    pub upstream_commit: String,
+    pub original_firmware_sha256: String,
+    pub patched_firmware_sha256: String,
+    pub catalogs: Vec<LegacyCatalogPatchReceipt>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LegacyCatalogPatchReceipt {
+    pub catalog: LegacyPatchCatalogFile,
+    pub source_sha256: String,
+    pub applications: Vec<LegacyRulePatchReceipt>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LegacyRulePatchReceipt {
+    pub rule_id: String,
+    pub expected_matches: usize,
+    pub changes: Vec<LegacyPatchChangeReceipt>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LegacyPatchChangeReceipt {
+    pub path: Vec<LegacyPatchPathReceipt>,
+    pub offset: usize,
+    pub before_hex: String,
+    pub after_hex: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum LegacyPatchPathReceipt {
+    FirmwareVolume {
+        offset: usize,
+    },
+    FirmwareFile {
+        offset: usize,
+        file_guid_hex: String,
+    },
+    Section {
+        offset: usize,
+        content_offset: usize,
+        section_type: u8,
+    },
+    LzmaPayload,
+    UncompressedPayload,
+    EfiCompressedPayload {
+        compression: String,
+    },
 }
 
 const LEGACY_PATCH_UPSTREAM_COMMIT: &str = "9c80fdb2cd3db94bdd19c58bd00d5ecf822f6430";
@@ -264,6 +323,7 @@ fn prepare_from_bytes(
     mut plan: DeploymentPlan,
     bundled_driver: &[u8],
 ) -> BackendResult<FirmwarePreparation> {
+    validate_builtin_legacy_profile(profile)?;
     plan.validate_for(profile).map_err(|error| {
         BackendError::Deployment(format!("deployment plan is invalid: {error}"))
     })?;
@@ -296,14 +356,51 @@ fn prepare_from_bytes(
         artifact
     };
 
-    if profile.board_path == BoardPath::LegacyAbove4g {
-        return Ok(FirmwarePreparation {
-            plan,
-            driver,
-            patched_firmware: None,
-            injection: None,
-        });
-    }
+    let (legacy_patched_firmware, legacy_patch_receipt, legacy_patch) =
+        if profile.board_path == BoardPath::LegacyAbove4g {
+            if step_is_completed(&plan, StepId::ApplyLegacyBoardPatches) {
+                load_legacy_patch_artifacts(store, profile, &plan)?
+            } else {
+                require_active_step(&plan, StepId::ApplyLegacyBoardPatches)?;
+                let original = read_preserved_original(store, profile)?;
+                let (patched, receipt) = apply_builtin_legacy_patches(profile, &original)?;
+                let patched_artifact = store
+                    .preserve_artifact(profile, ArtifactKind::LegacyPatchedFirmware, &patched)
+                    .map_err(BackendError::from)?;
+                if receipt.patched_firmware_sha256 != patched_artifact.sha256.as_str() {
+                    return Err(BackendError::Deployment(
+                        "legacy patch receipt does not match the persisted artifact".into(),
+                    ));
+                }
+                let receipt_bytes = serde_json::to_vec_pretty(&receipt).map_err(|error| {
+                    BackendError::Deployment(format!(
+                        "legacy patch receipt could not be encoded: {error}"
+                    ))
+                })?;
+                let receipt_artifact = store
+                    .preserve_artifact(profile, ArtifactKind::LegacyPatchReceipt, &receipt_bytes)
+                    .map_err(BackendError::from)?;
+                plan.complete(
+                    StepId::ApplyLegacyBoardPatches,
+                    StepEvidence::new(
+                        EvidenceKind::LegacyPatchReceipt,
+                        receipt_artifact.sha256.to_string(),
+                    )
+                    .map_err(|error| BackendError::Deployment(error.to_string()))?,
+                )
+                .map_err(|error| BackendError::Deployment(error.to_string()))?;
+                store
+                    .save_plan(profile, &plan)
+                    .map_err(BackendError::from)?;
+                (
+                    Some(patched_artifact),
+                    Some(receipt_artifact),
+                    Some(receipt),
+                )
+            }
+        } else {
+            (None, None, None)
+        };
 
     if step_is_completed(&plan, StepId::VerifyPatchedArtifact) {
         let (artifact, _) = store
@@ -317,6 +414,9 @@ fn prepare_from_bytes(
         return Ok(FirmwarePreparation {
             plan,
             driver,
+            legacy_patched_firmware,
+            legacy_patch_receipt,
+            legacy_patch,
             patched_firmware: Some(artifact),
             injection: None,
         });
@@ -326,15 +426,15 @@ fn prepare_from_bytes(
     let (_, driver_bytes) = store
         .load_artifact(profile, ArtifactKind::RustDriverFfs)
         .map_err(BackendError::from)?;
-    let original_path = store
-        .original_firmware_path(&profile.profile_id)
-        .map_err(BackendError::from)?;
-    let original = fs::read(&original_path).map_err(|error| {
-        BackendError::Deployment(format!(
-            "preserved original firmware could not be read: {error}"
-        ))
-    })?;
-    let (patched, injection) = nvstraps_ffs::inject_ffs(&original, &driver_bytes)
+    let base_firmware = if profile.board_path == BoardPath::LegacyAbove4g {
+        store
+            .load_artifact(profile, ArtifactKind::LegacyPatchedFirmware)
+            .map_err(BackendError::from)?
+            .1
+    } else {
+        read_preserved_original(store, profile)?
+    };
+    let (patched, injection) = nvstraps_ffs::inject_ffs(&base_firmware, &driver_bytes)
         .map_err(|error| BackendError::Deployment(format!("firmware injection failed: {error}")))?;
     match nvstraps_ffs::inject_ffs(&patched, &driver_bytes) {
         Err(nvstraps_ffs::InjectionError::DriverAlreadyPresent) => {}
@@ -368,6 +468,9 @@ fn prepare_from_bytes(
     Ok(FirmwarePreparation {
         plan,
         driver,
+        legacy_patched_firmware,
+        legacy_patch_receipt,
+        legacy_patch,
         patched_firmware: Some(patched_firmware),
         injection: Some(InjectionReceipt {
             firmware_volume_offset: injection.firmware_volume_offset,
@@ -378,6 +481,267 @@ fn prepare_from_bytes(
             recompressed_guided_section: injection.recompressed_guided_section,
         }),
     })
+}
+
+fn read_preserved_original(
+    store: &DeploymentStore,
+    profile: &MachineProfile,
+) -> BackendResult<Vec<u8>> {
+    let original_path = store
+        .original_firmware_path(&profile.profile_id)
+        .map_err(BackendError::from)?;
+    fs::read(&original_path).map_err(|error| {
+        BackendError::Deployment(format!(
+            "preserved original firmware could not be read: {error}"
+        ))
+    })
+}
+
+fn apply_builtin_legacy_patches(
+    profile: &MachineProfile,
+    original: &[u8],
+) -> BackendResult<(Vec<u8>, LegacyPatchReceipt)> {
+    let legacy = profile.legacy_patches.as_ref().ok_or_else(|| {
+        BackendError::Deployment("legacy patch profile is missing after validation".into())
+    })?;
+    let catalogs = builtin_legacy_catalogs()?;
+    let mut patched = original.to_vec();
+    let mut catalog_receipts = Vec::new();
+
+    for catalog in &catalogs {
+        let selected: Vec<_> = catalog
+            .parsed
+            .rules
+            .iter()
+            .filter_map(|rule| {
+                legacy
+                    .selections
+                    .iter()
+                    .find(|selection| {
+                        selection.catalog == catalog.catalog
+                            && selection.rule_id == rule.id.as_str()
+                    })
+                    .map(|selection| nvstraps_ffs::LegacyPatchSelection {
+                        rule_id: rule.id.clone(),
+                        expected_matches: selection.expected_matches as usize,
+                    })
+            })
+            .collect();
+        if selected.is_empty() {
+            continue;
+        }
+        let (next, report) =
+            nvstraps_ffs::patch_legacy_firmware(&patched, &catalog.parsed, &selected).map_err(
+                |error| {
+                    BackendError::Deployment(format!(
+                        "legacy firmware patching failed in catalog {:?}: {error}",
+                        catalog.catalog
+                    ))
+                },
+            )?;
+        patched = next;
+        catalog_receipts.push(LegacyCatalogPatchReceipt {
+            catalog: catalog.catalog,
+            source_sha256: report.catalog_sha256,
+            applications: report
+                .applications
+                .into_iter()
+                .map(|application| LegacyRulePatchReceipt {
+                    rule_id: application.rule_id.as_str().to_owned(),
+                    expected_matches: application.expected_matches,
+                    changes: application
+                        .changes
+                        .into_iter()
+                        .map(map_legacy_patch_change)
+                        .collect(),
+                })
+                .collect(),
+        });
+    }
+
+    if catalog_receipts.len() != legacy.catalogs.len() {
+        return Err(BackendError::Deployment(
+            "legacy patch execution did not cover every pinned catalog".into(),
+        ));
+    }
+    let receipt = LegacyPatchReceipt {
+        upstream_commit: legacy.upstream_commit.clone(),
+        original_firmware_sha256: Sha256Digest::from_bytes(original).to_string(),
+        patched_firmware_sha256: Sha256Digest::from_bytes(&patched).to_string(),
+        catalogs: catalog_receipts,
+    };
+    validate_legacy_patch_receipt(profile, &receipt)?;
+    Ok((patched, receipt))
+}
+
+fn map_legacy_patch_change(
+    change: nvstraps_ffs::LegacyFirmwarePatchChange,
+) -> LegacyPatchChangeReceipt {
+    LegacyPatchChangeReceipt {
+        path: change
+            .path
+            .into_iter()
+            .map(|part| match part {
+                nvstraps_ffs::LegacyFirmwarePatchPath::FirmwareVolume { offset } => {
+                    LegacyPatchPathReceipt::FirmwareVolume { offset }
+                }
+                nvstraps_ffs::LegacyFirmwarePatchPath::FirmwareFile { offset, file_guid } => {
+                    LegacyPatchPathReceipt::FirmwareFile {
+                        offset,
+                        file_guid_hex: hex_bytes(&file_guid),
+                    }
+                }
+                nvstraps_ffs::LegacyFirmwarePatchPath::Section {
+                    offset,
+                    content_offset,
+                    section_type,
+                } => LegacyPatchPathReceipt::Section {
+                    offset,
+                    content_offset,
+                    section_type,
+                },
+                nvstraps_ffs::LegacyFirmwarePatchPath::LzmaPayload => {
+                    LegacyPatchPathReceipt::LzmaPayload
+                }
+                nvstraps_ffs::LegacyFirmwarePatchPath::UncompressedPayload => {
+                    LegacyPatchPathReceipt::UncompressedPayload
+                }
+                nvstraps_ffs::LegacyFirmwarePatchPath::EfiCompressedPayload { compression } => {
+                    LegacyPatchPathReceipt::EfiCompressedPayload {
+                        compression: match compression {
+                            nvstraps_ffs::EfiCompression::EfiStandard => "efiStandard",
+                            nvstraps_ffs::EfiCompression::Tiano => "tiano",
+                        }
+                        .to_owned(),
+                    }
+                }
+            })
+            .collect(),
+        offset: change.change.offset,
+        before_hex: hex_bytes(&change.change.before),
+        after_hex: hex_bytes(&change.change.after),
+    }
+}
+
+fn load_legacy_patch_artifacts(
+    store: &DeploymentStore,
+    profile: &MachineProfile,
+    plan: &DeploymentPlan,
+) -> BackendResult<(
+    Option<StoredArtifact>,
+    Option<StoredArtifact>,
+    Option<LegacyPatchReceipt>,
+)> {
+    let (patched_artifact, _) = store
+        .load_artifact(profile, ArtifactKind::LegacyPatchedFirmware)
+        .map_err(BackendError::from)?;
+    let (receipt_artifact, receipt_bytes) = store
+        .load_artifact(profile, ArtifactKind::LegacyPatchReceipt)
+        .map_err(BackendError::from)?;
+    require_step_value(
+        plan,
+        StepId::ApplyLegacyBoardPatches,
+        receipt_artifact.sha256.as_str(),
+    )?;
+    let receipt: LegacyPatchReceipt = serde_json::from_slice(&receipt_bytes).map_err(|error| {
+        BackendError::Deployment(format!(
+            "persisted legacy patch receipt is invalid: {error}"
+        ))
+    })?;
+    validate_legacy_patch_receipt(profile, &receipt)?;
+    if receipt.patched_firmware_sha256 != patched_artifact.sha256.as_str() {
+        return Err(BackendError::Deployment(
+            "persisted legacy patch artifact does not match its receipt".into(),
+        ));
+    }
+    Ok((
+        Some(patched_artifact),
+        Some(receipt_artifact),
+        Some(receipt),
+    ))
+}
+
+fn validate_legacy_patch_receipt(
+    profile: &MachineProfile,
+    receipt: &LegacyPatchReceipt,
+) -> BackendResult<()> {
+    let legacy = profile.legacy_patches.as_ref().ok_or_else(|| {
+        BackendError::Deployment("legacy patch receipt belongs to a non-legacy profile".into())
+    })?;
+    if receipt.upstream_commit != legacy.upstream_commit
+        || receipt.original_firmware_sha256 != profile.original_firmware.sha256.as_str()
+        || receipt.catalogs.len() != legacy.catalogs.len()
+    {
+        return Err(BackendError::Deployment(
+            "legacy patch receipt does not match its machine profile".into(),
+        ));
+    }
+    let mut recorded_rules = Vec::new();
+    for catalog in &receipt.catalogs {
+        let Some(pin) = legacy
+            .catalogs
+            .iter()
+            .find(|pin| pin.catalog == catalog.catalog)
+        else {
+            return Err(BackendError::Deployment(
+                "legacy patch receipt contains an unpinned catalog".into(),
+            ));
+        };
+        if pin.source_sha256.as_str() != catalog.source_sha256 {
+            return Err(BackendError::Deployment(
+                "legacy patch receipt catalog hash does not match its profile".into(),
+            ));
+        }
+        for application in &catalog.applications {
+            let Some(selection) = legacy.selections.iter().find(|selection| {
+                selection.catalog == catalog.catalog && selection.rule_id == application.rule_id
+            }) else {
+                return Err(BackendError::Deployment(
+                    "legacy patch receipt contains an unselected rule".into(),
+                ));
+            };
+            if usize::from(selection.expected_matches) != application.expected_matches
+                || application.changes.len() != application.expected_matches
+            {
+                return Err(BackendError::Deployment(
+                    "legacy patch receipt has an unexpected match count".into(),
+                ));
+            }
+            recorded_rules.push((
+                catalog.catalog,
+                application.rule_id.as_str(),
+                application.expected_matches,
+            ));
+        }
+    }
+    recorded_rules.sort_unstable();
+    let mut expected_rules: Vec<_> = legacy
+        .selections
+        .iter()
+        .map(|selection| {
+            (
+                selection.catalog,
+                selection.rule_id.as_str(),
+                usize::from(selection.expected_matches),
+            )
+        })
+        .collect();
+    expected_rules.sort_unstable();
+    if recorded_rules != expected_rules {
+        return Err(BackendError::Deployment(
+            "legacy patch receipt does not cover every selected rule".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn hex_bytes(bytes: &[u8]) -> String {
+    use std::fmt::Write as _;
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        write!(&mut output, "{byte:02x}").expect("writing to a string cannot fail");
+    }
+    output
 }
 
 fn require_active_step(plan: &DeploymentPlan, expected: StepId) -> BackendResult<()> {
@@ -751,6 +1115,50 @@ mod tests {
         firmware
     }
 
+    fn synthetic_legacy_firmware() -> Vec<u8> {
+        let catalogs = builtin_legacy_catalogs().unwrap();
+        let catalog = catalogs
+            .iter()
+            .find(|catalog| catalog.catalog == LegacyPatchCatalogFile::General)
+            .unwrap();
+        let rule = &catalog.parsed.rules[0];
+        assert!(!rule.find_pattern().contains('.'));
+        let pattern = decode_hex(rule.find_pattern());
+
+        let mut section = vec![0_u8; 4];
+        let section_size = section.len() + pattern.len();
+        section[..3].copy_from_slice(&(section_size as u32).to_le_bytes()[..3]);
+        section[3] = rule.section_type;
+        section.extend_from_slice(&pattern);
+
+        let file_size = 24 + section.len();
+        let mut file = vec![0_u8; 24];
+        file[..16].copy_from_slice(&rule.file_guid);
+        file[18] = 0x06;
+        file[19] = 0x40;
+        file[20..23].copy_from_slice(&(file_size as u32).to_le_bytes()[..3]);
+        file[16] = checksum8(&file);
+        file[17] = checksum8(&section);
+        file[23] = !0x07;
+        file.extend_from_slice(&section);
+
+        let mut firmware = synthetic_firmware();
+        firmware[96..96 + file.len()].copy_from_slice(&file);
+        firmware
+    }
+
+    fn decode_hex(value: &str) -> Vec<u8> {
+        value
+            .as_bytes()
+            .chunks_exact(2)
+            .map(|pair| u8::from_str_radix(std::str::from_utf8(pair).unwrap(), 16).unwrap())
+            .collect()
+    }
+
+    fn checksum8(bytes: &[u8]) -> u8 {
+        0_u8.wrapping_sub(bytes.iter().fold(0_u8, |sum, byte| sum.wrapping_add(*byte)))
+    }
+
     #[test]
     fn profile_request_cannot_bypass_recovery_validation() {
         let request = CreateProfileRequest {
@@ -849,10 +1257,10 @@ mod tests {
     }
 
     #[test]
-    fn legacy_preparation_stops_before_board_specific_patches() {
+    fn legacy_preparation_persists_patches_receipt_and_final_driver() {
         let directory = TestDirectory::new();
         let source = directory.0.join("vendor.bin");
-        fs::write(&source, b"legacy vendor firmware").unwrap();
+        fs::write(&source, synthetic_legacy_firmware()).unwrap();
         let profile = profile(
             BoardPath::LegacyAbove4g,
             FirmwareFingerprint::inspect(&source).unwrap(),
@@ -863,12 +1271,49 @@ mod tests {
         let prepared =
             prepare_from_bytes(&store, &profile, provisioned.plan, &synthetic_driver_ffs())
                 .unwrap();
-        assert_eq!(prepared.plan.revision, 4);
+        assert_eq!(prepared.plan.revision, 6);
         assert_eq!(
             prepared.plan.active_step().unwrap().id,
-            StepId::ApplyLegacyBoardPatches
+            StepId::FlashWithVendorRoute
         );
-        assert!(prepared.patched_firmware.is_none());
-        assert!(prepared.injection.is_none());
+        assert!(prepared.legacy_patched_firmware.is_some());
+        assert!(prepared.legacy_patch_receipt.is_some());
+        assert_eq!(prepared.legacy_patch.as_ref().unwrap().catalogs.len(), 1);
+        assert!(prepared.patched_firmware.is_some());
+        assert!(prepared.injection.is_some());
+        let mut forged_receipt = prepared.legacy_patch.clone().unwrap();
+        let duplicate = forged_receipt.catalogs[0].applications[0].clone();
+        forged_receipt.catalogs[0].applications.push(duplicate);
+        assert!(validate_legacy_patch_receipt(&profile, &forged_receipt).is_err());
+
+        let (_, legacy_patched) = store
+            .load_artifact(&profile, ArtifactKind::LegacyPatchedFirmware)
+            .unwrap();
+        let catalogs = builtin_legacy_catalogs().unwrap();
+        let catalog = catalogs
+            .iter()
+            .find(|catalog| catalog.catalog == LegacyPatchCatalogFile::General)
+            .unwrap();
+        let rule = &catalog.parsed.rules[0];
+        assert!(matches!(
+            nvstraps_ffs::patch_legacy_firmware(
+                &legacy_patched,
+                &catalog.parsed,
+                &[nvstraps_ffs::LegacyPatchSelection {
+                    rule_id: rule.id.clone(),
+                    expected_matches: 1,
+                }]
+            ),
+            Err(nvstraps_ffs::LegacyFirmwarePatchError::InvalidRule(
+                nvstraps_ffs::LegacyPatchError::MatchCount { actual: 0, .. }
+            ))
+        ));
+
+        let repeated =
+            prepare_from_bytes(&store, &profile, prepared.plan, &synthetic_driver_ffs()).unwrap();
+        assert_eq!(repeated.plan.revision, 6);
+        assert!(repeated.injection.is_none());
+        assert_eq!(repeated.patched_firmware, prepared.patched_firmware);
+        assert_eq!(repeated.legacy_patch, prepared.legacy_patch);
     }
 }
