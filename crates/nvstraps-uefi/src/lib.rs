@@ -4,6 +4,7 @@
 extern crate alloc;
 
 pub mod engine;
+pub mod host_bridge;
 pub mod pci;
 pub mod s3;
 pub mod setup_variable;
