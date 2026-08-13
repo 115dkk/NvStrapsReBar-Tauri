@@ -8,7 +8,10 @@ use tauri::{AppHandle, State};
 
 use crate::{
     app::{AppState, SaveReceipt, save_config_inner},
-    config::{ConfigDraft, DeploymentConfigRecommendation, recommend_deployment_config},
+    config::{
+        ConfigDraft, DeploymentConfigRecommendation, recommend_deployment_config,
+        require_recommended_deployment_config,
+    },
     deployment::load_exact_deployment,
     error::{ApiError, BackendError, BackendResult, CommandResult},
     firmware::{STATUS_VARIABLE_NAME, read_variable},
@@ -145,6 +148,7 @@ fn save_deployment_config_command(
         .plan
         .require_active(StepId::WriteNvstrapsConfiguration)
         .map_err(BackendError::from)?;
+    require_recommended_deployment_config(&request.draft, &exact.devices)?;
 
     // The existing writer re-enumerates topology, validates, writes the EFI variable, and performs
     // an exact byte-for-byte readback. Only that successful receipt may advance the durable plan.

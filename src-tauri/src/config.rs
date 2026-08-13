@@ -160,6 +160,19 @@ pub fn recommend_deployment_config(
     })
 }
 
+pub fn require_recommended_deployment_config(
+    draft: &ConfigDraft,
+    devices: &[GpuDevice],
+) -> BackendResult<()> {
+    let expected = recommend_deployment_config(devices)?;
+    if expected.draft != *draft {
+        return Err(invalid(
+            "the deployment configuration no longer matches the guarded backend recommendation; refresh it before saving",
+        ));
+    }
+    Ok(())
+}
+
 pub fn draft_from_config(config: &NvConfig) -> ConfigDraft {
     ConfigDraft {
         global_mode: config.global_mode(),
@@ -537,5 +550,25 @@ mod tests {
         device.is_turing = false;
         device.recommended_bar_size_selector = None;
         assert!(recommend_deployment_config(&[device]).is_err());
+    }
+
+    #[test]
+    fn deployment_write_requires_the_fresh_backend_recommendation() {
+        let device = sample_device(0x1E84);
+        let recommendation = recommend_deployment_config(core::slice::from_ref(&device)).unwrap();
+        require_recommended_deployment_config(
+            &recommendation.draft,
+            core::slice::from_ref(&device),
+        )
+        .unwrap();
+
+        let mut changed = recommendation.draft;
+        changed.override_bar_size_mask = true;
+        assert!(
+            require_recommended_deployment_config(&changed, core::slice::from_ref(&device))
+                .unwrap_err()
+                .to_string()
+                .contains("guarded backend recommendation")
+        );
     }
 }
