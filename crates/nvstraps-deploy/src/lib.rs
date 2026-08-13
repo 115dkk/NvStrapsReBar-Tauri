@@ -15,11 +15,13 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 mod store;
+mod workflow;
 
 pub use store::{
     ArtifactKind, DeploymentPackageFile, DeploymentPackageManifest, DeploymentPackageReceipt,
     DeploymentStore, PackageFilePurpose, ProvisionedDeployment, StoreError, StoredArtifact,
 };
+pub use workflow::DeploymentWorkflow;
 
 pub const PROFILE_SCHEMA_VERSION: u8 = 3;
 pub const PLAN_SCHEMA_VERSION: u8 = 1;
