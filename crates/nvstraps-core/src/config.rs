@@ -421,6 +421,60 @@ impl Config {
             .map(|config| (config.vendor_id, config.device_id))
     }
 
+    pub fn upsert_gpu_config(&mut self, discovered: GpuConfig) -> Result<bool, ConfigError> {
+        if let Some(existing) = self.gpu_configs.iter_mut().find(|config| {
+            config.bus == discovered.bus
+                && config.device == discovered.device
+                && config.function == discovered.function
+        }) {
+            let changed = *existing != discovered;
+            *existing = discovered;
+            return Ok(changed);
+        }
+        if self.gpu_configs.len() >= MAX_GPU_COUNT {
+            return Err(ConfigError::TooManyGpuConfigs);
+        }
+        self.gpu_configs.push(discovered);
+        Ok(true)
+    }
+
+    pub fn upsert_bridge_config(&mut self, discovered: BridgeConfig) -> Result<bool, ConfigError> {
+        if let Some(existing) = self.bridge_configs.iter_mut().find(|config| {
+            config.bus == discovered.bus
+                && config.device == discovered.device
+                && config.function == discovered.function
+        }) {
+            let changed = *existing != discovered;
+            *existing = discovered;
+            return Ok(changed);
+        }
+        if self.bridge_configs.len() >= MAX_BRIDGE_COUNT {
+            return Err(ConfigError::TooManyBridgeConfigs);
+        }
+        self.bridge_configs.push(discovered);
+        Ok(true)
+    }
+
+    pub fn clear_hardware_inventory(&mut self) -> bool {
+        let changed = !self.gpu_configs.is_empty() || !self.bridge_configs.is_empty();
+        self.gpu_configs.clear();
+        self.bridge_configs.clear();
+        changed
+    }
+
+    pub fn record_setup_crc(&mut self, crc: u64) -> bool {
+        let changed = self.setup_var_crc != crc || !self.has_setup_crc();
+        self.setup_var_crc = crc;
+        self.option_flags |= OPTION_HAS_SETUP_CRC;
+        changed
+    }
+
+    pub fn clear_for_safety(&mut self) -> bool {
+        let changed = *self != Self::default();
+        *self = Self::default();
+        changed
+    }
+
     fn validate_counts(&self) -> Result<(), ConfigError> {
         if self.selectors.len() > MAX_GPU_COUNT {
             return Err(ConfigError::TooManySelectors);
@@ -591,5 +645,64 @@ mod tests {
     fn empty_configuration_encodes_as_variable_deletion() {
         assert!(Config::default().encode().unwrap().is_empty());
         assert_eq!(Config::decode(&[]).unwrap(), Config::default());
+    }
+
+    #[test]
+    fn discovered_hardware_is_upserted_by_pci_location() {
+        let mut config = sample_config();
+        let same_gpu = config.gpu_configs[0].clone();
+        assert!(!config.upsert_gpu_config(same_gpu.clone()).unwrap());
+
+        let mut changed_gpu = same_gpu;
+        changed_gpu.bar0_top += 0x1000;
+        assert!(config.upsert_gpu_config(changed_gpu.clone()).unwrap());
+        assert_eq!(config.gpu_configs.len(), 1);
+        assert_eq!(config.gpu_configs[0], changed_gpu);
+
+        let same_bridge = config.bridge_configs[0].clone();
+        assert!(!config.upsert_bridge_config(same_bridge.clone()).unwrap());
+        let mut changed_bridge = same_bridge;
+        changed_bridge.secondary_bus = 2;
+        assert!(config.upsert_bridge_config(changed_bridge.clone()).unwrap());
+        assert_eq!(config.bridge_configs[0], changed_bridge);
+    }
+
+    #[test]
+    fn inventory_clear_tracks_either_record_kind() {
+        let mut config = sample_config();
+        config.bridge_configs.clear();
+        assert!(config.clear_hardware_inventory());
+        assert!(config.gpu_configs.is_empty());
+        assert!(config.bridge_configs.is_empty());
+        assert!(!config.clear_hardware_inventory());
+    }
+
+    #[test]
+    fn discovered_hardware_never_exceeds_the_wire_capacity() {
+        let mut config = sample_config();
+        let template = config.gpu_configs[0].clone();
+        for bus in 2..=MAX_GPU_COUNT as u8 {
+            let mut gpu = template.clone();
+            gpu.bus = bus;
+            assert!(config.upsert_gpu_config(gpu).unwrap());
+        }
+        let mut overflow = template;
+        overflow.bus = 0xfe;
+        assert_eq!(
+            config.upsert_gpu_config(overflow),
+            Err(ConfigError::TooManyGpuConfigs)
+        );
+    }
+
+    #[test]
+    fn setup_crc_and_safety_clear_report_real_changes() {
+        let mut config = Config::default();
+        assert!(config.record_setup_crc(0x1234));
+        assert!(config.has_setup_crc());
+        assert_eq!(config.setup_var_crc, 0x1234);
+        assert!(!config.record_setup_crc(0x1234));
+        assert!(config.clear_for_safety());
+        assert_eq!(config, Config::default());
+        assert!(!config.clear_for_safety());
     }
 }
