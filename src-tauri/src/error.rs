@@ -13,6 +13,8 @@ pub enum BackendError {
     InvalidConfiguration(String),
     #[error("GPU inventory failed: {0}")]
     DeviceInventory(String),
+    #[error("machine identity failed: {0}")]
+    MachineIdentity(String),
     #[error("application state could not be locked")]
     StatePoisoned,
     #[error("failed to relaunch with administrator privileges: {0}")]
@@ -62,6 +64,7 @@ impl From<BackendError> for ApiError {
             BackendError::FirmwareUnavailable { .. } => ("firmware_unavailable", true, None),
             BackendError::InvalidConfiguration(_) => ("invalid_configuration", true, None),
             BackendError::DeviceInventory(_) => ("device_inventory_failed", true, None),
+            BackendError::MachineIdentity(_) => ("machine_identity_failed", true, None),
             BackendError::StatePoisoned => ("state_unavailable", false, None),
             BackendError::Elevation(_) => ("elevation_failed", true, None),
         };

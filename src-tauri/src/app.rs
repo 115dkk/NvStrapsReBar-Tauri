@@ -3,6 +3,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use nvstraps_deploy::MachineIdentity;
 use serde::Serialize;
 use tauri::{AppHandle, State};
 
@@ -17,6 +18,7 @@ use crate::{
         CONFIG_VARIABLE_NAME, STATUS_VARIABLE_NAME, inspect_access, read_variable,
         relaunch_elevated, write_variable,
     },
+    machine::collect_machine_identity,
     status::DriverStatus,
 };
 
@@ -42,6 +44,7 @@ pub struct SystemSnapshot {
     pub driver_status: Option<DriverStatus>,
     pub config: Option<ConfigView>,
     pub devices: Vec<GpuDevice>,
+    pub machine_identity: Option<MachineIdentity>,
     pub notices: Vec<Notice>,
 }
 
@@ -219,6 +222,12 @@ pub fn request_elevation(app: AppHandle) -> CommandResult<()> {
     Ok(())
 }
 
+#[tauri::command]
+pub fn get_machine_identity() -> CommandResult<MachineIdentity> {
+    let devices = enumerate_gpus().map_err(ApiError::from)?;
+    collect_machine_identity(&devices).map_err(ApiError::from)
+}
+
 fn refresh_snapshot(state: &AppState) -> BackendResult<SystemSnapshot> {
     let access = inspect_access();
     let mut devices = enumerate_gpus()?;
@@ -277,6 +286,16 @@ fn refresh_snapshot(state: &AppState) -> BackendResult<SystemSnapshot> {
             message: "No NVIDIA display adapters were detected.".into(),
         });
     }
+    let machine_identity = match collect_machine_identity(&devices) {
+        Ok(identity) => Some(identity),
+        Err(error) => {
+            notices.push(Notice {
+                kind: "warning",
+                message: format!("Machine identity could not be pinned: {error}"),
+            });
+            None
+        }
+    };
     if let Some(current) = &config {
         for device in &mut devices {
             device.effective_bar_size_selector = effective_bar_size(current, device);
@@ -312,6 +331,7 @@ fn refresh_snapshot(state: &AppState) -> BackendResult<SystemSnapshot> {
         driver_status,
         config: config_view,
         devices: devices.clone(),
+        machine_identity,
         notices,
     };
 

@@ -3,6 +3,7 @@ mod config;
 mod devices;
 mod error;
 mod firmware;
+mod machine;
 mod status;
 
 pub fn run() {
@@ -14,6 +15,7 @@ pub fn run() {
             app::validate_config,
             app::save_config,
             app::request_elevation,
+            app::get_machine_identity,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run NvStrapsReBar");
