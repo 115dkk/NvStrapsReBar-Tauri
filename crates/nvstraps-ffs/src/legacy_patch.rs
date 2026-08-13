@@ -531,22 +531,6 @@ mod tests {
     }
 
     #[test]
-    fn parses_every_pinned_official_catalog() {
-        let catalogs = [
-            (include_str!("../../../UEFIPatch/patches.txt"), 13),
-            (include_str!("../../../UEFIPatch/HswAbove4G.txt"), 4),
-            (include_str!("../../../UEFIPatch/IvyUSB3.txt"), 1),
-            (include_str!("../../../UEFIPatch/HswUSB3.txt"), 1),
-            (include_str!("../../../UEFIPatch/BdwUSB3.txt"), 1),
-        ];
-
-        for (source, expected_rules) in catalogs {
-            let catalog = LegacyPatchCatalog::parse(source).unwrap();
-            assert_eq!(catalog.rules.len(), expected_rules);
-        }
-    }
-
-    #[test]
     fn catalog_digest_is_stable_across_git_line_endings() {
         let lf = format!("# rule\n{GUID} 10 P:AABB:CCDD\n");
         let crlf = lf.replace('\n', "\r\n");

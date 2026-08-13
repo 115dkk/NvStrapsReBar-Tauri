@@ -1831,12 +1831,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "nvstraps-legacy"
+version = "0.1.0"
+dependencies = [
+ "nvstraps-deploy",
+ "nvstraps-ffs",
+ "serde",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "nvstraps-rebar"
 version = "0.1.0"
 dependencies = [
  "nvstraps-core",
  "nvstraps-deploy",
  "nvstraps-ffs",
+ "nvstraps-legacy",
  "quick-xml 0.41.0",
  "serde",
  "serde_json",

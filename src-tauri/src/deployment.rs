@@ -5,9 +5,13 @@ use std::{
 
 use nvstraps_deploy::{
     ArtifactKind, BoardPath, DeploymentPackageReceipt, DeploymentPlan, DeploymentStore,
-    DeploymentWorkflow, FirmwareFingerprint, FirmwareInstallRoute, LegacyPatchCatalogFile,
-    LegacyPatchProfile, LegacyPatchRisk, MachineIdentity, MachineProfile, ProfileDifference,
-    ProfileMatch, RecoveryCapability, Sha256Digest, StepId, StoredArtifact,
+    DeploymentWorkflow, FirmwareFingerprint, FirmwareInstallRoute, LegacyPatchProfile,
+    MachineIdentity, MachineProfile, ProfileDifference, ProfileMatch, RecoveryCapability,
+    Sha256Digest, StepId, StoredArtifact,
+};
+use nvstraps_legacy::{
+    LegacyCatalogAuthority, LegacyFirmwareCatalogAnalysis, LegacyPatchCatalogView,
+    LegacyPatchReceipt,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, path::BaseDirectory};
@@ -92,152 +96,20 @@ pub struct InjectionReceipt {
     pub recompressed_guided_section: bool,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LegacyPatchReceipt {
-    pub upstream_commit: String,
-    pub original_firmware_sha256: String,
-    pub patched_firmware_sha256: String,
-    pub catalogs: Vec<LegacyCatalogPatchReceipt>,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LegacyCatalogPatchReceipt {
-    pub catalog: LegacyPatchCatalogFile,
-    pub source_sha256: String,
-    pub applications: Vec<LegacyRulePatchReceipt>,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LegacyRulePatchReceipt {
-    pub rule_id: String,
-    pub expected_matches: usize,
-    pub changes: Vec<LegacyPatchChangeReceipt>,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LegacyPatchChangeReceipt {
-    pub path: Vec<LegacyPatchPathReceipt>,
-    pub offset: usize,
-    pub before_hex: String,
-    pub after_hex: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase", tag = "kind")]
-pub enum LegacyPatchPathReceipt {
-    FirmwareVolume {
-        offset: usize,
-    },
-    FirmwareFile {
-        offset: usize,
-        file_guid_hex: String,
-    },
-    Section {
-        offset: usize,
-        content_offset: usize,
-        section_type: u8,
-    },
-    LzmaPayload,
-    UncompressedPayload,
-    EfiCompressedPayload {
-        compression: String,
-    },
-}
-
-const LEGACY_PATCH_UPSTREAM_COMMIT: &str = "9c80fdb2cd3db94bdd19c58bd00d5ecf822f6430";
 const MAX_FIRMWARE_IMAGE_BYTES: u64 = 512 * 1024 * 1024;
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LegacyPatchCatalogView {
-    pub catalog: LegacyPatchCatalogFile,
-    pub upstream_commit: &'static str,
-    pub source_sha256: String,
-    pub rules: Vec<LegacyPatchRuleView>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LegacyPatchRuleView {
-    pub rule_id: String,
-    pub description: Option<String>,
-    pub section_type: u8,
-    pub required_risks: Vec<LegacyPatchRisk>,
-}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LegacyFirmwareAnalysisView {
     pub firmware: FirmwareFingerprint,
-    pub upstream_commit: &'static str,
-    pub catalogs: Vec<LegacyFirmwareCatalogAnalysisView>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LegacyFirmwareCatalogAnalysisView {
-    pub catalog: LegacyPatchCatalogFile,
-    pub source_sha256: String,
-    pub rules: Vec<LegacyFirmwareRuleAnalysisView>,
-}
-
-#[derive(Clone, Copy, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub enum LegacyFirmwareRuleStatus {
-    Applicable,
-    Absent,
-    Blocked,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LegacyFirmwareRuleAnalysisView {
-    pub rule_id: String,
-    pub description: Option<String>,
-    pub section_type: u8,
-    pub required_risks: Vec<LegacyPatchRisk>,
-    pub status: LegacyFirmwareRuleStatus,
-    pub expected_matches: Option<u16>,
-    pub blocked_reason: Option<String>,
-    pub recommended: bool,
-}
-
-struct BuiltinLegacyCatalog {
-    catalog: LegacyPatchCatalogFile,
-    parsed: nvstraps_ffs::LegacyPatchCatalog,
+    pub upstream_commit: String,
+    pub catalogs: Vec<LegacyFirmwareCatalogAnalysis>,
 }
 
 #[tauri::command]
 pub fn list_legacy_patch_catalogs() -> CommandResult<Vec<LegacyPatchCatalogView>> {
-    builtin_legacy_catalogs()
-        .map(|catalogs| {
-            catalogs
-                .iter()
-                .map(|catalog| LegacyPatchCatalogView {
-                    catalog: catalog.catalog,
-                    upstream_commit: LEGACY_PATCH_UPSTREAM_COMMIT,
-                    source_sha256: catalog.parsed.source_sha256.clone(),
-                    rules: catalog
-                        .parsed
-                        .rules
-                        .iter()
-                        .map(|rule| LegacyPatchRuleView {
-                            rule_id: rule.id.as_str().to_owned(),
-                            description: rule.description.clone(),
-                            section_type: rule.section_type,
-                            required_risks: required_risks(
-                                catalog.catalog,
-                                rule.description.as_deref(),
-                            ),
-                        })
-                        .collect(),
-                })
-                .collect()
-        })
+    legacy_authority()
+        .and_then(|authority| authority.catalog_views().map_err(legacy_error))
         .map_err(ApiError::from)
 }
 
@@ -530,7 +402,7 @@ fn prepare_from_bytes(
                 let patched_artifact = store
                     .preserve_artifact(profile, ArtifactKind::LegacyPatchedFirmware, &patched)
                     .map_err(BackendError::from)?;
-                if receipt.patched_firmware_sha256 != patched_artifact.sha256.as_str() {
+                if receipt.patched_firmware_sha256 != patched_artifact.sha256 {
                     return Err(BackendError::Deployment(
                         "legacy patch receipt does not match the persisted artifact".into(),
                     ));
@@ -660,123 +532,10 @@ fn apply_builtin_legacy_patches(
     let legacy = profile.legacy_patches.as_ref().ok_or_else(|| {
         BackendError::Deployment("legacy patch profile is missing after validation".into())
     })?;
-    let catalogs = builtin_legacy_catalogs()?;
-    let mut patched = original.to_vec();
-    let mut catalog_receipts = Vec::new();
-
-    for catalog in &catalogs {
-        let selected: Vec<_> = catalog
-            .parsed
-            .rules
-            .iter()
-            .filter_map(|rule| {
-                legacy
-                    .selections
-                    .iter()
-                    .find(|selection| {
-                        selection.catalog == catalog.catalog
-                            && selection.rule_id == rule.id.as_str()
-                    })
-                    .map(|selection| nvstraps_ffs::LegacyPatchSelection {
-                        rule_id: rule.id.clone(),
-                        expected_matches: selection.expected_matches as usize,
-                    })
-            })
-            .collect();
-        if selected.is_empty() {
-            continue;
-        }
-        let (next, report) =
-            nvstraps_ffs::patch_legacy_firmware(&patched, &catalog.parsed, &selected).map_err(
-                |error| {
-                    BackendError::Deployment(format!(
-                        "legacy firmware patching failed in catalog {:?}: {error}",
-                        catalog.catalog
-                    ))
-                },
-            )?;
-        patched = next;
-        catalog_receipts.push(LegacyCatalogPatchReceipt {
-            catalog: catalog.catalog,
-            source_sha256: report.catalog_sha256,
-            applications: report
-                .applications
-                .into_iter()
-                .map(|application| LegacyRulePatchReceipt {
-                    rule_id: application.rule_id.as_str().to_owned(),
-                    expected_matches: application.expected_matches,
-                    changes: application
-                        .changes
-                        .into_iter()
-                        .map(map_legacy_patch_change)
-                        .collect(),
-                })
-                .collect(),
-        });
-    }
-
-    if catalog_receipts.len() != legacy.catalogs.len() {
-        return Err(BackendError::Deployment(
-            "legacy patch execution did not cover every pinned catalog".into(),
-        ));
-    }
-    let receipt = LegacyPatchReceipt {
-        upstream_commit: legacy.upstream_commit.clone(),
-        original_firmware_sha256: Sha256Digest::from_bytes(original).to_string(),
-        patched_firmware_sha256: Sha256Digest::from_bytes(&patched).to_string(),
-        catalogs: catalog_receipts,
-    };
-    validate_legacy_patch_receipt(profile, &receipt)?;
-    Ok((patched, receipt))
-}
-
-fn map_legacy_patch_change(
-    change: nvstraps_ffs::LegacyFirmwarePatchChange,
-) -> LegacyPatchChangeReceipt {
-    LegacyPatchChangeReceipt {
-        path: change
-            .path
-            .into_iter()
-            .map(|part| match part {
-                nvstraps_ffs::LegacyFirmwarePatchPath::FirmwareVolume { offset } => {
-                    LegacyPatchPathReceipt::FirmwareVolume { offset }
-                }
-                nvstraps_ffs::LegacyFirmwarePatchPath::FirmwareFile { offset, file_guid } => {
-                    LegacyPatchPathReceipt::FirmwareFile {
-                        offset,
-                        file_guid_hex: hex_bytes(&file_guid),
-                    }
-                }
-                nvstraps_ffs::LegacyFirmwarePatchPath::Section {
-                    offset,
-                    content_offset,
-                    section_type,
-                } => LegacyPatchPathReceipt::Section {
-                    offset,
-                    content_offset,
-                    section_type,
-                },
-                nvstraps_ffs::LegacyFirmwarePatchPath::LzmaPayload => {
-                    LegacyPatchPathReceipt::LzmaPayload
-                }
-                nvstraps_ffs::LegacyFirmwarePatchPath::UncompressedPayload => {
-                    LegacyPatchPathReceipt::UncompressedPayload
-                }
-                nvstraps_ffs::LegacyFirmwarePatchPath::EfiCompressedPayload { compression } => {
-                    LegacyPatchPathReceipt::EfiCompressedPayload {
-                        compression: match compression {
-                            nvstraps_ffs::EfiCompression::EfiStandard => "efiStandard",
-                            nvstraps_ffs::EfiCompression::Tiano => "tiano",
-                        }
-                        .to_owned(),
-                    }
-                }
-            })
-            .collect(),
-        offset: change.change.offset,
-        before_hex: hex_bytes(&change.change.before),
-        after_hex: hex_bytes(&change.change.after),
-    }
+    let application = legacy_authority()?
+        .apply(original, legacy)
+        .map_err(legacy_error)?;
+    Ok((application.patched_firmware, application.receipt))
 }
 
 fn load_legacy_patch_artifacts(
@@ -804,12 +563,7 @@ fn load_legacy_patch_artifacts(
             "persisted legacy patch receipt is invalid: {error}"
         ))
     })?;
-    validate_legacy_patch_receipt(profile, &receipt)?;
-    if receipt.patched_firmware_sha256 != patched_artifact.sha256.as_str() {
-        return Err(BackendError::Deployment(
-            "persisted legacy patch artifact does not match its receipt".into(),
-        ));
-    }
+    validate_legacy_patch_receipt(profile, &patched_artifact.sha256, &receipt)?;
     Ok((
         Some(patched_artifact),
         Some(receipt_artifact),
@@ -819,85 +573,20 @@ fn load_legacy_patch_artifacts(
 
 fn validate_legacy_patch_receipt(
     profile: &MachineProfile,
+    patched_sha256: &Sha256Digest,
     receipt: &LegacyPatchReceipt,
 ) -> BackendResult<()> {
     let legacy = profile.legacy_patches.as_ref().ok_or_else(|| {
         BackendError::Deployment("legacy patch receipt belongs to a non-legacy profile".into())
     })?;
-    if receipt.upstream_commit != legacy.upstream_commit
-        || receipt.original_firmware_sha256 != profile.original_firmware.sha256.as_str()
-        || receipt.catalogs.len() != legacy.catalogs.len()
-    {
-        return Err(BackendError::Deployment(
-            "legacy patch receipt does not match its machine profile".into(),
-        ));
-    }
-    let mut recorded_rules = Vec::new();
-    for catalog in &receipt.catalogs {
-        let Some(pin) = legacy
-            .catalogs
-            .iter()
-            .find(|pin| pin.catalog == catalog.catalog)
-        else {
-            return Err(BackendError::Deployment(
-                "legacy patch receipt contains an unpinned catalog".into(),
-            ));
-        };
-        if pin.source_sha256.as_str() != catalog.source_sha256 {
-            return Err(BackendError::Deployment(
-                "legacy patch receipt catalog hash does not match its profile".into(),
-            ));
-        }
-        for application in &catalog.applications {
-            let Some(selection) = legacy.selections.iter().find(|selection| {
-                selection.catalog == catalog.catalog && selection.rule_id == application.rule_id
-            }) else {
-                return Err(BackendError::Deployment(
-                    "legacy patch receipt contains an unselected rule".into(),
-                ));
-            };
-            if usize::from(selection.expected_matches) != application.expected_matches
-                || application.changes.len() != application.expected_matches
-            {
-                return Err(BackendError::Deployment(
-                    "legacy patch receipt has an unexpected match count".into(),
-                ));
-            }
-            recorded_rules.push((
-                catalog.catalog,
-                application.rule_id.as_str(),
-                application.expected_matches,
-            ));
-        }
-    }
-    recorded_rules.sort_unstable();
-    let mut expected_rules: Vec<_> = legacy
-        .selections
-        .iter()
-        .map(|selection| {
-            (
-                selection.catalog,
-                selection.rule_id.as_str(),
-                usize::from(selection.expected_matches),
-            )
-        })
-        .collect();
-    expected_rules.sort_unstable();
-    if recorded_rules != expected_rules {
-        return Err(BackendError::Deployment(
-            "legacy patch receipt does not cover every selected rule".into(),
-        ));
-    }
-    Ok(())
-}
-
-fn hex_bytes(bytes: &[u8]) -> String {
-    use std::fmt::Write as _;
-    let mut output = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        write!(&mut output, "{byte:02x}").expect("writing to a string cannot fail");
-    }
-    output
+    legacy_authority()?
+        .validate_receipt(
+            legacy,
+            &profile.original_firmware.sha256,
+            patched_sha256,
+            receipt,
+        )
+        .map_err(legacy_error)
 }
 
 fn build_profile(
@@ -933,123 +622,21 @@ fn require_expected_firmware(
     }
 }
 
-fn builtin_legacy_catalogs() -> BackendResult<Vec<BuiltinLegacyCatalog>> {
-    let sources = [
-        (
-            LegacyPatchCatalogFile::General,
-            include_str!("../../UEFIPatch/patches.txt"),
-        ),
-        (
-            LegacyPatchCatalogFile::HaswellAbove4g,
-            include_str!("../../UEFIPatch/HswAbove4G.txt"),
-        ),
-        (
-            LegacyPatchCatalogFile::IvyBridgeUsb3,
-            include_str!("../../UEFIPatch/IvyUSB3.txt"),
-        ),
-        (
-            LegacyPatchCatalogFile::HaswellUsb3,
-            include_str!("../../UEFIPatch/HswUSB3.txt"),
-        ),
-        (
-            LegacyPatchCatalogFile::BroadwellUsb3,
-            include_str!("../../UEFIPatch/BdwUSB3.txt"),
-        ),
-    ];
-    sources
-        .into_iter()
-        .map(|(catalog, source)| {
-            nvstraps_ffs::LegacyPatchCatalog::parse(source)
-                .map(|parsed| BuiltinLegacyCatalog { catalog, parsed })
-                .map_err(|error| {
-                    BackendError::Deployment(format!(
-                        "built-in legacy patch catalog {catalog:?} is invalid: {error}"
-                    ))
-                })
-        })
-        .collect()
+fn legacy_authority() -> BackendResult<LegacyCatalogAuthority> {
+    LegacyCatalogAuthority::load().map_err(legacy_error)
+}
+
+fn legacy_error(error: nvstraps_legacy::LegacyCatalogError) -> BackendError {
+    BackendError::Deployment(error.to_string())
 }
 
 fn validate_builtin_legacy_profile(profile: &MachineProfile) -> BackendResult<()> {
     let Some(legacy) = profile.legacy_patches.as_ref() else {
         return Ok(());
     };
-    if legacy.upstream_commit != LEGACY_PATCH_UPSTREAM_COMMIT {
-        return Err(BackendError::Deployment(format!(
-            "legacy patch bundle pins unsupported upstream commit {}; expected {LEGACY_PATCH_UPSTREAM_COMMIT}",
-            legacy.upstream_commit
-        )));
-    }
-    let catalogs = builtin_legacy_catalogs()?;
-    for pin in &legacy.catalogs {
-        let catalog = catalogs
-            .iter()
-            .find(|catalog| catalog.catalog == pin.catalog)
-            .ok_or_else(|| {
-                BackendError::Deployment(format!(
-                    "legacy patch catalog {:?} is not built into this application",
-                    pin.catalog
-                ))
-            })?;
-        let expected = Sha256Digest::parse(catalog.parsed.source_sha256.clone())
-            .map_err(BackendError::from)?;
-        if pin.source_sha256 != expected {
-            return Err(BackendError::Deployment(format!(
-                "legacy patch catalog {:?} digest does not match the built-in source",
-                pin.catalog
-            )));
-        }
-    }
-    for selection in &legacy.selections {
-        let catalog = catalogs
-            .iter()
-            .find(|catalog| catalog.catalog == selection.catalog)
-            .expect("the deployment domain requires every selected catalog to be pinned");
-        let rule = catalog
-            .parsed
-            .rules
-            .iter()
-            .find(|rule| rule.id.as_str() == selection.rule_id)
-            .ok_or_else(|| {
-                BackendError::Deployment(format!(
-                    "legacy patch rule {} is not in built-in catalog {:?}",
-                    selection.rule_id, selection.catalog
-                ))
-            })?;
-        let risks = required_risks(selection.catalog, rule.description.as_deref());
-        if selection.required_risks != risks {
-            return Err(BackendError::Deployment(format!(
-                "legacy patch rule {} has an incorrect risk declaration",
-                selection.rule_id
-            )));
-        }
-    }
-    Ok(())
-}
-
-fn required_risks(
-    catalog: LegacyPatchCatalogFile,
-    description: Option<&str>,
-) -> Vec<LegacyPatchRisk> {
-    let description = description.unwrap_or_default();
-    let mut risks = Vec::new();
-    if description.contains("MAY REQUIRE DSDT MODIFICATION")
-        || description.eq_ignore_ascii_case("replace old patch")
-    {
-        risks.push(LegacyPatchRisk::DsdtModification);
-    }
-    if description.contains("NVRAM whitelist") {
-        risks.push(LegacyPatchRisk::NvramWhitelist);
-    }
-    if matches!(
-        catalog,
-        LegacyPatchCatalogFile::IvyBridgeUsb3
-            | LegacyPatchCatalogFile::HaswellUsb3
-            | LegacyPatchCatalogFile::BroadwellUsb3
-    ) {
-        risks.push(LegacyPatchRisk::UsbControllerBlacklist);
-    }
-    risks
+    legacy_authority()?
+        .validate_profile(legacy)
+        .map_err(legacy_error)
 }
 
 fn analyze_legacy_firmware_path(path: &str) -> BackendResult<LegacyFirmwareAnalysisView> {
@@ -1063,74 +650,11 @@ fn analyze_legacy_firmware_bytes(
     firmware: FirmwareFingerprint,
     bytes: &[u8],
 ) -> BackendResult<LegacyFirmwareAnalysisView> {
-    let catalogs = builtin_legacy_catalogs()?
-        .into_iter()
-        .map(|catalog| {
-            let analysis =
-                nvstraps_ffs::analyze_legacy_firmware(bytes, &catalog.parsed).map_err(|error| {
-                    BackendError::Deployment(format!(
-                        "legacy firmware analysis failed for catalog {:?}: {error}",
-                        catalog.catalog
-                    ))
-                })?;
-            let rules = analysis
-                .rules
-                .into_iter()
-                .map(|analysis_rule| {
-                    let rule = catalog
-                        .parsed
-                        .rule(&analysis_rule.rule_id)
-                        .expect("analysis rules originate from the same parsed catalog");
-                    let required_risks =
-                        required_risks(catalog.catalog, rule.description.as_deref());
-                    let (status, expected_matches, blocked_reason) = match analysis_rule.disposition
-                    {
-                        nvstraps_ffs::LegacyFirmwareRuleDisposition::Applicable {
-                            expected_matches,
-                        } => match u16::try_from(expected_matches) {
-                            Ok(expected_matches) => (
-                                LegacyFirmwareRuleStatus::Applicable,
-                                Some(expected_matches),
-                                None,
-                            ),
-                            Err(_) => (
-                                LegacyFirmwareRuleStatus::Blocked,
-                                None,
-                                Some("match count exceeds the deployment profile limit".into()),
-                            ),
-                        },
-                        nvstraps_ffs::LegacyFirmwareRuleDisposition::Absent => {
-                            (LegacyFirmwareRuleStatus::Absent, None, None)
-                        }
-                        nvstraps_ffs::LegacyFirmwareRuleDisposition::Blocked { reason } => {
-                            (LegacyFirmwareRuleStatus::Blocked, None, Some(reason))
-                        }
-                    };
-                    let recommended = matches!(status, LegacyFirmwareRuleStatus::Applicable)
-                        && required_risks.is_empty();
-                    LegacyFirmwareRuleAnalysisView {
-                        rule_id: analysis_rule.rule_id.as_str().to_owned(),
-                        description: rule.description.clone(),
-                        section_type: rule.section_type,
-                        required_risks,
-                        status,
-                        expected_matches,
-                        blocked_reason,
-                        recommended,
-                    }
-                })
-                .collect();
-            Ok(LegacyFirmwareCatalogAnalysisView {
-                catalog: catalog.catalog,
-                source_sha256: analysis.catalog_sha256,
-                rules,
-            })
-        })
-        .collect::<BackendResult<Vec<_>>>()?;
+    let analysis = legacy_authority()?.analyze(bytes).map_err(legacy_error)?;
     Ok(LegacyFirmwareAnalysisView {
         firmware,
-        upstream_commit: LEGACY_PATCH_UPSTREAM_COMMIT,
-        catalogs,
+        upstream_commit: analysis.upstream_commit,
+        catalogs: analysis.catalogs,
     })
 }
 
@@ -1221,8 +745,11 @@ mod tests {
 
     use nvstraps_deploy::{
         BootObservation, EvidenceKind, FirmwareInstallMethod, GpuFingerprint,
-        LegacyPatchCatalogFile, LegacyPatchCatalogPin, LegacyPatchSelection, PciLocation,
-        RecoveryMethod, Sha256Digest, StepEvidence,
+        LegacyPatchCatalogFile, PciLocation, RecoveryMethod, Sha256Digest, StepEvidence,
+    };
+    use nvstraps_legacy::{
+        LEGACY_PATCH_UPSTREAM_COMMIT, LegacyFirmwareRuleStatus,
+        test_support::{selected_profile, synthetic_legacy_firmware},
     };
 
     use super::*;
@@ -1345,30 +872,7 @@ mod tests {
     }
 
     fn valid_builtin_legacy_profile() -> LegacyPatchProfile {
-        let catalogs = builtin_legacy_catalogs().unwrap();
-        let catalog = catalogs
-            .iter()
-            .find(|catalog| catalog.catalog == LegacyPatchCatalogFile::General)
-            .unwrap();
-        let rule = &catalog.parsed.rules[0];
-        LegacyPatchProfile::create(
-            LEGACY_PATCH_UPSTREAM_COMMIT,
-            vec![LegacyPatchCatalogPin {
-                catalog: LegacyPatchCatalogFile::General,
-                source_sha256: Sha256Digest::parse(catalog.parsed.source_sha256.clone()).unwrap(),
-            }],
-            vec![LegacyPatchSelection {
-                catalog: LegacyPatchCatalogFile::General,
-                rule_id: rule.id.as_str().to_owned(),
-                expected_matches: 1,
-                required_risks: required_risks(
-                    LegacyPatchCatalogFile::General,
-                    rule.description.as_deref(),
-                ),
-            }],
-            vec![],
-        )
-        .unwrap()
+        selected_profile()
     }
 
     fn synthetic_driver_ffs() -> Vec<u8> {
@@ -1418,50 +922,6 @@ mod tests {
         firmware[dxe_core + 20..dxe_core + 23].copy_from_slice(&[24, 0, 0]);
         firmware[dxe_core + 23] = !0x07;
         firmware
-    }
-
-    fn synthetic_legacy_firmware() -> Vec<u8> {
-        let catalogs = builtin_legacy_catalogs().unwrap();
-        let catalog = catalogs
-            .iter()
-            .find(|catalog| catalog.catalog == LegacyPatchCatalogFile::General)
-            .unwrap();
-        let rule = &catalog.parsed.rules[0];
-        assert!(!rule.find_pattern().contains('.'));
-        let pattern = decode_hex(rule.find_pattern());
-
-        let mut section = vec![0_u8; 4];
-        let section_size = section.len() + pattern.len();
-        section[..3].copy_from_slice(&(section_size as u32).to_le_bytes()[..3]);
-        section[3] = rule.section_type;
-        section.extend_from_slice(&pattern);
-
-        let file_size = 24 + section.len();
-        let mut file = vec![0_u8; 24];
-        file[..16].copy_from_slice(&rule.file_guid);
-        file[18] = 0x06;
-        file[19] = 0x40;
-        file[20..23].copy_from_slice(&(file_size as u32).to_le_bytes()[..3]);
-        file[16] = checksum8(&file);
-        file[17] = checksum8(&section);
-        file[23] = !0x07;
-        file.extend_from_slice(&section);
-
-        let mut firmware = synthetic_firmware();
-        firmware[96..96 + file.len()].copy_from_slice(&file);
-        firmware
-    }
-
-    fn decode_hex(value: &str) -> Vec<u8> {
-        value
-            .as_bytes()
-            .chunks_exact(2)
-            .map(|pair| u8::from_str_radix(std::str::from_utf8(pair).unwrap(), 16).unwrap())
-            .collect()
-    }
-
-    fn checksum8(bytes: &[u8]) -> u8 {
-        0_u8.wrapping_sub(bytes.iter().fold(0_u8, |sum, byte| sum.wrapping_add(*byte)))
     }
 
     #[test]
@@ -1580,7 +1040,7 @@ mod tests {
         assert_eq!(views.len(), 5);
         assert!(views.iter().all(|view| {
             view.upstream_commit == LEGACY_PATCH_UPSTREAM_COMMIT
-                && view.source_sha256.len() == 64
+                && view.source_sha256.as_str().len() == 64
                 && !view.rules.is_empty()
         }));
 
@@ -1772,30 +1232,25 @@ mod tests {
         let mut forged_receipt = prepared.legacy_patch.clone().unwrap();
         let duplicate = forged_receipt.catalogs[0].applications[0].clone();
         forged_receipt.catalogs[0].applications.push(duplicate);
-        assert!(validate_legacy_patch_receipt(&profile, &forged_receipt).is_err());
+        let legacy_patched_sha256 = prepared
+            .legacy_patched_firmware
+            .as_ref()
+            .unwrap()
+            .sha256
+            .clone();
+        assert!(
+            validate_legacy_patch_receipt(&profile, &legacy_patched_sha256, &forged_receipt,)
+                .is_err()
+        );
 
         let (_, legacy_patched) = store
             .load_artifact(&profile, ArtifactKind::LegacyPatchedFirmware)
             .unwrap();
-        let catalogs = builtin_legacy_catalogs().unwrap();
-        let catalog = catalogs
-            .iter()
-            .find(|catalog| catalog.catalog == LegacyPatchCatalogFile::General)
-            .unwrap();
-        let rule = &catalog.parsed.rules[0];
-        assert!(matches!(
-            nvstraps_ffs::patch_legacy_firmware(
-                &legacy_patched,
-                &catalog.parsed,
-                &[nvstraps_ffs::LegacyPatchSelection {
-                    rule_id: rule.id.clone(),
-                    expected_matches: 1,
-                }]
-            ),
-            Err(nvstraps_ffs::LegacyFirmwarePatchError::InvalidRule(
-                nvstraps_ffs::LegacyPatchError::MatchCount { actual: 0, .. }
-            ))
-        ));
+        let reapply_error = legacy_authority()
+            .unwrap()
+            .apply(&legacy_patched, profile.legacy_patches.as_ref().unwrap())
+            .unwrap_err();
+        assert!(reapply_error.to_string().contains("matched 0 times"));
 
         let repeated =
             prepare_from_bytes(&store, &profile, prepared.plan, &synthetic_driver_ffs()).unwrap();

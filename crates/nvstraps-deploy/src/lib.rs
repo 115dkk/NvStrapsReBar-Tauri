@@ -1554,7 +1554,7 @@ mod tests {
 
     fn legacy_patch_profile() -> LegacyPatchProfile {
         LegacyPatchProfile::create(
-            "9c80fdb2cd3db94bdd19c58bd00d5ecf822f6430",
+            "a".repeat(40),
             vec![LegacyPatchCatalogPin {
                 catalog: LegacyPatchCatalogFile::General,
                 source_sha256: Sha256Digest::from_bytes(b"general catalog"),

@@ -70,6 +70,12 @@ A read-only scan of one exact firmware fingerprint against pinned patch catalogs
 rule as applicable, absent, or blocked. Only analyzer-owned match counts and catalog hashes may
 enter a legacy Machine Profile.
 
+### Legacy catalog authority
+
+The Rust Module that owns the trusted UEFIPatch commit and sources, catalog digests, rule risks,
+profile validation, analysis, application order, and receipt validation. FFS parsing is its
+low-level Implementation; Tauri only adapts its typed results to commands and durable storage.
+
 ### Firmware device transaction
 
 The bounded UEFI operation that remaps one bridge and GPU BAR0, programs BAR1 straps, then offers
@@ -94,6 +100,8 @@ are the installed `nvidia-smi.exe` and a pinned official NVIDIA Profile Inspecto
   canonical Rust owner.
 - A Firmware device transaction always attempts device restore before bridge restore, and a failed
   operation cannot bypass restoration of an earlier successful remap.
+- Legacy catalog pins, risks, analysis, patch application, and receipts must all pass through the
+  same Legacy catalog authority.
 - Every persisted artifact is read back and content-addressed; an existing different artifact is
   an immutable conflict.
 - Vendor flash, UEFI settings, NVIDIA application policy, hardware work, and physical recovery

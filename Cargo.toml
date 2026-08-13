@@ -3,6 +3,7 @@ members = [
     "crates/nvstraps-core",
     "crates/nvstraps-deploy",
     "crates/nvstraps-ffs",
+    "crates/nvstraps-legacy",
     "crates/nvstraps-uefi",
     "src-tauri",
 ]
