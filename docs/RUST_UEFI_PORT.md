@@ -1,13 +1,15 @@
-# Rust UEFI port status
+# Rust UEFI implementation status
 
-The repository can now build a stable-Rust AMD64 UEFI boot-service driver, package it as an FFS
-file, and inject it into supported firmware volumes without EDK2, Python, `pefile`, `GenSec`, or
-`GenFfs`.
+The repository builds a stable-Rust AMD64 UEFI boot-service driver, packages it as an FFS file, and
+injects it into supported firmware volumes without C/C++, EDK2, Python, `pefile`, `GenSec`, or
+`GenFfs`. The former C DXE implementation and native build path have been removed; Rust is the
+canonical implementation.
 
-> **Do not flash the Rust artifact yet.** OVMF proves automatic DXE dispatch, configuration-variable
-> decoding, and host-bridge hook installation, but no recoverable trial has verified real NVIDIA
-> hardware or a vendor firmware image. The injector creates a new output and never overwrites its
-> input; it is an artifact-preparation tool, not a flasher.
+> **The artifact is not hardware-verified.** OVMF proves automatic DXE dispatch,
+> configuration-variable decoding, and host-bridge hook installation, but no recoverable trial has
+> verified the complete path on real NVIDIA hardware and a pinned vendor firmware image. The
+> injector creates a new output and never overwrites its input; it is an artifact-preparation tool,
+> not a flasher.
 
 ## Reproducible validation
 
@@ -60,18 +62,22 @@ before development and release builds and bundles the FFS under the fixed resour
 `NvStrapsReBar.ffs`. End users therefore do not need Rust, EDK2, Python, or firmware packaging
 tools; those are build-time concerns only.
 
-## Deletion gates for the C DXE
+## RIIR and validation gates
 
-The C firmware implementation and its EDK2 workflow must remain until all of these are true:
+`npm run check:riir` rejects tracked C/C++ source, the deleted C/EDK2 trees, and their superseded
+build helpers. CI runs that gate on Windows and Linux.
 
-1. Rust owns config/status variable access and exact status reporting. **Passed.**
-2. Rust locates and hooks the PCI host-bridge resource-allocation protocol. **Passed in OVMF.**
-3. PCI discovery, resizable-BAR programming, NVIDIA strap MMIO, and bridge guards match the C
-   behavior against golden vectors.
-4. S3 resume writes and setup-variable/CMOS reset guards have Rust implementations. **Passed in
-   host-side tests; hardware behavior remains unverified.**
-5. A QEMU/OVMF load test proves the driver remains resident and installs its hook. **Passed.**
-6. A recoverable hardware trial proves boot, write, reboot, and status readback on a pinned machine
-   profile.
+The following implementation gates are complete:
 
-CI uploads validation evidence, not a deployable firmware image, until the hardware gate passes.
+1. Rust owns config/status variable access and exact status reporting.
+2. Rust locates and hooks the PCI host-bridge resource-allocation protocol.
+3. PCI discovery, resizable-BAR programming, NVIDIA strap MMIO, and bridge guards have canonical
+   Rust implementations and host-side vectors.
+4. S3 resume writes and setup-variable/CMOS reset guards have Rust implementations and host tests.
+5. QEMU/OVMF proves that the driver is dispatched, remains resident, and installs its hook.
+6. FFS generation and injection are parsed back independently and duplicate injection is rejected.
+
+The remaining gate is deployment evidence, not a source-porting task: a recoverable physical trial
+must prove the pinned vendor image, boot, EFI configuration write/readback, restart, DXE status, and
+BAR1 result on the exact machine profile. CI artifacts prove their recorded software checks only;
+they are not approval to flash a physical board.
