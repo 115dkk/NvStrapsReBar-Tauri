@@ -3,6 +3,8 @@ use std::{
     io::{self, Cursor, Read, Write},
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
+    thread,
+    time::{Duration, Instant},
 };
 
 use nvstraps_deploy::Sha256Digest;
@@ -115,7 +117,31 @@ pub struct ProfileInspectorLaunch {
     pub executable_path: PathBuf,
     pub executable_sha256: Sha256Digest,
     pub elevated: bool,
+    pub backup: NvidiaProfileBackupReceipt,
     pub warnings: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NvidiaProfileBackupManifest {
+    pub schema_version: u8,
+    pub profile_id: String,
+    pub tool_version: &'static str,
+    pub tool_manifest_sha256: Sha256Digest,
+    pub nip_sha256: Sha256Digest,
+    pub nip_byte_length: u64,
+    pub profile_count: usize,
+    pub executable_count: usize,
+    pub setting_count: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NvidiaProfileBackupReceipt {
+    pub backup_path: PathBuf,
+    pub manifest_path: PathBuf,
+    pub manifest: NvidiaProfileBackupManifest,
+    pub manifest_sha256: Sha256Digest,
 }
 
 #[tauri::command]
@@ -147,11 +173,33 @@ pub fn get_nvidia_profile_inspector_installation(
 }
 
 #[tauri::command]
-pub fn launch_nvidia_profile_inspector(
+pub async fn launch_nvidia_profile_inspector(
     app: AppHandle,
     request: LaunchProfileInspectorRequest,
 ) -> CommandResult<ProfileInspectorLaunch> {
-    launch_command(&app, request).map_err(ApiError::from)
+    tauri::async_runtime::spawn_blocking(move || launch_command(&app, request))
+        .await
+        .map_err(|error| {
+            ApiError::from(BackendError::Deployment(format!(
+                "Profile Inspector launch worker failed: {error}"
+            )))
+        })?
+        .map_err(ApiError::from)
+}
+
+#[tauri::command]
+pub async fn backup_nvidia_profiles(
+    app: AppHandle,
+    profile_id: String,
+) -> CommandResult<NvidiaProfileBackupReceipt> {
+    tauri::async_runtime::spawn_blocking(move || backup_command(&app, &profile_id))
+        .await
+        .map_err(|error| {
+            ApiError::from(BackendError::Deployment(format!(
+                "NVIDIA profile backup worker failed: {error}"
+            )))
+        })?
+        .map_err(ApiError::from)
 }
 
 fn launch_command(
@@ -176,6 +224,7 @@ fn launch_command(
                 "Profile Inspector manifest does not contain the executable".into(),
             )
         })?;
+    let backup = backup_with_installation(app, &exact.profile.profile_id, &installation)?;
     let child = std::process::Command::new(&installation.executable_path)
         .current_dir(&installation.install_path)
         .stdin(std::process::Stdio::null())
@@ -191,12 +240,315 @@ fn launch_command(
         executable_path: installation.executable_path,
         executable_sha256: executable.sha256.clone(),
         elevated: true,
+        backup,
         warnings: vec![
             "Profile Inspector can modify NVIDIA driver profiles only after you press Apply Changes in its own window.".into(),
-            "Export customized profiles before changing policy so the driver database can be restored.".into(),
+            "A content-addressed backup of all customized NVIDIA profiles was created before this launch.".into(),
+            "Close any other Profile Inspector instance first; its single-instance behavior can activate an already-running copy.".into(),
             "The pinned installation is reverified before every launch; in-place updater changes are refused on the next launch.".into(),
         ],
     })
+}
+
+fn backup_command(app: &AppHandle, profile_id: &str) -> BackendResult<NvidiaProfileBackupReceipt> {
+    let exact = load_exact_deployment(app, profile_id, "NVIDIA profile backup")?;
+    if !inspect_access().is_elevated {
+        return Err(BackendError::Elevation(
+            "relaunch NvStrapsReBar as administrator before backing up NVIDIA profiles".into(),
+        ));
+    }
+    let installation = verify_installation(&installation_root(app)?.join(VERSION), false)?;
+    backup_with_installation(app, &exact.profile.profile_id, &installation)
+}
+
+fn backup_with_installation(
+    app: &AppHandle,
+    profile_id: &str,
+    installation: &ProfileInspectorInstallation,
+) -> BackendResult<NvidiaProfileBackupReceipt> {
+    let tool_root = installation_root(app)?;
+    let sessions_root = tool_root.join("sessions");
+    fs::create_dir_all(&sessions_root).map_err(|error| io_error(&sessions_root, error))?;
+    let suffix = profile_id
+        .strip_prefix("nvstraps-")
+        .ok_or_else(|| BackendError::Deployment("deployment profile ID is malformed".into()))?;
+    let session_path = sessions_root.join(format!(
+        "{suffix}-{}-{}",
+        std::process::id(),
+        INSTALL_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+    ));
+    fs::create_dir(&session_path).map_err(|error| io_error(&session_path, error))?;
+    let _cleanup = SessionCleanup(session_path.clone());
+
+    for file in &installation.manifest.files {
+        let source = installation.install_path.join(&file.relative_path);
+        let bytes = fs::read(&source).map_err(|error| io_error(&source, error))?;
+        if bytes.len() as u64 != file.byte_length || Sha256Digest::from_bytes(&bytes) != file.sha256
+        {
+            return Err(BackendError::Deployment(format!(
+                "Profile Inspector changed before profile backup: {}",
+                file.relative_path
+            )));
+        }
+        write_new_synced(&session_path.join(&file.relative_path), &bytes)?;
+    }
+    run_profile_export(&session_path.join(EXECUTABLE_FILE_NAME), &session_path)?;
+
+    let backups = fs::read_dir(&session_path)
+        .map_err(|error| io_error(&session_path, error))?
+        .map(|entry| entry.map_err(|error| io_error(&session_path, error)))
+        .collect::<BackendResult<Vec<_>>>()?
+        .into_iter()
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.extension()
+                .and_then(|extension| extension.to_str())
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("nip"))
+        })
+        .collect::<Vec<_>>();
+    if backups.len() != 1 {
+        return Err(BackendError::Deployment(format!(
+            "Profile Inspector produced {} backup files instead of exactly one",
+            backups.len()
+        )));
+    }
+    let nip_bytes = fs::read(&backups[0]).map_err(|error| io_error(&backups[0], error))?;
+    if nip_bytes.is_empty() || nip_bytes.len() > 16 * 1024 * 1024 {
+        return Err(BackendError::Deployment(
+            "Profile Inspector backup is empty or exceeds the 16 MiB guard".into(),
+        ));
+    }
+    let summary = inspect_nip(&nip_bytes)?;
+    persist_backup(
+        &tool_root.join("backups").join(profile_id),
+        profile_id,
+        &nip_bytes,
+        installation.manifest_sha256.clone(),
+        summary,
+    )
+}
+
+struct SessionCleanup(PathBuf);
+
+impl Drop for SessionCleanup {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct NipSummary {
+    profile_count: usize,
+    executable_count: usize,
+    setting_count: usize,
+}
+
+fn inspect_nip(bytes: &[u8]) -> BackendResult<NipSummary> {
+    use quick_xml::events::Event;
+
+    let text = decode_nip_text(bytes)?;
+    let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
+    let mut reader = quick_xml::Reader::from_str(text);
+    reader.config_mut().trim_text(true);
+    let mut root_seen = false;
+    let mut profile_count = 0;
+    let mut executable_count = 0;
+    let mut setting_count = 0;
+    loop {
+        let event = reader.read_event().map_err(|error| {
+            BackendError::Deployment(format!("Profile Inspector backup XML is invalid: {error}"))
+        })?;
+        match event {
+            Event::Start(start) | Event::Empty(start) => {
+                let name = start.name();
+                let name = name.as_ref();
+                if !root_seen {
+                    if name != b"ArrayOfProfile" {
+                        return Err(BackendError::Deployment(
+                            "Profile Inspector backup has an unexpected XML root".into(),
+                        ));
+                    }
+                    root_seen = true;
+                } else if name == b"Profile" {
+                    profile_count += 1;
+                } else if name == b"string" {
+                    executable_count += 1;
+                } else if name == b"ProfileSetting" {
+                    setting_count += 1;
+                }
+            }
+            Event::DocType(_) => {
+                return Err(BackendError::Deployment(
+                    "Profile Inspector backup must not contain a document type declaration".into(),
+                ));
+            }
+            Event::Eof => break,
+            _ => {}
+        }
+    }
+    if !root_seen {
+        return Err(BackendError::Deployment(
+            "Profile Inspector backup has no XML root".into(),
+        ));
+    }
+    Ok(NipSummary {
+        profile_count,
+        executable_count,
+        setting_count,
+    })
+}
+
+fn decode_nip_text(bytes: &[u8]) -> BackendResult<String> {
+    if let Some(bytes) = bytes.strip_prefix(&[0xff, 0xfe]) {
+        if bytes.len() % 2 != 0 {
+            return Err(BackendError::Deployment(
+                "Profile Inspector UTF-16 backup has an odd byte length".into(),
+            ));
+        }
+        let words = bytes
+            .chunks_exact(2)
+            .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+            .collect::<Vec<_>>();
+        return String::from_utf16(&words).map_err(|error| {
+            BackendError::Deployment(format!(
+                "Profile Inspector UTF-16 backup is invalid: {error}"
+            ))
+        });
+    }
+    if let Some(bytes) = bytes.strip_prefix(&[0xfe, 0xff]) {
+        if bytes.len() % 2 != 0 {
+            return Err(BackendError::Deployment(
+                "Profile Inspector UTF-16 backup has an odd byte length".into(),
+            ));
+        }
+        let words = bytes
+            .chunks_exact(2)
+            .map(|pair| u16::from_be_bytes([pair[0], pair[1]]))
+            .collect::<Vec<_>>();
+        return String::from_utf16(&words).map_err(|error| {
+            BackendError::Deployment(format!(
+                "Profile Inspector UTF-16 backup is invalid: {error}"
+            ))
+        });
+    }
+    let bytes = bytes.strip_prefix(&[0xef, 0xbb, 0xbf]).unwrap_or(bytes);
+    String::from_utf8(bytes.to_vec()).map_err(|error| {
+        BackendError::Deployment(format!(
+            "Profile Inspector backup is not valid UTF-8: {error}"
+        ))
+    })
+}
+
+fn persist_backup(
+    backup_root: &Path,
+    profile_id: &str,
+    nip_bytes: &[u8],
+    tool_manifest_sha256: Sha256Digest,
+    summary: NipSummary,
+) -> BackendResult<NvidiaProfileBackupReceipt> {
+    fs::create_dir_all(backup_root).map_err(|error| io_error(backup_root, error))?;
+    let nip_sha256 = Sha256Digest::from_bytes(nip_bytes);
+    let stem = format!("CustomizedProfiles-{}", &nip_sha256.as_str()[..16]);
+    let backup_path = backup_root.join(format!("{stem}.nip"));
+    write_once_verified(&backup_path, nip_bytes)?;
+    let manifest = NvidiaProfileBackupManifest {
+        schema_version: 1,
+        profile_id: profile_id.to_owned(),
+        tool_version: VERSION,
+        tool_manifest_sha256,
+        nip_sha256,
+        nip_byte_length: nip_bytes.len() as u64,
+        profile_count: summary.profile_count,
+        executable_count: summary.executable_count,
+        setting_count: summary.setting_count,
+    };
+    let manifest_bytes = json_bytes(&manifest, "NVIDIA profile backup manifest")?;
+    let manifest_path = backup_root.join(format!("{stem}.json"));
+    write_once_verified(&manifest_path, &manifest_bytes)?;
+    Ok(NvidiaProfileBackupReceipt {
+        backup_path,
+        manifest_path,
+        manifest,
+        manifest_sha256: Sha256Digest::from_bytes(&manifest_bytes),
+    })
+}
+
+fn write_once_verified(path: &Path, bytes: &[u8]) -> BackendResult<()> {
+    if path.exists() {
+        let persisted = fs::read(path).map_err(|error| io_error(path, error))?;
+        return if persisted == bytes {
+            Ok(())
+        } else {
+            Err(BackendError::Deployment(format!(
+                "immutable NVIDIA profile backup conflicts at {}",
+                path.display()
+            )))
+        };
+    }
+    match write_new_synced(path, bytes) {
+        Ok(()) => Ok(()),
+        Err(error) if path.exists() => {
+            let persisted = fs::read(path).map_err(|read_error| io_error(path, read_error))?;
+            if persisted == bytes {
+                Ok(())
+            } else {
+                Err(error)
+            }
+        }
+        Err(error) => Err(error),
+    }
+}
+
+fn json_bytes(value: &impl Serialize, description: &str) -> BackendResult<Vec<u8>> {
+    let mut bytes = serde_json::to_vec_pretty(value).map_err(|error| {
+        BackendError::Deployment(format!("{description} could not be encoded: {error}"))
+    })?;
+    bytes.push(b'\n');
+    Ok(bytes)
+}
+
+#[cfg(windows)]
+fn run_profile_export(executable: &Path, working_directory: &Path) -> BackendResult<()> {
+    let mut child = std::process::Command::new(executable)
+        .arg("-exportCustomized")
+        .current_dir(working_directory)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|error| {
+            BackendError::Deployment(format!("failed to start NVIDIA profile backup: {error}"))
+        })?;
+    let started = Instant::now();
+    loop {
+        if let Some(status) = child.try_wait().map_err(|error| {
+            BackendError::Deployment(format!("NVIDIA profile backup status failed: {error}"))
+        })? {
+            return if status.success() {
+                Ok(())
+            } else {
+                Err(BackendError::Deployment(format!(
+                    "NVIDIA profile backup failed with exit code {}",
+                    status
+                        .code()
+                        .map_or_else(|| "unknown".into(), |code| code.to_string())
+                )))
+            };
+        }
+        if started.elapsed() >= Duration::from_secs(60) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(BackendError::Deployment(
+                "NVIDIA profile backup exceeded the 60-second timeout".into(),
+            ));
+        }
+        thread::sleep(Duration::from_millis(25));
+    }
+}
+
+#[cfg(not(windows))]
+fn run_profile_export(_executable: &Path, _working_directory: &Path) -> BackendResult<()> {
+    Err(BackendError::UnsupportedPlatform)
 }
 
 fn install_command(app: &AppHandle) -> BackendResult<ProfileInspectorInstallation> {
@@ -680,6 +1032,55 @@ mod tests {
         )
         .unwrap();
         assert!(verify_installation(&version_path, false).is_err());
+    }
+
+    #[test]
+    fn profile_backup_xml_is_counted_and_persisted_by_content_digest() {
+        let nip = br#"<?xml version="1.0" encoding="utf-8"?>
+<ArrayOfProfile>
+  <Profile>
+    <ProfileName>Game profile</ProfileName>
+    <Executeables><string>game.exe</string><string>launcher.exe</string></Executeables>
+    <Settings><ProfileSetting/><ProfileSetting/></Settings>
+  </Profile>
+</ArrayOfProfile>"#;
+        let summary = inspect_nip(nip).unwrap();
+        assert_eq!(
+            summary,
+            NipSummary {
+                profile_count: 1,
+                executable_count: 2,
+                setting_count: 2,
+            }
+        );
+        let directory = TestDirectory::new();
+        let profile_id = "nvstraps-0123456789abcdef01234567";
+        let tool_manifest_sha256 = Sha256Digest::from_bytes(b"tool manifest");
+        let first = persist_backup(
+            &directory.0,
+            profile_id,
+            nip,
+            tool_manifest_sha256.clone(),
+            summary,
+        )
+        .unwrap();
+        let repeated =
+            persist_backup(&directory.0, profile_id, nip, tool_manifest_sha256, summary).unwrap();
+        assert_eq!(first, repeated);
+        assert_eq!(fs::read(&first.backup_path).unwrap(), nip);
+        assert_eq!(first.manifest.profile_count, 1);
+    }
+
+    #[test]
+    fn profile_backup_decoder_accepts_utf16_and_rejects_doctypes() {
+        let xml = "<ArrayOfProfile><Profile><Executeables/><Settings/></Profile></ArrayOfProfile>";
+        let mut utf16 = vec![0xff, 0xfe];
+        for word in xml.encode_utf16() {
+            utf16.extend_from_slice(&word.to_le_bytes());
+        }
+        assert_eq!(inspect_nip(&utf16).unwrap().profile_count, 1);
+        assert!(inspect_nip(b"<!DOCTYPE x><ArrayOfProfile/>").is_err());
+        assert!(inspect_nip(b"<Unexpected/>").is_err());
     }
 
     #[cfg(windows)]

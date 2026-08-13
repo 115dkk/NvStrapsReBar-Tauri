@@ -34,6 +34,7 @@ pub fn run() {
             profile_inspector::install_nvidia_profile_inspector,
             profile_inspector::get_nvidia_profile_inspector_installation,
             profile_inspector::launch_nvidia_profile_inspector,
+            profile_inspector::backup_nvidia_profiles,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run NvStrapsReBar");
