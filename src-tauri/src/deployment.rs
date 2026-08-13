@@ -5,9 +5,9 @@ use std::{
 
 use nvstraps_deploy::{
     ArtifactKind, BoardPath, DeploymentPackageReceipt, DeploymentPlan, DeploymentStore,
-    EvidenceKind, FirmwareFingerprint, FirmwareInstallRoute, LegacyPatchCatalogFile,
+    DeploymentWorkflow, FirmwareFingerprint, FirmwareInstallRoute, LegacyPatchCatalogFile,
     LegacyPatchProfile, LegacyPatchRisk, MachineIdentity, MachineProfile, ProfileMatch,
-    RecoveryCapability, Sha256Digest, StepEvidence, StepId, StepState, StoredArtifact,
+    RecoveryCapability, Sha256Digest, StepId, StoredArtifact,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, path::BaseDirectory};
@@ -438,48 +438,53 @@ pub(crate) fn load_exact_deployment(
 fn prepare_from_bytes(
     store: &DeploymentStore,
     profile: &MachineProfile,
-    mut plan: DeploymentPlan,
+    plan: DeploymentPlan,
     bundled_driver: &[u8],
 ) -> BackendResult<FirmwarePreparation> {
     validate_builtin_legacy_profile(profile)?;
-    plan.validate_for(profile).map_err(|error| {
-        BackendError::Deployment(format!("deployment plan is invalid: {error}"))
-    })?;
-    let driver = if step_is_completed(&plan, StepId::PrepareRustDriver) {
+    let mut workflow =
+        DeploymentWorkflow::from_plan(store, profile, plan).map_err(BackendError::from)?;
+    let driver = if workflow.plan().is_step_completed(StepId::PrepareRustDriver) {
         let (artifact, bytes) = store
             .load_artifact(profile, ArtifactKind::RustDriverFfs)
             .map_err(BackendError::from)?;
         nvstraps_ffs::inspect_ffs(&bytes).map_err(|error| {
             BackendError::Deployment(format!("persisted Rust driver is invalid: {error}"))
         })?;
-        require_step_value(&plan, StepId::PrepareRustDriver, artifact.sha256.as_str())?;
+        workflow
+            .plan()
+            .require_completed_value(StepId::PrepareRustDriver, artifact.sha256.as_str())
+            .map_err(BackendError::from)?;
         artifact
     } else {
-        require_active_step(&plan, StepId::PrepareRustDriver)?;
+        workflow
+            .plan()
+            .require_active(StepId::PrepareRustDriver)
+            .map_err(BackendError::from)?;
         nvstraps_ffs::inspect_ffs(bundled_driver).map_err(|error| {
             BackendError::Deployment(format!("bundled Rust driver is invalid: {error}"))
         })?;
         let artifact = store
             .preserve_artifact(profile, ArtifactKind::RustDriverFfs, bundled_driver)
             .map_err(BackendError::from)?;
-        plan.complete(
-            StepId::PrepareRustDriver,
-            StepEvidence::new(EvidenceKind::RustDriverSha256, artifact.sha256.to_string())
-                .map_err(|error| BackendError::Deployment(error.to_string()))?,
-        )
-        .map_err(|error| BackendError::Deployment(error.to_string()))?;
-        store
-            .save_plan(profile, &plan)
+        workflow
+            .record_step(StepId::PrepareRustDriver, artifact.sha256.to_string())
             .map_err(BackendError::from)?;
         artifact
     };
 
     let (legacy_patched_firmware, legacy_patch_receipt, legacy_patch) =
         if profile.board_path == BoardPath::LegacyAbove4g {
-            if step_is_completed(&plan, StepId::ApplyLegacyBoardPatches) {
-                load_legacy_patch_artifacts(store, profile, &plan)?
+            if workflow
+                .plan()
+                .is_step_completed(StepId::ApplyLegacyBoardPatches)
+            {
+                load_legacy_patch_artifacts(store, profile, workflow.plan())?
             } else {
-                require_active_step(&plan, StepId::ApplyLegacyBoardPatches)?;
+                workflow
+                    .plan()
+                    .require_active(StepId::ApplyLegacyBoardPatches)
+                    .map_err(BackendError::from)?;
                 let original = read_preserved_original(store, profile)?;
                 let (patched, receipt) = apply_builtin_legacy_patches(profile, &original)?;
                 let patched_artifact = store
@@ -498,17 +503,11 @@ fn prepare_from_bytes(
                 let receipt_artifact = store
                     .preserve_artifact(profile, ArtifactKind::LegacyPatchReceipt, &receipt_bytes)
                     .map_err(BackendError::from)?;
-                plan.complete(
-                    StepId::ApplyLegacyBoardPatches,
-                    StepEvidence::new(
-                        EvidenceKind::LegacyPatchReceipt,
+                workflow
+                    .record_step(
+                        StepId::ApplyLegacyBoardPatches,
                         receipt_artifact.sha256.to_string(),
                     )
-                    .map_err(|error| BackendError::Deployment(error.to_string()))?,
-                )
-                .map_err(|error| BackendError::Deployment(error.to_string()))?;
-                store
-                    .save_plan(profile, &plan)
                     .map_err(BackendError::from)?;
                 (
                     Some(patched_artifact),
@@ -520,17 +519,19 @@ fn prepare_from_bytes(
             (None, None, None)
         };
 
-    if step_is_completed(&plan, StepId::VerifyPatchedArtifact) {
+    if workflow
+        .plan()
+        .is_step_completed(StepId::VerifyPatchedArtifact)
+    {
         let (artifact, _) = store
             .load_artifact(profile, ArtifactKind::PatchedFirmware)
             .map_err(BackendError::from)?;
-        require_step_value(
-            &plan,
-            StepId::VerifyPatchedArtifact,
-            artifact.sha256.as_str(),
-        )?;
+        workflow
+            .plan()
+            .require_completed_value(StepId::VerifyPatchedArtifact, artifact.sha256.as_str())
+            .map_err(BackendError::from)?;
         return Ok(FirmwarePreparation {
-            plan,
+            plan: workflow.into_plan(),
             driver,
             legacy_patched_firmware,
             legacy_patch_receipt,
@@ -540,7 +541,10 @@ fn prepare_from_bytes(
         });
     }
 
-    require_active_step(&plan, StepId::VerifyPatchedArtifact)?;
+    workflow
+        .plan()
+        .require_active(StepId::VerifyPatchedArtifact)
+        .map_err(BackendError::from)?;
     let (_, driver_bytes) = store
         .load_artifact(profile, ArtifactKind::RustDriverFfs)
         .map_err(BackendError::from)?;
@@ -570,21 +574,15 @@ fn prepare_from_bytes(
     let patched_firmware = store
         .preserve_artifact(profile, ArtifactKind::PatchedFirmware, &patched)
         .map_err(BackendError::from)?;
-    plan.complete(
-        StepId::VerifyPatchedArtifact,
-        StepEvidence::new(
-            EvidenceKind::PatchedFirmwareSha256,
+    workflow
+        .record_step(
+            StepId::VerifyPatchedArtifact,
             patched_firmware.sha256.to_string(),
         )
-        .map_err(|error| BackendError::Deployment(error.to_string()))?,
-    )
-    .map_err(|error| BackendError::Deployment(error.to_string()))?;
-    store
-        .save_plan(profile, &plan)
         .map_err(BackendError::from)?;
 
     Ok(FirmwarePreparation {
-        plan,
+        plan: workflow.into_plan(),
         driver,
         legacy_patched_firmware,
         legacy_patch_receipt,
@@ -756,11 +754,11 @@ fn load_legacy_patch_artifacts(
     let (receipt_artifact, receipt_bytes) = store
         .load_artifact(profile, ArtifactKind::LegacyPatchReceipt)
         .map_err(BackendError::from)?;
-    require_step_value(
-        plan,
+    plan.require_completed_value(
         StepId::ApplyLegacyBoardPatches,
         receipt_artifact.sha256.as_str(),
-    )?;
+    )
+    .map_err(BackendError::from)?;
     let receipt: LegacyPatchReceipt = serde_json::from_slice(&receipt_bytes).map_err(|error| {
         BackendError::Deployment(format!(
             "persisted legacy patch receipt is invalid: {error}"
@@ -860,41 +858,6 @@ fn hex_bytes(bytes: &[u8]) -> String {
         write!(&mut output, "{byte:02x}").expect("writing to a string cannot fail");
     }
     output
-}
-
-fn require_active_step(plan: &DeploymentPlan, expected: StepId) -> BackendResult<()> {
-    match plan.active_step() {
-        Some(step) if step.id == expected => Ok(()),
-        Some(step) => Err(BackendError::Deployment(format!(
-            "deployment step {expected:?} cannot run while {:?} is active",
-            step.id
-        ))),
-        None => Err(BackendError::Deployment(
-            "deployment plan has no active step".into(),
-        )),
-    }
-}
-
-fn step_is_completed(plan: &DeploymentPlan, id: StepId) -> bool {
-    plan.steps
-        .iter()
-        .any(|step| step.id == id && step.state == StepState::Completed)
-}
-
-fn require_step_value(plan: &DeploymentPlan, id: StepId, expected: &str) -> BackendResult<()> {
-    let value = plan
-        .steps
-        .iter()
-        .find(|step| step.id == id && step.state == StepState::Completed)
-        .and_then(|step| step.evidence.as_ref())
-        .map(|evidence| evidence.value.as_str());
-    if value == Some(expected) {
-        Ok(())
-    } else {
-        Err(BackendError::Deployment(format!(
-            "persisted artifact does not match evidence for {id:?}"
-        )))
-    }
 }
 
 fn build_profile(

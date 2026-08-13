@@ -99,5 +99,11 @@ impl From<nvstraps_deploy::StoreError> for BackendError {
     }
 }
 
+impl From<nvstraps_deploy::PlanError> for BackendError {
+    fn from(error: nvstraps_deploy::PlanError) -> Self {
+        Self::Deployment(error.to_string())
+    }
+}
+
 pub type BackendResult<T> = Result<T, BackendError>;
 pub type CommandResult<T> = Result<T, ApiError>;
