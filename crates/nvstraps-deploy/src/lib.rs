@@ -14,6 +14,10 @@ use serde::{Deserialize, Deserializer, Serialize, de};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+mod store;
+
+pub use store::{DeploymentStore, ProvisionedDeployment, StoreError};
+
 pub const PROFILE_SCHEMA_VERSION: u8 = 1;
 pub const PLAN_SCHEMA_VERSION: u8 = 1;
 
