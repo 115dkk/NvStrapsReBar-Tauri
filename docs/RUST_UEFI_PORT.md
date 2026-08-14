@@ -34,6 +34,27 @@ The FFS writer follows the same standard-header order as EDK2 `GenFfs`: calculat
 checksum while checksum/state fields are zero, calculate the body checksum, and finally set the
 three valid-state bits. Unit tests pin the resulting standard header and section layout.
 
+## Miri unsafe-code validation
+
+Install nightly Miri and run the same command used by the dedicated Windows CI job:
+
+```text
+rustup toolchain install nightly --component miri --profile minimal
+npm run check:miri
+```
+
+The gate interprets `nvstraps-core` and the host build of `nvstraps-uefi`. In particular, its tests
+execute the exact volatile reads and writes used for NVIDIA BAR1 strap MMIO against live, aligned
+Rust allocations, so Miri checks pointer provenance, alignment, initialization, and access rules
+inside that unsafe boundary. The production adapter supplies the physical MMIO addresses only
+after the existing BAR0 validation and temporary mapping transaction.
+
+Miri does not emulate UEFI boot services, protocol callbacks, PCI configuration space, or Windows
+SetupAPI/EFI-variable calls. Those target-only unsafe blocks remain under UEFI/Windows compilation,
+warning-free Clippy, native tests, transaction simulations, and the QEMU/OVMF dispatch test. A
+passing Miri job is dynamic evidence for the interpreted paths, not a claim that every external
+firmware or operating-system call ran under Miri.
+
 ## OVMF integration test
 
 On Linux, install QEMU and OVMF and run:

@@ -1,9 +1,9 @@
-use core::ptr::{read_volatile, write_volatile};
-
 use nvstraps_core::straps::{
-    self, NVIDIA_STRAPS_SET0_ADDRESS_OFFSET, NVIDIA_STRAPS_SET1_ADDRESS_OFFSET, StrapError,
+    NVIDIA_STRAPS_SET0_ADDRESS_OFFSET, NVIDIA_STRAPS_SET1_ADDRESS_OFFSET, StrapError,
 };
 use uefi::Status;
+
+use crate::mmio::{plan_bar1_straps_from_mmio, write_bar1_strap};
 
 pub trait S3Recorder {
     fn memory_read_write_u32(
@@ -42,15 +42,18 @@ pub unsafe fn configure_bar1_size(
     let set1_pointer = set1_address as *mut u32;
 
     // SAFETY: Guaranteed by this function's BAR0 mapping contract.
-    let straps0 = unsafe { read_volatile(set0_pointer) };
-    // SAFETY: Guaranteed by this function's BAR0 mapping contract.
-    let straps1 = unsafe { read_volatile(set1_pointer) };
-    let plan = straps::plan_bar1_straps(straps0, straps1, bar_size_selector)?;
+    let plan = unsafe {
+        plan_bar1_straps_from_mmio(
+            set0_pointer.cast_const(),
+            set1_pointer.cast_const(),
+            bar_size_selector,
+        )
+    }?;
     let mut resume_error = None;
 
     if let Some(write) = plan.set0 {
         // SAFETY: Guaranteed by this function's BAR0 mapping contract.
-        unsafe { write_volatile(set0_pointer, write.register_value) };
+        unsafe { write_bar1_strap(set0_pointer, write.register_value) };
         if let Err(status) =
             resume.memory_read_write_u32(set0_address, write.resume_data, write.resume_mask)
         {
@@ -59,7 +62,7 @@ pub unsafe fn configure_bar1_size(
     }
     if let Some(write) = plan.set1 {
         // SAFETY: Guaranteed by this function's BAR0 mapping contract.
-        unsafe { write_volatile(set1_pointer, write.register_value) };
+        unsafe { write_bar1_strap(set1_pointer, write.register_value) };
         if let Err(status) =
             resume.memory_read_write_u32(set1_address, write.resume_data, write.resume_mask)
         {

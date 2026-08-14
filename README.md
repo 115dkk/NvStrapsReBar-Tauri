@@ -93,6 +93,18 @@ npm run check:rust
 npm run tauri dev
 ```
 
+Install nightly Miri once and interpret the host-safe contracts plus the actual volatile BAR1
+MMIO read/write implementation with:
+
+```powershell
+rustup toolchain install nightly --component miri --profile minimal
+npm run check:miri
+```
+
+Miri cannot call the external Windows SetupAPI/EFI functions or UEFI protocols. Those target-only
+boundaries remain covered by Windows compilation and tests, UEFI-target Clippy, and QEMU/OVMF;
+the Miri gate dynamically checks only code it can genuinely interpret.
+
 Build the Windows executable and bundled Rust FFS with:
 
 ```powershell

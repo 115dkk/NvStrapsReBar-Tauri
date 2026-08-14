@@ -3,6 +3,7 @@
 extern crate alloc;
 
 pub mod execution;
+pub mod mmio;
 
 #[cfg(not(target_os = "uefi"))]
 pub mod simulation;
