@@ -29,6 +29,8 @@
         --ko-weight-button: 650;
         --ko-weight-section: 680;
         --ko-weight-page: 720;
+        --font-mono-cjk: ui-monospace, Consolas, "Pretendard Variable", Pretendard,
+                "Malgun Gothic", monospace;
 }
 html:lang(ko) {
         font-family: "Pretendard Variable", Pretendard, "Segoe UI Variable Text",
@@ -66,6 +68,10 @@ select,
 input,
 textarea {
         font: inherit;
+}
+:where(code, pre, kbd, samp) {
+        font-family: var(--font-mono-cjk);
+        font-weight: 400;
 }
 button,
 select {
@@ -120,9 +126,7 @@ button:disabled {
         background: #d7aa5c;
         color: #211c14;
         font:
-                700 11px/26px ui-monospace,
-                Consolas,
-                monospace;
+                700 11px/26px var(--font-mono-cjk);
         text-align: center;
         letter-spacing: 0.07em;
 }
@@ -208,7 +212,7 @@ button:disabled {
 .rebar-aggregate-symbol {
         flex: 0 0 auto;
         color: var(--warn);
-        font: 700 11px ui-monospace, Consolas, monospace;
+        font: 700 11px var(--font-mono-cjk);
         letter-spacing: 0.08em;
 }
 .rebar-status-gpus {
@@ -238,9 +242,7 @@ button:disabled {
 .kicker,
 .step {
         font:
-                700 11px/1.2 ui-monospace,
-                Consolas,
-                monospace;
+                700 11px/1.2 var(--font-mono-cjk);
         letter-spacing: 0.13em;
         color: var(--accent);
 }
@@ -275,8 +277,7 @@ h1 {
 .dirty,
 .saved {
         font:
-                700 10px ui-monospace,
-                monospace;
+                700 10px var(--font-mono-cjk);
         letter-spacing: 0.1em;
 }
 .dirty {
@@ -352,7 +353,8 @@ aside hr {
 }
 .mono-wrap {
         overflow-wrap: anywhere;
-        font-family: ui-monospace, Consolas, monospace;
+        font-family: var(--font-mono-cjk);
+        font-weight: 400;
 }
 .muted-copy {
         color: var(--muted);
@@ -399,7 +401,7 @@ aside hr {
 }
 .truth-badge strong {
         color: #f0a176;
-        font: 700 11px ui-monospace, Consolas, monospace;
+        font: 700 11px var(--font-mono-cjk);
         letter-spacing: 0.12em;
 }
 .truth-badge span {
@@ -593,7 +595,7 @@ aside hr {
 }
 .legacy-rule b {
         color: var(--ok);
-        font: 700 9px ui-monospace, Consolas, monospace;
+        font: 700 9px var(--font-mono-cjk);
         letter-spacing: 0.08em;
 }
 .legacy-empty,
@@ -726,7 +728,7 @@ aside hr {
 }
 .active-workflow-head > strong {
         color: var(--ok);
-        font: 700 15px ui-monospace, Consolas, monospace;
+        font: 700 15px var(--font-mono-cjk);
 }
 .active-workflow-action {
         display: flex;
@@ -774,7 +776,7 @@ aside hr {
 }
 .recommendation-facts dd {
         color: var(--ok);
-        font: 700 16px ui-monospace, Consolas, monospace;
+        font: 700 16px var(--font-mono-cjk);
 }
 .recommendation-rules {
         display: grid;
@@ -904,7 +906,7 @@ aside hr {
         display: block;
         margin-bottom: 8px;
         color: var(--warn);
-        font: 700 10px ui-monospace, Consolas, monospace;
+        font: 700 10px var(--font-mono-cjk);
         letter-spacing: 0.11em;
 }
 .manual-gates strong {
@@ -948,7 +950,7 @@ aside hr {
 }
 .reboot-modal code {
         color: #f2c1a5;
-        font-family: ui-monospace, Consolas, monospace;
+        font-family: var(--font-mono-cjk);
 }
 .reboot-modal .warning-box {
         display: grid;
@@ -1056,8 +1058,7 @@ dl {
 }
 dt {
         font:
-                600 10px ui-monospace,
-                monospace;
+                600 10px var(--font-mono-cjk);
         color: var(--muted);
         text-transform: uppercase;
         letter-spacing: 0.08em;
@@ -1114,8 +1115,7 @@ dd {
 .count b {
         display: block;
         font:
-                400 40px/1 ui-monospace,
-                monospace;
+                400 40px/1 var(--font-mono-cjk);
         color: var(--ink);
 }
 .count span {
@@ -1223,8 +1223,7 @@ dd {
 .pci {
         align-self: flex-start;
         font:
-                700 11px ui-monospace,
-                monospace;
+                700 11px var(--font-mono-cjk);
         padding: 5px 7px;
         color: #e7b393;
         background: #3a2b25;
@@ -1238,8 +1237,7 @@ dd {
         margin: 0;
         color: var(--muted);
         font:
-                11px ui-monospace,
-                monospace;
+                11px var(--font-mono-cjk);
 }
 .gpu-facts {
         display: flex;
@@ -1305,8 +1303,7 @@ dd {
         padding-bottom: 10px;
         color: var(--muted);
         font:
-                11px ui-monospace,
-                monospace;
+                11px var(--font-mono-cjk);
 }
 .empty {
         padding: 30px;
@@ -1519,7 +1516,7 @@ dd {
         border: 1px solid var(--line);
         background: #111417;
         color: #c6ccd1;
-        font: 400 11px/1.55 ui-monospace, Consolas, monospace;
+        font: 400 11px/1.55 var(--font-mono-cjk);
         white-space: pre-wrap;
 }
 .license-text:focus-visible {
@@ -1630,7 +1627,7 @@ dd {
         align-items: center;
         gap: 7px;
         color: var(--muted);
-        font: 650 10px ui-monospace, Consolas, monospace;
+        font: 650 10px var(--font-mono-cjk);
         letter-spacing: 0.05em;
         text-transform: uppercase;
 }
