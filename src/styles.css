@@ -1416,6 +1416,40 @@ dd {
 .rule-identity {
         font-variant-numeric: tabular-nums;
 }
+.language-select {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        color: var(--muted);
+        font: 650 10px ui-monospace, Consolas, monospace;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+}
+.language-select select {
+        width: 92px;
+        height: 34px;
+        padding: 0 8px;
+        color: var(--ink);
+        border: 1px solid var(--line);
+        background: var(--surface);
+        font: 600 12px system-ui, sans-serif;
+        text-transform: none;
+        letter-spacing: 0;
+}
+@media (max-width: 900px) {
+        .language-select span {
+                position: absolute;
+                width: 1px;
+                height: 1px;
+                padding: 0;
+                margin: -1px;
+                overflow: hidden;
+                clip: rect(0, 0, 0, 0);
+                white-space: nowrap;
+                border: 0;
+        }
+        .language-select select { width: 84px; }
+}
 .intro h2,
 .section-head h3 {
         text-wrap: balance;

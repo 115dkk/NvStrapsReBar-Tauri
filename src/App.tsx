@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { bridge, previewMode } from "./bridge";
 import { DeploymentWorkspace } from "./DeploymentWorkspace";
+import { useI18n } from "./i18n";
 import {
         DEFAULT_DRAFT,
         type ConfigDraft,
@@ -70,6 +71,7 @@ function Status({ label, ok }: { label: string; ok: boolean }) {
         );
 }
 export function App() {
+        const { locale, setLocale, t, validationSummary, gpuCountLabel } = useI18n();
         const [snap, setSnap] = useState<SystemSnapshot | null>(null),
                 [draft, setDraft] = useState<ConfigDraft>(DEFAULT_DRAFT),
                 [baseline, setBaseline] = useState<ConfigDraft>(DEFAULT_DRAFT),
@@ -92,7 +94,7 @@ export function App() {
                 if (
                         dirty &&
                         refresh &&
-                        !confirm("Discard unsaved edits and refresh hardware?")
+                        !confirm(t("Discard unsaved edits and refresh hardware?"))
                 )
                         return;
                 setBusy(true);
@@ -250,33 +252,25 @@ export function App() {
                 return (
                         <main className="center">
                                 <div className="loader" />
-                                <h1>Reading system state</h1>
-                                <p>
-                                        Inspecting UEFI access and NVIDIA
-                                        adapters…
-                                </p>
+                                <h1>{t("Reading system state")}</h1>
+                                <p>{t("Inspecting UEFI access and NVIDIA adapters…")}</p>
                         </main>
                 );
         if (!snap)
                 return (
                         <main className="center">
-                                <h1>System state unavailable</h1>
+                                <h1>{t("System state unavailable")}</h1>
                                 <p>
                                         {error ||
-                                                "The native bridge did not return a snapshot."}
+                                                t("The native bridge did not return a snapshot.")}
                                 </p>
-                                <button onClick={() => load()}>
-                                        Try again
-                                </button>
+                                <button onClick={() => load()}>{t("Try again")}</button>
                         </main>
                 );
         return (
                 <div className="app">
                         {previewMode && (
-                                <div className="preview" role="status">
-                                        PREVIEW DATA · Browser fixture only · No
-                                        firmware is being read or written
-                                </div>
+                                <div className="preview" role="status">{t("PREVIEW DATA · Browser fixture only · No firmware is being read or written")}</div>
                         )}
                         <header>
                                 <div>
@@ -285,14 +279,26 @@ export function App() {
                                         </span>
                                         <h1>
                                                 {surface === "configure"
-                                                        ? "Firmware configuration"
-                                                        : "Deployment workspace"}
+                                                        ? t("Firmware configuration")
+                                                        : t("Deployment workspace")}
                                         </h1>
                                 </div>
                                 <div className="header-actions">
+                                        <label className="language-select">
+                                                <span>{t("Language")}</span>
+                                                <select
+                                                        data-testid="language-select"
+                                                        aria-label={t("Language")}
+                                                        value={locale}
+                                                        onChange={(event) => setLocale(event.target.value as "en" | "ko")}
+                                                >
+                                                        <option value="en">English</option>
+                                                        <option value="ko">한국어</option>
+                                                </select>
+                                        </label>
                                         <nav
                                                 className="surface-nav"
-                                                aria-label="Application workspace"
+                                                aria-label={t("Application workspace")}
                                         >
                                                 <button
                                                         aria-current={
@@ -306,9 +312,7 @@ export function App() {
                                                                         "configure",
                                                                 )
                                                         }
-                                                >
-                                                        Configure
-                                                </button>
+                                                >{t("Configure")}</button>
                                                 <button
                                                         aria-current={
                                                                 surface ===
@@ -321,9 +325,7 @@ export function App() {
                                                                         "deploy",
                                                                 )
                                                         }
-                                                >
-                                                        Deploy
-                                                </button>
+                                                >{t("Deploy")}</button>
                                         </nav>
                                         {surface === "configure" && (
                                                 <span
@@ -334,61 +336,59 @@ export function App() {
                                                         }
                                                 >
                                                         {dirty
-                                                                ? "UNSAVED EDITS"
-                                                                : "IN SYNC"}
+                                                                ? t("UNSAVED EDITS")
+                                                                : t("IN SYNC")}
                                                 </span>
                                         )}
                                         <button
                                                 className="quiet"
                                                 onClick={() => void load(true)}
                                                 disabled={busy}
-                                        >
-                                                Refresh system
-                                        </button>
+                                        >{t("Refresh system")}</button>
                                 </div>
                         </header>
                         {surface === "deploy" ? (
                                 <DeploymentWorkspace snapshot={snap} />
                         ) : (
                         <div className="workspace">
-                                <aside aria-label="System status">
-                                        <h2>System gate</h2>
+                                <aside aria-label={t("System status")}>
+                                        <h2>{t("System gate")}</h2>
                                         <Status
-                                                label="Windows"
+                                                label={t("Windows")}
                                                 ok={snap.platform.supported}
                                         />
                                         <Status
-                                                label="UEFI boot"
+                                                label={t("UEFI boot")}
                                                 ok={snap.platform.uefi}
                                         />
                                         <Status
-                                                label="Administrator"
+                                                label={t("Administrator")}
                                                 ok={snap.platform.elevated}
                                         />
                                         <Status
-                                                label="Firmware access"
+                                                label={t("Firmware access")}
                                                 ok={snap.firmware.accessible}
                                         />
                                         <hr />
                                         <dl>
-                                                <dt>Driver state</dt>
+                                                <dt>{t("Driver state")}</dt>
                                                 <dd>
                                                         {snap.driverStatus
-                                                                ?.label ??
-                                                                "Unavailable"}
+                                                                ? t(snap.driverStatus.label) :
+                                                                t("Unavailable")}
                                                 </dd>
-                                                <dt>Saved variable</dt>
+                                                <dt>{t("Saved variable")}</dt>
                                                 <dd>
                                                         {snap.firmware
                                                                 .configVariablePresent ===
                                                         null
-                                                                ? "Unknown"
+                                                                ? t("Unknown")
                                                                 : snap.firmware
                                                                             .configVariablePresent
-                                                                  ? "Present"
-                                                                  : "Not present"}
+                                                                  ? t("Present")
+                                                                  : t("Not present")}
                                                 </dd>
-                                                <dt>Architecture</dt>
+                                                <dt>{t("Architecture")}</dt>
                                                 <dd>
                                                         {
                                                                 snap.platform
@@ -402,42 +402,19 @@ export function App() {
                                                         onClick={() =>
                                                                 void bridge.elevate()
                                                         }
-                                                >
-                                                        Restart as administrator
-                                                </button>
+                                                >{t("Restart as administrator")}</button>
                                         )}
                                         <div className="rail-note">
-                                                <strong>Hardware safety</strong>
-                                                <p>
-                                                        GPU or PCI topology
-                                                        changes can invalidate
-                                                        saved selectors. Refresh
-                                                        and validate after any
-                                                        hardware change.
-                                                </p>
+                                                <strong>{t("Hardware safety")}</strong>
+                                                <p>{t("GPU or PCI topology changes can invalidate saved selectors. Refresh and validate after any hardware change.")}</p>
                                         </div>
                                 </aside>
                                 <main className="content">
                                         <section className="intro">
                                                 <div>
-                                                        <span className="kicker">
-                                                                ACTIVE SYSTEM /
-                                                                EDITABLE DRAFT
-                                                        </span>
-                                                        <h2>
-                                                                Configure what
-                                                                firmware applies
-                                                                at next boot
-                                                        </h2>
-                                                        <p>
-                                                                Changes are
-                                                                written to a
-                                                                UEFI variable.
-                                                                They do not take
-                                                                effect until
-                                                                Windows is
-                                                                restarted.
-                                                        </p>
+                                                        <span className="kicker">{t("ACTIVE SYSTEM / EDITABLE DRAFT")}</span>
+                                                        <h2>{t("Configure what firmware applies at next boot")}</h2>
+                                                        <p>{t("Changes are written to a UEFI variable. They do not take effect until Windows is restarted.")}</p>
                                                 </div>
                                                 <div className="count">
                                                         <b>
@@ -447,14 +424,7 @@ export function App() {
                                                                                 .length
                                                                 }
                                                         </b>
-                                                        <span>
-                                                                NVIDIA GPU
-                                                                {snap.devices
-                                                                        .length ===
-                                                                1
-                                                                        ? ""
-                                                                        : "s"}
-                                                        </span>
+                                                        <span>{gpuCountLabel(snap.devices.length)}</span>
                                                 </div>
                                         </section>
                                         {error && (
@@ -462,17 +432,15 @@ export function App() {
                                                         className="notice error"
                                                         role="alert"
                                                 >
-                                                        <strong>
-                                                                Operation failed
-                                                        </strong>
-                                                        <span>{error}</span>
+                                                        <strong>{t("Operation failed")}</strong>
+                                                        <span>{t(error)}</span>
                                                         <button
                                                                 onClick={() =>
                                                                         setError(
                                                                                 "",
                                                                         )
                                                                 }
-                                                                aria-label="Dismiss error"
+                                                                aria-label={t("Dismiss error")}
                                                         >
                                                                 ×
                                                         </button>
@@ -483,7 +451,7 @@ export function App() {
                                                         className={`notice ${n.kind}`}
                                                         key={i}
                                                 >
-                                                        {n.message}
+                                                        {t(n.message)}
                                                 </div>
                                         ))}
                                         <section className="panel">
@@ -492,39 +460,30 @@ export function App() {
                                                                 <span className="step">
                                                                         01
                                                                 </span>
-                                                                <h3>
-                                                                        Automatic
-                                                                        policy
-                                                                </h3>
+                                                                <h3>{t("Automatic policy")}</h3>
                                                         </div>
-                                                        <p>
-                                                                Choose the
-                                                                default behavior
-                                                                before adding
-                                                                device-specific
-                                                                exceptions.
-                                                        </p>
+                                                        <p>{t("Choose the default behavior before adding device-specific exceptions.")}</p>
                                                 </div>
                                                 <div
                                                         className="mode-grid"
                                                         role="radiogroup"
-                                                        aria-label="Automatic GPU policy"
+                                                        aria-label={t("Automatic GPU policy")}
                                                 >
                                                         {[
                                                                 [
                                                                         0,
-                                                                        "Off",
-                                                                        "Only explicit GPU rules are used.",
+                                                                        t("Off"),
+                                                                        t("Only explicit GPU rules are used."),
                                                                 ],
                                                                 [
                                                                         1,
-                                                                        "Registry only",
-                                                                        "Use sizes from the upstream Turing registry.",
+                                                                        t("Registry only"),
+                                                                        t("Use sizes from the upstream Turing registry."),
                                                                 ],
                                                                 [
                                                                         2,
-                                                                        "Registry + fallback",
-                                                                        "Use the registry, or 2 GiB for otherwise unlisted Turing GPUs.",
+                                                                        t("Registry + fallback"),
+                                                                        t("Use the registry, or 2 GiB for otherwise unlisted Turing GPUs."),
                                                                 ],
                                                         ].map(([v, l, d]) => (
                                                                 <label
@@ -568,10 +527,7 @@ export function App() {
                                                         ))}
                                                 </div>
                                                 <label className="field">
-                                                        <span>
-                                                                Target PCI BAR
-                                                                size
-                                                        </span>
+                                                        <span>{t("Target PCI BAR size")}</span>
                                                         <select
                                                                 value={
                                                                         draft.targetPciBarSize
@@ -587,10 +543,7 @@ export function App() {
                                                                         })
                                                                 }
                                                         >
-                                                                <option value="0">
-                                                                        System
-                                                                        default
-                                                                </option>
+                                                                <option value="0">{t("System default")}</option>
                                                                 {Array.from(
                                                                         {
                                                                                 length: 31,
@@ -615,31 +568,11 @@ export function App() {
                                                                                 </option>
                                                                         ),
                                                                 )}
-                                                                <option value="32">
-                                                                        Any
-                                                                        supported
-                                                                        size
-                                                                </option>
-                                                                <option value="64">
-                                                                        Selected
-                                                                        GPUs
-                                                                        only
-                                                                </option>
-                                                                <option value="65">
-                                                                        GPU
-                                                                        straps
-                                                                        only
-                                                                </option>
+                                                                <option value="32">{t("Any supported size")}</option>
+                                                                <option value="64">{t("Selected GPUs only")}</option>
+                                                                <option value="65">{t("GPU straps only")}</option>
                                                         </select>
-                                                        <small>
-                                                                Special modes 64
-                                                                and 65 constrain
-                                                                PCI-side
-                                                                changes;
-                                                                validation
-                                                                remains
-                                                                authoritative.
-                                                        </small>
+                                                        <small>{t("Special modes 64 and 65 constrain PCI-side changes; validation remains authoritative.")}</small>
                                                 </label>
                                         </section>
                                         <section className="panel">
@@ -648,42 +581,14 @@ export function App() {
                                                                 <span className="step">
                                                                         02
                                                                 </span>
-                                                                <h3>
-                                                                        Detected
-                                                                        GPUs &
-                                                                        rules
-                                                                </h3>
+                                                                <h3>{t("Detected GPUs & rules")}</h3>
                                                         </div>
-                                                        <p>
-                                                                Rules are
-                                                                matched most
-                                                                safely by PCI
-                                                                location.
-                                                                Maximum eight.
-                                                        </p>
+                                                        <p>{t("Rules are matched most safely by PCI location. Maximum eight.")}</p>
                                                 </div>
                                                 {snap.devices.length === 0 ? (
                                                         <div className="empty">
-                                                                <strong>
-                                                                        No
-                                                                        NVIDIA
-                                                                        display
-                                                                        adapters
-                                                                        detected
-                                                                </strong>
-                                                                <span>
-                                                                        Refresh
-                                                                        after
-                                                                        verifying
-                                                                        the
-                                                                        device
-                                                                        is
-                                                                        present
-                                                                        in
-                                                                        Windows
-                                                                        Device
-                                                                        Manager.
-                                                                </span>
+                                                                <strong>{t("No NVIDIA display adapters detected")}</strong>
+                                                                <span>{t("Refresh after verifying the device is present in Windows Device Manager.")}</span>
                                                         </div>
                                                 ) : (
                                                         snap.devices.map(
@@ -772,19 +677,19 @@ export function App() {
                                                                                                         </b>
                                                                                                 </span>
                                                                                                 <span>
-                                                                                                        Family{" "}
+                                                                                                        {t("Family")}{" "}
                                                                                                         <b>
                                                                                                                 {g.isTuring
                                                                                                                         ? "Turing"
-                                                                                                                        : "Other"}
+                                                                                                                        : t("Other")}
                                                                                                         </b>
                                                                                                 </span>
                                                                                                 <span>
-                                                                                                        Effective{" "}
+                                                                                                        {t("Effective")}{" "}
                                                                                                         <b>
                                                                                                                 {g.effectiveBarSizeSelector ===
                                                                                                                 null
-                                                                                                                        ? "None"
+                                                                                                                        ? t("None")
                                                                                                                         : sizes[
                                                                                                                                   g
                                                                                                                                           .effectiveBarSizeSelector
@@ -808,17 +713,11 @@ export function App() {
                                                                                                                 8
                                                                                                         }
                                                                                                 >
-                                                                                                        +
-                                                                                                        Add
-                                                                                                        explicit
-                                                                                                        rule
+                                                                                                        + {t("Add explicit rule")}
                                                                                                 </button>
                                                                                         ) : (
                                                                                                 <div className="rule">
-                                                                                                        <label>
-                                                                                                                Match
-                                                                                                                scope
-                                                                                                                <select
+                                                                                                        <label>{t("Match scope")}<select
                                                                                                                         value={
                                                                                                                                 draft
                                                                                                                                         .rules[
@@ -839,24 +738,12 @@ export function App() {
                                                                                                                                 )
                                                                                                                         }
                                                                                                                 >
-                                                                                                                        <option value="device">
-                                                                                                                                Device
-                                                                                                                                ID
-                                                                                                                        </option>
-                                                                                                                        <option value="subsystem">
-                                                                                                                                Subsystem
-                                                                                                                        </option>
-                                                                                                                        <option value="location">
-                                                                                                                                PCI
-                                                                                                                                location
-                                                                                                                        </option>
+                                                                                                                        <option value="device">{t("Device ID")}</option>
+                                                                                                                        <option value="subsystem">{t("Subsystem")}</option>
+                                                                                                                        <option value="location">{t("PCI location")}</option>
                                                                                                                 </select>
                                                                                                         </label>
-                                                                                                        <label>
-                                                                                                                Action
-                                                                                                                /
-                                                                                                                size
-                                                                                                                <select
+                                                                                                        <label>{t("Action / size")}<select
                                                                                                                         value={
                                                                                                                                 draft
                                                                                                                                         .rules[
@@ -886,11 +773,7 @@ export function App() {
                                                                                                                                 )
                                                                                                                         }
                                                                                                                 >
-                                                                                                                        <option value="">
-                                                                                                                                No
-                                                                                                                                explicit
-                                                                                                                                size
-                                                                                                                        </option>
+                                                                                                                        <option value="">{t("No explicit size")}</option>
                                                                                                                         {sizes.map(
                                                                                                                                 (
                                                                                                                                         s,
@@ -910,16 +793,10 @@ export function App() {
                                                                                                                                         </option>
                                                                                                                                 ),
                                                                                                                         )}
-                                                                                                                        <option value="254">
-                                                                                                                                Exclude
-                                                                                                                                GPU
-                                                                                                                        </option>
+                                                                                                                        <option value="254">{t("Exclude GPU")}</option>
                                                                                                                 </select>
                                                                                                         </label>
-                                                                                                        <label>
-                                                                                                                Size-mask
-                                                                                                                override
-                                                                                                                <select
+                                                                                                        <label>{t("Size-mask override")}<select
                                                                                                                         value={
                                                                                                                                 draft
                                                                                                                                         .rules[
@@ -956,18 +833,9 @@ export function App() {
                                                                                                                                 )
                                                                                                                         }
                                                                                                                 >
-                                                                                                                        <option value="inherit">
-                                                                                                                                Inherit
-                                                                                                                                global
-                                                                                                                        </option>
-                                                                                                                        <option value="true">
-                                                                                                                                Force
-                                                                                                                                enabled
-                                                                                                                        </option>
-                                                                                                                        <option value="false">
-                                                                                                                                Force
-                                                                                                                                disabled
-                                                                                                                        </option>
+                                                                                                                        <option value="inherit">{t("Inherit global")}</option>
+                                                                                                                        <option value="true">{t("Force enabled")}</option>
+                                                                                                                        <option value="false">{t("Force disabled")}</option>
                                                                                                                 </select>
                                                                                                         </label>
                                                                                                         <button
@@ -986,9 +854,7 @@ export function App() {
                                                                                                                                 },
                                                                                                                         )
                                                                                                                 }
-                                                                                                        >
-                                                                                                                Remove
-                                                                                                        </button>
+                                                                                                        >{t("Remove")}</button>
                                                                                                 </div>
                                                                                         )}
                                                                                 </article>
@@ -998,23 +864,8 @@ export function App() {
                                                 )}
                                                 {draft.rules.length > 0 && (
                                                         <div className="all-rules">
-                                                                <h4>
-                                                                        All
-                                                                        configured
-                                                                        rules
-                                                                </h4>
-                                                                <p>
-                                                                        Every
-                                                                        saved
-                                                                        scope
-                                                                        remains
-                                                                        directly
-                                                                        editable,
-                                                                        including
-                                                                        overlapping
-                                                                        priority
-                                                                        rules.
-                                                                </p>
+                                                                <h4>{t("All configured rules")}</h4>
+                                                                <p>{t("Every saved scope remains directly editable, including overlapping priority rules.")}</p>
                                                                 {draft.rules.map(
                                                                         (
                                                                                 r,
@@ -1024,10 +875,7 @@ export function App() {
                                                                                         className="rule"
                                                                                         key={`${r.matchScope}-${r.deviceId}-${r.subsystemVendorId}-${r.subsystemDeviceId}-${r.bus}-${r.device}-${r.function}`}
                                                                                 >
-                                                                                        <label>
-                                                                                                Match
-                                                                                                scope
-                                                                                                <select
+                                                                                        <label>{t("Match scope")}<select
                                                                                                         aria-label={`Rule ${i + 1} match scope`}
                                                                                                         value={
                                                                                                                 r.matchScope
@@ -1045,24 +893,12 @@ export function App() {
                                                                                                                 )
                                                                                                         }
                                                                                                 >
-                                                                                                        <option value="device">
-                                                                                                                Device
-                                                                                                                ID
-                                                                                                        </option>
-                                                                                                        <option value="subsystem">
-                                                                                                                Subsystem
-                                                                                                        </option>
-                                                                                                        <option value="location">
-                                                                                                                PCI
-                                                                                                                location
-                                                                                                        </option>
+                                                                                                        <option value="device">{t("Device ID")}</option>
+                                                                                                        <option value="subsystem">{t("Subsystem")}</option>
+                                                                                                        <option value="location">{t("PCI location")}</option>
                                                                                                 </select>
                                                                                         </label>
-                                                                                        <label>
-                                                                                                Action
-                                                                                                /
-                                                                                                size
-                                                                                                <select
+                                                                                        <label>{t("Action / size")}<select
                                                                                                         aria-label={`Rule ${i + 1} action / size`}
                                                                                                         value={
                                                                                                                 r.barSizeSelector ??
@@ -1089,11 +925,7 @@ export function App() {
                                                                                                                 )
                                                                                                         }
                                                                                                 >
-                                                                                                        <option value="">
-                                                                                                                No
-                                                                                                                explicit
-                                                                                                                size
-                                                                                                        </option>
+                                                                                                        <option value="">{t("No explicit size")}</option>
                                                                                                         {sizes.map(
                                                                                                                 (
                                                                                                                         s,
@@ -1113,10 +945,7 @@ export function App() {
                                                                                                                         </option>
                                                                                                                 ),
                                                                                                         )}
-                                                                                                        <option value="254">
-                                                                                                                Exclude
-                                                                                                                GPU
-                                                                                                        </option>
+                                                                                                        <option value="254">{t("Exclude GPU")}</option>
                                                                                                 </select>
                                                                                         </label>
                                                                                         <span className="rule-identity">
@@ -1162,18 +991,9 @@ export function App() {
                                                                 <span className="step">
                                                                         03
                                                                 </span>
-                                                                <h3>
-                                                                        Advanced
-                                                                        safety
-                                                                </h3>
+                                                                <h3>{t("Advanced safety")}</h3>
                                                         </div>
-                                                        <p>
-                                                                Defaults favor
-                                                                change detection
-                                                                and conservative
-                                                                firmware
-                                                                behavior.
-                                                        </p>
+                                                        <p>{t("Defaults favor change detection and conservative firmware behavior.")}</p>
                                                 </div>
                                                 <div className="checks">
                                                         <label>
@@ -1196,22 +1016,8 @@ export function App() {
                                                                         }
                                                                 />
                                                                 <span>
-                                                                        <strong>
-                                                                                Guard
-                                                                                against
-                                                                                Setup
-                                                                                variable
-                                                                                changes
-                                                                        </strong>
-                                                                        <small>
-                                                                                Keep
-                                                                                the
-                                                                                firmware
-                                                                                setup
-                                                                                fingerprint
-                                                                                check
-                                                                                enabled.
-                                                                        </small>
+                                                                        <strong>{t("Guard against Setup variable changes")}</strong>
+                                                                        <small>{t("Keep the firmware setup fingerprint check enabled.")}</small>
                                                                 </span>
                                                         </label>
                                                         <label>
@@ -1234,23 +1040,8 @@ export function App() {
                                                                         }
                                                                 />
                                                                 <span>
-                                                                        <strong>
-                                                                                Override
-                                                                                BAR
-                                                                                size
-                                                                                mask
-                                                                                globally
-                                                                        </strong>
-                                                                        <small>
-                                                                                Advertise
-                                                                                the
-                                                                                configured
-                                                                                size
-                                                                                when
-                                                                                capability
-                                                                                masks
-                                                                                differ.
-                                                                        </small>
+                                                                        <strong>{t("Override BAR size mask globally")}</strong>
+                                                                        <small>{t("Advertise the configured size when capability masks differ.")}</small>
                                                                 </span>
                                                         </label>
                                                         <label className="danger-check">
@@ -1273,22 +1064,8 @@ export function App() {
                                                                         }
                                                                 />
                                                                 <span>
-                                                                        <strong>
-                                                                                Skip
-                                                                                S3
-                                                                                resume
-                                                                                reconfiguration
-                                                                        </strong>
-                                                                        <small>
-                                                                                Resume
-                                                                                behavior
-                                                                                must
-                                                                                be
-                                                                                verified
-                                                                                on
-                                                                                this
-                                                                                machine.
-                                                                        </small>
+                                                                        <strong>{t("Skip S3 resume reconfiguration")}</strong>
+                                                                        <small>{t("Resume behavior must be verified on this machine.")}</small>
                                                                 </span>
                                                         </label>
                                                 </div>
@@ -1298,53 +1075,21 @@ export function App() {
                                                 aria-live="polite"
                                         >
                                                 <div>
-                                                        <span className="kicker">
-                                                                VALIDATION
-                                                        </span>
+                                                        <span className="kicker">{t("VALIDATION")}</span>
                                                         {!dirty ? (
-                                                                <h3>
-                                                                        No
-                                                                        pending
-                                                                        changes
-                                                                </h3>
+                                                                <h3>{t("No pending changes")}</h3>
                                                         ) : !report ? (
-                                                                <h3>
-                                                                        Checking
-                                                                        draft…
-                                                                </h3>
+                                                                <h3>{t("Checking draft…")}</h3>
                                                         ) : report.valid ? (
                                                                 <>
-                                                                        <h3>
-                                                                                Draft
-                                                                                is
-                                                                                ready
-                                                                                for
-                                                                                review
-                                                                        </h3>
+                                                                        <h3>{t("Draft is ready for review")}</h3>
                                                                         <p>
-                                                                                {
-                                                                                        report
-                                                                                                .affectedGpuIds
-                                                                                                .length
-                                                                                }{" "}
-                                                                                detected
-                                                                                GPU(s)
-                                                                                affected
-                                                                                ·{" "}
-                                                                                {
-                                                                                        report.encodedSize
-                                                                                }{" "}
-                                                                                bytes
-                                                                                encoded
+                                                                                {validationSummary(report.affectedGpuIds.length, report.encodedSize)}
                                                                         </p>
                                                                 </>
                                                         ) : (
                                                                 <>
-                                                                        <h3>
-                                                                                Draft
-                                                                                needs
-                                                                                correction
-                                                                        </h3>
+                                                                        <h3>{t("Draft needs correction")}</h3>
                                                                         {report.errors.map(
                                                                                 (
                                                                                         x,
@@ -1355,9 +1100,7 @@ export function App() {
                                                                                                         x
                                                                                                 }
                                                                                         >
-                                                                                                {
-                                                                                                        x
-                                                                                                }
+                                                                                                {t(x)}
                                                                                         </p>
                                                                                 ),
                                                                         )}
@@ -1380,9 +1123,7 @@ export function App() {
                                                                                 null,
                                                                         );
                                                                 }}
-                                                        >
-                                                                Discard edits
-                                                        </button>
+                                                        >{t("Discard edits")}</button>
                                                         <button
                                                                 ref={
                                                                         reviewButton
@@ -1401,9 +1142,7 @@ export function App() {
                                                                                 true,
                                                                         )
                                                                 }
-                                                        >
-                                                                Review & save
-                                                        </button>
+                                                        >{t("Review & save")}</button>
                                                 </div>
                                         </section>
                                         {report?.warnings.map((w) => (
@@ -1411,7 +1150,7 @@ export function App() {
                                                         className="notice warning"
                                                         key={w}
                                                 >
-                                                        {w}
+                                                        {t(w)}
                                                 </div>
                                         ))}
                                         {receipt && (
@@ -1419,10 +1158,7 @@ export function App() {
                                                         className="receipt"
                                                         role="status"
                                                 >
-                                                        <strong>
-                                                                Save verified by
-                                                                read-back
-                                                        </strong>
+                                                        <strong>{t("Save verified by read-back")}</strong>
                                                         <span>
                                                                 {
                                                                         receipt.bytesWritten
@@ -1433,16 +1169,7 @@ export function App() {
                                                                         ? "present"
                                                                         : "removed"}
                                                         </span>
-                                                        <p>
-                                                                Restart Windows
-                                                                when ready. The
-                                                                firmware driver
-                                                                cannot apply
-                                                                this
-                                                                configuration
-                                                                until the next
-                                                                boot.
-                                                        </p>
+                                                        <p>{t("Restart Windows when ready. The firmware driver cannot apply this configuration until the next boot.")}</p>
                                                 </div>
                                         )}
                                 </main>
@@ -1460,37 +1187,12 @@ export function App() {
                                                 aria-modal="true"
                                                 aria-labelledby="confirm-title"
                                         >
-                                                <span className="kicker">
-                                                        CONSEQUENTIAL WRITE
-                                                </span>
-                                                <h2 id="confirm-title">
-                                                        Write this draft to UEFI
-                                                        firmware?
-                                                </h2>
-                                                <p>
-                                                        The application will
-                                                        write and read back the
-                                                        NvStrapsReBar
-                                                        configuration variable.
-                                                        A restart is required
-                                                        before the driver can
-                                                        apply it.
-                                                </p>
+                                                <span className="kicker">{t("CONSEQUENTIAL WRITE")}</span>
+                                                <h2 id="confirm-title">{t("Write this draft to UEFI firmware?")}</h2>
+                                                <p>{t("The application will write and read back the NvStrapsReBar configuration variable. A restart is required before the driver can apply it.")}</p>
                                                 <div className="warning-box">
-                                                        <strong>
-                                                                Before you
-                                                                continue
-                                                        </strong>
-                                                        <span>
-                                                                Confirm the
-                                                                detected GPU and
-                                                                PCI topology
-                                                                match this
-                                                                machine.
-                                                                Hardware changes
-                                                                can make saved
-                                                                selectors stale.
-                                                        </span>
+                                                        <strong>{t("Before you continue")}</strong>
+                                                        <span>{t("Confirm the detected GPU and PCI topology match this machine. Hardware changes can make saved selectors stale.")}</span>
                                                 </div>
                                                 <div className="modal-actions">
                                                         <button
@@ -1501,18 +1203,13 @@ export function App() {
                                                                                 false,
                                                                         )
                                                                 }
-                                                        >
-                                                                Cancel
-                                                        </button>
+                                                        >{t("Cancel")}</button>
                                                         <button
                                                                 className="primary danger-button"
                                                                 onClick={() =>
                                                                         void save()
                                                                 }
-                                                        >
-                                                                Write
-                                                                configuration
-                                                        </button>
+                                                        >{t("Write configuration")}</button>
                                                 </div>
                                         </div>
                                 </div>
