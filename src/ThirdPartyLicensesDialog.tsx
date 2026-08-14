@@ -5,6 +5,12 @@ const pretendardLicenseUrl = new URL(
         "licenses/Pretendard/LICENSE",
         document.baseURI,
 ).toString();
+const jetendardLicenseUrl = new URL(
+        "licenses/Jetendard/LICENSE",
+        document.baseURI,
+).toString();
+
+type LicenseId = "pretendard" | "jetendard";
 
 export function ThirdPartyLicensesDialog({
         onClose,
@@ -15,23 +21,40 @@ export function ThirdPartyLicensesDialog({
 }) {
         const { t } = useI18n();
         const dialog = useRef<HTMLDivElement>(null);
-        const [licenseText, setLicenseText] = useState("");
+        const [selectedLicense, setSelectedLicense] =
+                useState<LicenseId>("pretendard");
+        const [licenseText, setLicenseText] = useState<Record<LicenseId, string>>({
+                pretendard: "",
+                jetendard: "",
+        });
         const [loadFailed, setLoadFailed] = useState(false);
 
         useEffect(() => {
                 const controller = new AbortController();
-                void fetch(pretendardLicenseUrl, {
-                        cache: "force-cache",
-                        signal: controller.signal,
-                })
-                        .then((response) => {
+                void Promise.all(
+                        [
+                                ["pretendard", pretendardLicenseUrl],
+                                ["jetendard", jetendardLicenseUrl],
+                        ].map(async ([id, url]) => {
+                                const response = await fetch(url, {
+                                        cache: "force-cache",
+                                        signal: controller.signal,
+                                });
                                 if (!response.ok)
                                         throw new Error(
-                                                `Bundled Pretendard license returned ${response.status}`,
+                                                `Bundled ${id} license returned ${response.status}`,
                                         );
-                                return response.text();
-                        })
-                        .then(setLicenseText)
+                                return [id, await response.text()] as const;
+                        }),
+                )
+                        .then((licenses) =>
+                                setLicenseText(
+                                        Object.fromEntries(licenses) as Record<
+                                                LicenseId,
+                                                string
+                                        >,
+                                ),
+                        )
                         .catch((error: unknown) => {
                                 if (
                                         !(error instanceof DOMException) ||
@@ -110,31 +133,83 @@ export function ThirdPartyLicensesDialog({
                                                 "ui.pretendardV139IsBundledWithThisApplicationUnderTheSilOpenFontLicense11",
                                         )}
                                 </p>
-                                <div className="license-attribution">
-                                        <strong>Pretendard v1.3.9</strong>
-                                        <span>
-                                                Copyright (c) 2021, Kil
-                                                Hyung-jin
-                                        </span>
-                                        <span>
-                                                Reserved Font Name
-                                                &apos;Pretendard&apos;
-                                        </span>
+                                <p>
+                                        {t(
+                                                "ui.jetendardV010IsBundledForTechnicalInformationUnderTheSilOpenFontLicense11",
+                                        )}
+                                </p>
+                                <div className="license-attribution-list">
+                                        <div className="license-attribution">
+                                                <strong>Pretendard v1.3.9</strong>
+                                                <span>
+                                                        Copyright (c) 2021, Kil
+                                                        Hyung-jin
+                                                </span>
+                                                <span>
+                                                        Reserved Font Name
+                                                        &apos;Pretendard&apos;
+                                                </span>
+                                        </div>
+                                        <div className="license-attribution">
+                                                <strong>Jetendard v0.1.0</strong>
+                                                <span>
+                                                        Copyright (c) 2026 Jung
+                                                        Woong Park
+                                                </span>
+                                                <span>
+                                                        Reserved Font Name
+                                                        &apos;Jetendard&apos;
+                                                </span>
+                                        </div>
                                 </div>
                                 <h3>{t("ui.fullLicenseText")}</h3>
+                                <div
+                                        className="license-picker"
+                                        role="group"
+                                        aria-label={t("ui.fullLicenseText")}
+                                >
+                                        <button
+                                                type="button"
+                                                aria-pressed={
+                                                        selectedLicense ===
+                                                        "pretendard"
+                                                }
+                                                onClick={() =>
+                                                        setSelectedLicense(
+                                                                "pretendard",
+                                                        )
+                                                }
+                                        >
+                                                {t("ui.pretendardLicense")}
+                                        </button>
+                                        <button
+                                                type="button"
+                                                aria-pressed={
+                                                        selectedLicense ===
+                                                        "jetendard"
+                                                }
+                                                onClick={() =>
+                                                        setSelectedLicense(
+                                                                "jetendard",
+                                                        )
+                                                }
+                                        >
+                                                {t("ui.jetendardLicense")}
+                                        </button>
+                                </div>
                                 {loadFailed ? (
                                         <p role="alert">
                                                 {t(
                                                         "ui.theBundledLicenseTextCouldNotBeLoaded",
                                                 )}
                                         </p>
-                                ) : licenseText ? (
+                                ) : licenseText[selectedLicense] ? (
                                         <pre
                                                 className="license-text"
-                                                data-testid="pretendard-license-text"
+                                                data-testid={`${selectedLicense}-license-text`}
                                                 tabIndex={0}
                                         >
-                                                {licenseText}
+                                                {licenseText[selectedLicense]}
                                         </pre>
                                 ) : (
                                         <p role="status">
