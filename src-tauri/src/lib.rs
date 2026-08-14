@@ -41,6 +41,7 @@ pub fn run() {
             reboot::reboot_to_firmware_setup,
             reboot::preview_configuration_reboot,
             reboot::reboot_after_configuration,
+            nvidia_smi::inspect_resizable_bar_status,
             nvidia_smi::collect_nvidia_smi_evidence,
             profile_inspector::install_nvidia_profile_inspector,
             profile_inspector::get_nvidia_profile_inspector_installation,
