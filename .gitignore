@@ -37,3 +37,6 @@ playwright-report/
 test-results/
 *.tsbuildinfo
 .superloopy/evidence/
+
+# Local skill evidence
+_workspace/humanize-korean/
