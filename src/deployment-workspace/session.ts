@@ -1,4 +1,10 @@
 import type { ConfigDraft, SystemSnapshot } from "../types";
+import {
+        message,
+        messages,
+        type MessageDescriptor,
+        type StaticMessageId,
+} from "../i18n-catalog";
 import type { DeploymentAdapter } from "./adapter";
 import { previewDeploymentAdapter } from "./preview-adapter";
 import { tauriDeploymentAdapter } from "./tauri-adapter";
@@ -24,6 +30,7 @@ import type {
         StepId,
 } from "./contract";
 import { usesMsiProZ690Route } from "../hardware-support";
+import { stepTitleIds } from "./messages";
 
 const MSI_MANUAL =
         "https://download.msi.com/archive/mnu_exe/mb/PROZ690-AWIFIDDR4_PROZ690-ADDR4100x150.pdf";
@@ -32,6 +39,8 @@ const isTauri = () =>
 const clone = <T>(value: T): T => structuredClone(value);
 const errorText = (error: unknown) =>
         (error as { message?: string }).message || String(error);
+const deploymentError = (error: unknown): MessageDescriptor =>
+        message("ui.deploymentOperationFailed", { detail: errorText(error) });
 const fileName = (path: string) => path.split(/[\\/]/).at(-1) || "firmware.bin";
 const sameFirmware = (
         left: FirmwareFingerprint | null,
@@ -56,16 +65,15 @@ const validAcknowledgementNote = (note: string, fingerprintPrefix: string) => {
                         .includes(fingerprintPrefix.toLowerCase())
         );
 };
-const riskLabels: Record<LegacyPatchRisk, string> = {
-        dsdtModification: "DSDT modification",
-        nvramWhitelist: "NVRAM whitelist change",
-        usbControllerBlacklist: "USB controller blacklist",
-        experimentalX79: "Experimental X79 patch",
-};
-
+const riskAcknowledgementMessageIds = {
+        dsdtModification: "ui.addDsdtRiskAcknowledgement",
+        nvramWhitelist: "ui.addNvramRiskAcknowledgement",
+        usbControllerBlacklist: "ui.addUsbRiskAcknowledgement",
+        experimentalX79: "ui.addX79RiskAcknowledgement",
+} as const satisfies Record<LegacyPatchRisk, StaticMessageId>;
 export type DeploymentWorkspaceActivity = {
         tone: "success" | "warning" | "error";
-        text: string;
+        message: MessageDescriptor;
 } | null;
 export type DeploymentNextAction =
         | "prepare"
@@ -90,6 +98,8 @@ export interface DeploymentWorkspaceView {
         instructionsUrl: string;
         recoveryNote: string;
         installNote: string;
+        recoveryNotePresetId: StaticMessageId | null;
+        installNotePresetId: StaticMessageId | null;
         routeConfirmed: boolean;
         legacyAnalysis: { path: string; value: LegacyFirmwareAnalysis } | null;
         legacyAnalysisStatus: "idle" | "pending" | "ready" | "error";
@@ -104,6 +114,8 @@ export interface DeploymentWorkspaceView {
         plan: DeploymentPlan | null;
         activeStep: DeploymentPlan["steps"][number] | null;
         nextStep: DeploymentPlan["steps"][number] | null;
+        activeStepTitleId: StaticMessageId | null;
+        nextStepTitleId: StaticMessageId | null;
         nextAction: DeploymentNextAction;
         preflightExact: boolean | null;
         preparation: FirmwarePreparation | null;
@@ -124,8 +136,11 @@ export interface DeploymentWorkspaceView {
                 value: DeploymentConfigRecommendation;
         } | null;
         recommendationStatus: "idle" | "pending" | "ready" | "error";
-        recommendationError: string;
-        workflowReceipt: { title: string; detail: string } | null;
+        recommendationError: MessageDescriptor | null;
+        workflowReceipt: {
+                title: MessageDescriptor;
+                detail: MessageDescriptor;
+        } | null;
         barEvidence: NvidiaSmiEvidence | null;
         installation: ProfileInspectorInstallation | null;
         backup: NvidiaProfileBackupReceipt | null;
@@ -141,7 +156,7 @@ export interface DeploymentWorkspaceView {
         acknowledgementHash: string;
         missingLegacyRisk: LegacyPatchRisk | undefined;
         legacyReady: boolean;
-        legacyNextAction: string;
+        legacyNextAction: MessageDescriptor | null;
 }
 
 type FieldIntent =
@@ -206,6 +221,8 @@ type DeploymentWorkspaceState = Omit<
         | "selectedProfile"
         | "activeStep"
         | "nextStep"
+        | "activeStepTitleId"
+        | "nextStepTitleId"
         | "nextAction"
         | "legacyAnalysisValid"
         | "selectedLegacyEntries"
@@ -446,11 +463,21 @@ class Session implements DeploymentWorkspaceSession {
                         installMethod: "firmwareSetupUtility",
                         instructionsUrl: msi ? MSI_MANUAL : "",
                         recoveryNote: msi
-                                ? "MSI Flash BIOS Button recovery: MSI.ROM at USB root, rear Flash BIOS port, physical button."
+                                ? messages[
+                                          "ui.msiFlashBiosButtonRecoveryMsiRomAtUsbRootRearFlashBiosPortPhysicalButton"
+                                  ].en
                                 : "",
                         installNote: msi
-                                ? "Use M-FLASH to select the exported vendor-format image."
+                                ? messages[
+                                          "ui.useMFlashToSelectTheExportedVendorFormatImage"
+                                  ].en
                                 : "",
+                        recoveryNotePresetId: msi
+                                ? "ui.msiFlashBiosButtonRecoveryMsiRomAtUsbRootRearFlashBiosPortPhysicalButton"
+                                : null,
+                        installNotePresetId: msi
+                                ? "ui.useMFlashToSelectTheExportedVendorFormatImage"
+                                : null,
                         routeConfirmed: false,
                         legacyAnalysis: null,
                         legacyAnalysisStatus: "idle",
@@ -475,7 +502,7 @@ class Session implements DeploymentWorkspaceSession {
                         guardedConfigConfirmed: false,
                         configRecommendation: null,
                         recommendationStatus: "idle",
-                        recommendationError: "",
+                        recommendationError: null,
                         workflowReceipt: null,
                         barEvidence: null,
                         installation: null,
@@ -564,36 +591,49 @@ class Session implements DeploymentWorkspaceSession {
                                 legacyAnalysisValid &&
                                 selectedLegacyEntries.length > 0 &&
                                 !missingLegacyRisk);
-                let legacyNextAction = "";
+                let legacyNextAction: MessageDescriptor | null = null;
                 if (this.state.boardPath === "legacyAbove4g") {
                         if (!this.state.firmware)
                                 legacyNextAction =
-                                        "Choose and inspect the firmware image first.";
+                                        message("ui.chooseAndInspectTheFirmwareImageFirst");
                         else if (this.state.legacyAnalysisStatus === "pending")
                                 legacyNextAction =
-                                        "Wait for the image analysis to finish.";
+                                        message("ui.waitForTheImageAnalysisToFinish");
                         else if (this.state.legacyAnalysisStatus === "error")
-                                legacyNextAction = `Analysis failed: ${this.state.legacyAnalysisError} Retry this image.`;
+                                legacyNextAction = message(
+                                        "ui.analysisFailedRetryImage",
+                                        { detail: this.state.legacyAnalysisError },
+                                );
                         else if (
                                 !this.state.legacyAnalysis ||
                                 !legacyAnalysisValid
                         )
                                 legacyNextAction =
-                                        "Analyze this firmware image before selecting legacy rules.";
+                                        message("ui.analyzeThisFirmwareImageBeforeSelectingLegacyRules");
                         else if (!selectedLegacyEntries.length)
                                 legacyNextAction =
-                                        "Select at least one rule reported as applicable by the analyzer.";
+                                        message("ui.selectAtLeastOneRuleReportedAsApplicableByTheAnalyzer");
                         else if (missingLegacyRisk)
-                                legacyNextAction = `Add an image-specific note and confirmation for ${riskLabels[missingLegacyRisk]}.`;
+                                legacyNextAction = message(
+                                        riskAcknowledgementMessageIds[
+                                                missingLegacyRisk
+                                        ],
+                                );
                         else
                                 legacyNextAction =
-                                        "Selected legacy rules are linked to this firmware fingerprint. The profile is ready to create.";
+                                        message("ui.selectedLegacyRulesAreLinkedToThisFirmwareFingerprintTheProfileIsReadyToCreate");
                 }
                 this.cachedView = {
                         ...this.state,
                         selectedProfile,
                         activeStep,
                         nextStep,
+                        activeStepTitleId: activeStep
+                                ? stepTitleIds[activeStep.id]
+                                : null,
+                        nextStepTitleId: nextStep
+                                ? stepTitleIds[nextStep.id]
+                                : null,
                         nextAction: nextActionFor(activeStep?.id),
                         legacyAnalysisValid,
                         selectedLegacyEntries,
@@ -647,7 +687,7 @@ class Session implements DeploymentWorkspaceSession {
                                 this.patch({
                                         activity: {
                                                 tone: "error",
-                                                text: errorText(error),
+                                                message: deploymentError(error),
                                         },
                                 });
                 }
@@ -685,7 +725,7 @@ class Session implements DeploymentWorkspaceSession {
                                 this.patch({
                                         activity: {
                                                 tone: "error",
-                                                text: errorText(error),
+                                                message: deploymentError(error),
                                         },
                                 });
                 }
@@ -706,7 +746,7 @@ class Session implements DeploymentWorkspaceSession {
                         patch: (
                                 value: Partial<DeploymentWorkspaceState>,
                         ) => void;
-                        success: (text: string) => void;
+                        success: (message: MessageDescriptor) => void;
                         current: () => boolean;
                 }) => Promise<void>,
         ): Promise<void> {
@@ -719,8 +759,8 @@ class Session implements DeploymentWorkspaceSession {
                         patch: (value: Partial<DeploymentWorkspaceState>) => {
                                 if (current()) this.patch(value);
                         },
-                        success: (text: string) => {
-                                if (current()) this.success(text);
+                        success: (successMessage: MessageDescriptor) => {
+                                if (current()) this.success(successMessage);
                         },
                         current,
                 };
@@ -733,7 +773,7 @@ class Session implements DeploymentWorkspaceSession {
                                         this.patch({
                                                 activity: {
                                                         tone: "error",
-                                                        text: errorText(error),
+                                                        message: deploymentError(error),
                                                 },
                                         });
                         })
@@ -746,8 +786,13 @@ class Session implements DeploymentWorkspaceSession {
                 this.inflight = promise;
                 return promise;
         }
-        private success(text: string) {
-                this.patch({ activity: { tone: "success", text } });
+        private success(successMessage: MessageDescriptor) {
+                this.patch({
+                        activity: {
+                                tone: "success",
+                                message: successMessage,
+                        },
+                });
         }
         private async loadRecommendation() {
                 const plan = this.state.plan;
@@ -758,7 +803,7 @@ class Session implements DeploymentWorkspaceSession {
                         this.patch({
                                 recommendationStatus: "idle",
                                 configRecommendation: null,
-                                recommendationError: "",
+                                recommendationError: null,
                                 guardedConfigConfirmed: false,
                         });
                         return;
@@ -767,7 +812,7 @@ class Session implements DeploymentWorkspaceSession {
                 this.patch({
                         recommendationStatus: "pending",
                         configRecommendation: null,
-                        recommendationError: "",
+                        recommendationError: null,
                         guardedConfigConfirmed: false,
                 });
                 try {
@@ -792,11 +837,14 @@ class Session implements DeploymentWorkspaceSession {
                         });
                 } catch (error) {
                         if (generation === this.generation) {
-                                const text = errorText(error);
+                                const errorMessage = deploymentError(error);
                                 this.patch({
                                         recommendationStatus: "error",
-                                        recommendationError: text,
-                                        activity: { tone: "error", text },
+                                        recommendationError: errorMessage,
+                                        activity: {
+                                                tone: "error",
+                                                message: errorMessage,
+                                        },
                                 });
                         }
                 }
@@ -828,10 +876,16 @@ class Session implements DeploymentWorkspaceSession {
                                 this.patch({ instructionsUrl: intent.value });
                                 return;
                         case "setRecoveryNote":
-                                this.patch({ recoveryNote: intent.value });
+                                this.patch({
+                                        recoveryNote: intent.value,
+                                        recoveryNotePresetId: null,
+                                });
                                 return;
                         case "setInstallNote":
-                                this.patch({ installNote: intent.value });
+                                this.patch({
+                                        installNote: intent.value,
+                                        installNotePresetId: null,
+                                });
                                 return;
                         case "setRouteConfirmed":
                                 this.patch({ routeConfirmed: intent.value });
@@ -922,7 +976,7 @@ class Session implements DeploymentWorkspaceSession {
                                         guardedConfigConfirmed: false,
                                         configRecommendation: null,
                                         recommendationStatus: "idle",
-                                        recommendationError: "",
+                                        recommendationError: null,
                                         workflowReceipt: null,
                                         barEvidence: null,
                                         backup: null,
@@ -964,9 +1018,7 @@ class Session implements DeploymentWorkspaceSession {
                                                 selectedLegacyRules: [],
                                                 legacyAcknowledgements: {},
                                         });
-                                        tx.success(
-                                                "Source firmware inspected · size and SHA-256 recorded.",
-                                        );
+                                        tx.success(message("ui.sourceFirmwareInspectedSizeAndSha256Recorded"));
                                 });
                         case "inspectFirmware":
                                 return this.run("firmware", async (tx) => {
@@ -982,9 +1034,7 @@ class Session implements DeploymentWorkspaceSession {
                                                 selectedLegacyRules: [],
                                                 legacyAcknowledgements: {},
                                         });
-                                        tx.success(
-                                                "Source firmware inspected · size and SHA-256 recorded.",
-                                        );
+                                        tx.success(message("ui.sourceFirmwareInspectedSizeAndSha256Recorded"));
                                 });
                         case "analyzeLegacy":
                                 return this.run(
@@ -1054,9 +1104,7 @@ class Session implements DeploymentWorkspaceSession {
                                                         legacyAnalysisStatus:
                                                                 "ready",
                                                 });
-                                                tx.success(
-                                                        "Legacy analysis complete · source fingerprint and rule results recorded.",
-                                                );
+                                                tx.success(message("ui.legacyAnalysisCompleteSourceFingerprintAndRuleResultsRecorded"));
                                         },
                                 );
                         case "createProfile":
@@ -1082,7 +1130,7 @@ class Session implements DeploymentWorkspaceSession {
                                                 );
                                         }
                                         tx.success(
-                                                "Current machine, GPU topology, BIOS, and preserved source match the profile.",
+                                                message("ui.currentProfileMatchesHardware"),
                                         );
                                 });
                         case "prepare":
@@ -1097,7 +1145,7 @@ class Session implements DeploymentWorkspaceSession {
                                                 );
                                         tx.patch({ destination: value });
                                         tx.success(
-                                                "Package destination selected.",
+                                                message("ui.packageDestinationSelected"),
                                         );
                                 });
                         case "exportPackage":
@@ -1109,9 +1157,7 @@ class Session implements DeploymentWorkspaceSession {
                                                         this.state.destination,
                                                 );
                                         tx.patch({ packageReceipt });
-                                        tx.success(
-                                                "Deployment package exported · open it in the vendor tool for flashing.",
-                                        );
+                                        tx.success(message("ui.deploymentPackageExportedOpenItInTheVendorToolForFlashing"));
                                 });
                         case "previewFirmwareReboot":
                                 return this.run(
@@ -1152,9 +1198,7 @@ class Session implements DeploymentWorkspaceSession {
                                                         savedWork: false,
                                                         showReboot: true,
                                                 });
-                                                tx.success(
-                                                        "Firmware setup restart details loaded for review.",
-                                                );
+                                                tx.success(message("ui.firmwareSetupRestartDetailsLoadedForReview"));
                                         },
                                 );
                         case "requestFirmwareReboot":
@@ -1199,7 +1243,7 @@ class Session implements DeploymentWorkspaceSession {
                                                         "The firmware restart request returned an invalid acceptance receipt.",
                                                 );
                                         tx.success(
-                                                "Windows accepted the restart request. This only opens firmware setup.",
+                                                message("ui.restartingToFirmwareSetup"),
                                         );
                                 });
                         case "openManual":
@@ -1225,9 +1269,7 @@ class Session implements DeploymentWorkspaceSession {
                                                 const installation =
                                                         await this.adapter.installNvidiaProfileInspector();
                                                 tx.patch({ installation });
-                                                tx.success(
-                                                        "NVIDIA Profile Inspector installed.",
-                                                );
+                                                tx.success(message("ui.nvidiaProfileInspectorInstalled"));
                                         },
                                 );
                         case "backupProfiles":
@@ -1251,7 +1293,7 @@ class Session implements DeploymentWorkspaceSession {
                                                         );
                                                 tx.patch({ backup });
                                                 tx.success(
-                                                        "Customized NVIDIA profiles exported to an immutable backup.",
+                                                        message("ui.nvidiaProfilesBackupExported"),
                                                 );
                                         },
                                 );
@@ -1282,7 +1324,7 @@ class Session implements DeploymentWorkspaceSession {
                                                         backup: launch.backup,
                                                 });
                                                 tx.success(
-                                                        "Profile Inspector launched after an automatic profile backup. Policy changes remain manual.",
+                                                        message("ui.profileInspectorLaunched"),
                                                 );
                                         },
                                 );
@@ -1390,19 +1432,21 @@ class Session implements DeploymentWorkspaceSession {
                         });
                         const selectionCount =
                                 view.selectedLegacyEntries.length;
-                        const success =
+                        const successMessage =
                                 view.boardPath === "legacyAbove4g"
-                                        ? [
-                                                  "Legacy profile created with",
-                                                  selectionCount,
-                                                  selectionCount === 1
-                                                          ? "rule"
-                                                          : "rules",
-                                                  "·",
-                                                  "source fingerprint recorded.",
-                                          ].join(" ")
-                                        : "Machine profile created · source image fingerprint recorded.";
-                        tx.success(success);
+                                        ? selectionCount === 1
+                                                ? message(
+                                                          "ui.legacyProfileCreatedWithOneRule",
+                                                  )
+                                                : message(
+                                                          "ui.legacyProfileCreated",
+                                                          {
+                                                                  ruleCount:
+                                                                          selectionCount,
+                                                          },
+                                                  )
+                                        : message("ui.machineProfileCreatedSourceImageFingerprintRecorded");
+                        tx.success(successMessage);
                 });
         }
         private prepare() {
@@ -1426,9 +1470,7 @@ class Session implements DeploymentWorkspaceSession {
                                 );
                         assertPlanAdvance(before, preparation.plan, expected);
                         tx.patch({ preparation, plan: preparation.plan });
-                        tx.success(
-                                "Firmware artifact prepared · Rust driver inserted and SHA-256 recorded.",
-                        );
+                        tx.success(message("ui.firmwareArtifactPreparedRustDriverInsertedAndSha256Recorded"));
                 });
         }
         private openManual() {
@@ -1455,9 +1497,7 @@ class Session implements DeploymentWorkspaceSession {
                                 manualConfirmed: false,
                                 showManual: true,
                         });
-                        tx.success(
-                                "Current manual step loaded for review.",
-                        );
+                        tx.success(message("ui.currentManualStepLoadedForReview"));
                 });
         }
         private confirmManual() {
@@ -1495,13 +1535,18 @@ class Session implements DeploymentWorkspaceSession {
                         tx.patch({
                                 plan: receipt.plan,
                                 workflowReceipt: {
-                                        title: `${preview.title} recorded`,
-                                        detail: `Completion recorded at ${receipt.recordedAtUnixMs}.`,
+                                        title: message(
+                                                "ui.manualStepRecordedInTheDeploymentPlan",
+                                        ),
+                                        detail: message(
+                                                "ui.completionRecordedAt",
+                                                {
+                                                        time: receipt.recordedAtUnixMs,
+                                                },
+                                        ),
                                 },
                         });
-                        tx.success(
-                                "Manual step recorded in the deployment plan.",
-                        );
+                        tx.success(message("ui.manualStepRecordedInTheDeploymentPlan"));
                 });
         }
         private verifyDriver() {
@@ -1522,13 +1567,18 @@ class Session implements DeploymentWorkspaceSession {
                         tx.patch({
                                 plan: receipt.plan,
                                 workflowReceipt: {
-                                        title: "Current boot and Rust DXE status recorded",
-                                        detail: `${receipt.status.label} · ${receipt.status.raw}. Boot and driver steps advanced.`,
+                                        title: message(
+                                                "ui.currentBootAndRustDxeStatusRecorded",
+                                        ),
+                                        detail: message(
+                                                "ui.driverRawAndBootStepsRecorded",
+                                                {
+                                                        raw: receipt.status.raw,
+                                                },
+                                        ),
                                 },
                         });
-                        tx.success(
-                                "Current Windows boot and Rust DXE status recorded.",
-                        );
+                        tx.success(message("ui.currentWindowsBootAndRustDxeStatusRecorded"));
                         if (tx.current()) await this.loadRecommendation();
                 });
         }
@@ -1560,14 +1610,20 @@ class Session implements DeploymentWorkspaceSession {
                         tx.patch({
                                 plan: receipt.plan,
                                 workflowReceipt: {
-                                        title: "Configuration written and read back",
-                                        detail: `${receipt.save.bytesWritten} bytes · saved ${receipt.save.savedAtUnixMs}. A Windows restart is still required.`,
+                                        title: message(
+                                                "ui.configurationWrittenAndReadBack",
+                                        ),
+                                        detail: message(
+                                                "ui.configurationSaved",
+                                                {
+                                                        bytes: receipt.save.bytesWritten,
+                                                        time: receipt.save.savedAtUnixMs,
+                                                },
+                                        ),
                                 },
                                 guardedConfigConfirmed: false,
                         });
-                        tx.success(
-                                "Deployment configuration written and read back.",
-                        );
+                        tx.success(message("ui.deploymentConfigurationWrittenAndReadBack"));
                 });
         }
         private openConfigurationReboot() {
@@ -1589,9 +1645,7 @@ class Session implements DeploymentWorkspaceSession {
                                 savedWork: false,
                                 showConfigurationReboot: true,
                         });
-                        tx.success(
-                                "Configuration restart details loaded for review.",
-                        );
+                        tx.success(message("ui.configurationRestartDetailsLoadedForReview"));
                 });
         }
         private requestConfigurationReboot() {
@@ -1624,13 +1678,15 @@ class Session implements DeploymentWorkspaceSession {
                                 );
                         tx.patch({
                                 workflowReceipt: {
-                                        title: "Configuration restart request accepted",
-                                        detail: "Return after Windows boots, then check the boot time.",
+                                        title: message(
+                                                "ui.configurationRestartRequestAccepted",
+                                        ),
+                                        detail: message(
+                                                "ui.returnAfterWindowsBootsThenCheckTheBootTime",
+                                        ),
                                 },
                         });
-                        tx.success(
-                                "Windows accepted the restart request. Return after the next boot.",
-                        );
+                        tx.success(message("ui.windowsAcceptedTheRestartRequestReturnAfterTheNextBoot"));
                 });
         }
         private verifyConfigurationBoot() {
@@ -1662,13 +1718,18 @@ class Session implements DeploymentWorkspaceSession {
                         tx.patch({
                                 plan: receipt.plan,
                                 workflowReceipt: {
-                                        title: "Windows boot time recorded",
-                                        detail: `Boot ${receipt.bootedAtUnixMs} is later than configuration read-back ${receipt.configurationSavedAtUnixMs}.`,
+                                        title: message("ui.windowsBootTimeRecorded"),
+                                        detail: message(
+                                                "ui.bootRecordedAfterConfiguration",
+                                                {
+                                                        bootTime: receipt.bootedAtUnixMs,
+                                                        savedTime:
+                                                                receipt.configurationSavedAtUnixMs,
+                                                },
+                                        ),
                                 },
                         });
-                        tx.success(
-                                "Windows boot after the configuration read-back recorded.",
-                        );
+                        tx.success(message("ui.windowsBootAfterTheConfigurationReadBackRecorded"));
                 });
         }
         private collectBar() {
@@ -1693,13 +1754,16 @@ class Session implements DeploymentWorkspaceSession {
                                 plan: receipt.plan,
                                 barEvidence: receipt.evidence,
                                 workflowReceipt: {
-                                        title: "Resizable BAR observed",
-                                        detail: `All profile GPUs observed · XML ${receipt.evidence.rawXmlSha256.slice(0, 10)}…${receipt.evidence.rawXmlSha256.slice(-8)}.`,
+                                        title: message("ui.resizableBarObserved"),
+                                        detail: message(
+                                                "ui.profileGpusObserved",
+                                                {
+                                                        hash: `${receipt.evidence.rawXmlSha256.slice(0, 10)}…${receipt.evidence.rawXmlSha256.slice(-8)}`,
+                                                },
+                                        ),
                                 },
                         });
-                        tx.success(
-                                "NVIDIA BAR1 data recorded for this profile.",
-                        );
+                        tx.success(message("ui.nvidiaBar1DataRecordedForThisProfile"));
                 });
         }
 }

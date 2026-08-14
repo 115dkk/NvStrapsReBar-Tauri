@@ -42,10 +42,24 @@ export type ResizableBarApertureState =
         | "expanded"
         | "legacy256MiB"
         | "indeterminate";
+export type ResizableBarInspectionState =
+        | ResizableBarApertureState
+        | "mixed";
+export type ResizableBarPatchConfiguration = {
+        state: "notNeeded" | "available" | "unavailable" | "indeterminate";
+        reasonCode:
+                | "alreadyExpanded"
+                | "automaticTargetAvailable"
+                | "registryExcluded"
+                | "unusableBar0"
+                | "apertureIndeterminate";
+        targetSelector: number | null;
+        targetSizeBytes: string | null;
+};
 export type ResizableBarInspection = {
         driverVersion: string;
         capturedAt: string;
-        state: ResizableBarApertureState;
+        state: ResizableBarInspectionState;
         gpus: {
                 pciBusId: string;
                 productName: string;
@@ -53,6 +67,7 @@ export type ResizableBarInspection = {
                 windowsBarSizeBytes: string;
                 state: ResizableBarApertureState;
                 reason: string;
+                patchConfiguration: ResizableBarPatchConfiguration;
         }[];
         warnings: string[];
 };

@@ -5,10 +5,13 @@ import {
         presentResizableBarStatus,
         type ResizableBarInspectionLoadState,
 } from "./resizable-bar-status";
-import type { ResizableBarInspection } from "./types";
+import type {
+        ResizableBarApertureState,
+        ResizableBarInspection,
+} from "./types";
 
 const inspection = (
-        state: ResizableBarInspection["state"],
+        state: ResizableBarApertureState,
 ): ResizableBarInspection => ({
         driverVersion: "596.36",
         capturedAt: "2026-08-14T10:50:58Z",
@@ -29,6 +32,29 @@ const inspection = (
                                         : "268435456",
                         state,
                         reason: "fixture",
+                        patchConfiguration:
+                                state === "expanded"
+                                        ? {
+                                                  state: "notNeeded",
+                                                  reasonCode: "alreadyExpanded",
+                                                  targetSelector: null,
+                                                  targetSizeBytes: null,
+                                          }
+                                        : state === "legacy256MiB"
+                                          ? {
+                                                    state: "available",
+                                                    reasonCode:
+                                                            "automaticTargetAvailable",
+					targetSelector: 7,
+                                                    targetSizeBytes: "8589934592",
+                                            }
+                                          : {
+                                                    state: "indeterminate",
+                                                    reasonCode:
+                                                            "apertureIndeterminate",
+                                                    targetSelector: null,
+                                                    targetSizeBytes: null,
+                                            },
                 },
         ],
         warnings: [],
@@ -62,8 +88,16 @@ describe("Resizable BAR status presenter", () => {
                         }),
                 ).toMatchObject({
                         tone: "expanded",
-                        heading: "Resizable BAR active",
-                        gpus: [{ bar1TotalBytes: "8589934592" }],
+                        headingId: "ui.resizableBarActive",
+                        aggregateSymbol: null,
+                        gpus: [
+                                {
+                                        apertureId: "ui.apertureExpanded",
+                                        patchStateId: "ui.configurationNotNeeded",
+                                        patchSymbol: "—",
+                                        gpu: { bar1TotalBytes: "8589934592" },
+                                },
+                        ],
                 });
                 expect(
                         presentResizableBarStatus({
@@ -72,8 +106,16 @@ describe("Resizable BAR status presenter", () => {
                         }),
                 ).toMatchObject({
                         tone: "legacy",
-                        heading: "BAR1 is using the 256 MiB aperture",
-                        gpus: [{ state: "legacy256MiB" }],
+                        headingId: "ui.bar1IsUsingThe256MibAperture",
+                        aggregateSymbol: null,
+                        gpus: [
+                                {
+                                        apertureId: "ui.apertureLegacy256Mib",
+                                        patchStateId: "ui.patchConfigurationAvailable",
+                                        patchSymbol: "O",
+                                        gpu: { state: "legacy256MiB" },
+                                },
+                        ],
                 });
                 expect(
                         presentResizableBarStatus({
@@ -82,17 +124,83 @@ describe("Resizable BAR status presenter", () => {
                         }),
                 ).toEqual({
                         tone: "unavailable",
-                        heading: "Resizable BAR status unavailable",
+                        headingId: "ui.resizableBarStatusUnavailable",
+                        aggregateSymbol: null,
                         driverVersion: null,
-                        gpus: [],
+                        gpus: [
+                                expect.objectContaining({
+                                        apertureId: "ui.apertureIndeterminate",
+                                        patchStateId:
+                                                "ui.patchConfigurationIndeterminate",
+                                        patchSymbol: "?",
+                                }),
+                        ],
                 });
                 expect(
                         presentResizableBarStatus({ status: "error" }),
                 ).toEqual({
                         tone: "unavailable",
-                        heading: "Resizable BAR status unavailable",
+                        headingId: "ui.resizableBarStatusUnavailable",
+                        aggregateSymbol: null,
                         driverVersion: null,
                         gpus: [],
+                });
+        });
+
+        it("keeps every GPU in a mixed inspection with app configuration facts", () => {
+                const expanded = inspection("expanded").gpus[0]!;
+                const legacy = inspection("legacy256MiB").gpus[0]!;
+                const result = presentResizableBarStatus({
+                        status: "ready",
+                        inspection: {
+                                ...inspection("expanded"),
+                                state: "mixed",
+                                gpus: [expanded, legacy],
+                        },
+                });
+
+                expect(result).toMatchObject({
+                        tone: "mixed",
+                        headingId: "ui.mixedResizableBarApertures",
+                        aggregateSymbol: "MIX",
+                });
+                expect(result.gpus).toHaveLength(2);
+                expect(result.gpus.map((gpu) => gpu.patchSymbol)).toEqual([
+                        "—",
+                        "O",
+                ]);
+                expect(result.gpus[1]?.gpu.patchConfiguration).toMatchObject({
+                        state: "available",
+			targetSelector: 7,
+                        targetSizeBytes: "8589934592",
+                });
+        });
+
+        it("distinguishes a registry-excluded configuration from an available target", () => {
+                const legacy = inspection("legacy256MiB").gpus[0]!;
+                const result = presentResizableBarStatus({
+                        status: "ready",
+                        inspection: {
+                                ...inspection("legacy256MiB"),
+                                gpus: [
+                                        {
+                                                ...legacy,
+                                                patchConfiguration: {
+                                                        state: "unavailable",
+                                                        reasonCode:
+                                                                "registryExcluded",
+                                                        targetSelector: null,
+                                                        targetSizeBytes: null,
+                                                },
+                                        },
+                                ],
+                        },
+                });
+
+                expect(result.gpus[0]).toMatchObject({
+                        patchStateId: "ui.patchConfigurationUnavailable",
+                        patchSymbol: "X",
+                        patchTone: "unavailable",
                 });
         });
 

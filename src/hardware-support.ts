@@ -1,4 +1,5 @@
 import type { SystemSnapshot } from "./types";
+import type { StaticMessageId } from "./i18n-catalog";
 
 export const MSI_PRO_Z690_A_DDR4_CATALOG_ID =
         "msi-pro-z690-a-ddr4-ms-7d25";
@@ -8,11 +9,8 @@ export const usesMsiProZ690Route = (snapshot: SystemSnapshot) =>
         MSI_PRO_Z690_A_DDR4_CATALOG_ID;
 
 export type MotherboardSupportPresentation = {
-        label:
-                | "Supported"
-                | "Unsupported"
-                | "Not in current support list"
-                | "Motherboard identity unavailable";
+        statusId: StaticMessageId;
+        symbol: "O" | "X" | "?";
         tone: "supported" | "unsupported" | "unknown";
         boardProduct: string | null;
 };
@@ -23,17 +21,29 @@ export function presentMotherboardSupport(
         const finding = snapshot.hardwareSupport.motherboardNativeResizableBar;
         const boardProduct = snapshot.machineIdentity?.boardProduct ?? null;
         if (finding.state === "supported")
-                return { label: "Supported", tone: "supported", boardProduct };
+                return {
+                        statusId: "ui.supported",
+                        symbol: "O",
+                        tone: "supported",
+                        boardProduct,
+                };
         if (finding.state === "unsupported")
-                return { label: "Unsupported", tone: "unsupported", boardProduct };
+                return {
+                        statusId: "ui.unsupported",
+                        symbol: "X",
+                        tone: "unsupported",
+                        boardProduct,
+                };
         if (finding.reasonCode === "motherboardNotInCatalog")
                 return {
-                        label: "Not in current support list",
+                        statusId: "ui.notInCurrentSupportList",
+                        symbol: "?",
                         tone: "unknown",
                         boardProduct,
                 };
         return {
-                label: "Motherboard identity unavailable",
+                statusId: "ui.motherboardIdentityUnavailable",
+                symbol: "?",
                 tone: "unknown",
                 boardProduct: null,
         };

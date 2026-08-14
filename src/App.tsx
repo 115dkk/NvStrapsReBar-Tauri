@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bridge, previewMode } from "./bridge";
 import { DeploymentWorkspace } from "./DeploymentWorkspace";
-import { useI18n } from "./i18n";
+import { translateMessage, useI18n } from "./i18n";
+import { message, type MessageDescriptor } from "./i18n-catalog";
 import { presentMotherboardSupport } from "./hardware-support";
 import {
         createRequestGenerationGuard,
@@ -10,6 +11,7 @@ import {
         type ResizableBarInspectionLoadState,
 } from "./resizable-bar-status";
 import { ThirdPartyLicensesDialog } from "./ThirdPartyLicensesDialog";
+import { driverStatusMessageId, presentSystemNotices } from "./system-messages";
 import {
         DEFAULT_DRAFT,
         type ConfigDraft,
@@ -84,7 +86,7 @@ export function App() {
                 [draft, setDraft] = useState<ConfigDraft>(DEFAULT_DRAFT),
                 [baseline, setBaseline] = useState<ConfigDraft>(DEFAULT_DRAFT),
                 [report, setReport] = useState<ValidationReport | null>(null),
-                [error, setError] = useState(""),
+                [error, setError] = useState<MessageDescriptor | null>(null),
                 [busy, setBusy] = useState(true),
                 [showConfirm, setShowConfirm] = useState(false),
                 [showLicenses, setShowLicenses] = useState(false),
@@ -123,7 +125,7 @@ export function App() {
                 if (
                         dirty &&
                         refresh &&
-                        !confirm(t("Discard unsaved edits and refresh hardware?"))
+                        !confirm(t("ui.discardUnsavedEditsAndRefreshHardware"))
                 )
                         return;
                 const sequence = systemSnapshotGeneration.begin();
@@ -131,7 +133,7 @@ export function App() {
                         bridge.inspectResizableBarStatus(),
                 );
                 setBusy(true);
-                setError("");
+                setError(null);
                 try {
                         const s = await (refresh
                                 ? bridge.refresh()
@@ -144,10 +146,14 @@ export function App() {
                         setBaseline(structuredClone(d));
                         setReport(null);
                 } catch (e) {
-                        if (systemSnapshotGeneration.isCurrent(sequence)) setError(
-                                (e as { message?: string }).message ||
-                                        String(e),
-                        );
+                        if (systemSnapshotGeneration.isCurrent(sequence))
+                                setError(
+                                        message("ui.configureOperationFailed", {
+                                                detail:
+                                                        (e as { message?: string })
+                                                                .message || String(e),
+                                        }),
+                                );
                 } finally {
                         if (systemSnapshotGeneration.isCurrent(sequence))
                                 setBusy(false);
@@ -178,14 +184,18 @@ export function App() {
                                                         sequence ===
                                                                 validationSequence.current &&
                                                         setError(
-                                                                (
-                                                                        e as {
-                                                                                message?: string;
-                                                                        }
-                                                                ).message ||
-                                                                        String(
-                                                                                e,
-                                                                        ),
+                                                                message(
+                                                                        "ui.configureOperationFailed",
+                                                                        {
+                                                                                detail:
+                                                                                        (
+                                                                                                e as {
+                                                                                                        message?: string;
+                                                                                                }
+                                                                                        ).message ||
+                                                                                        String(e),
+                                                                        },
+                                                                ),
                                                         ),
                                         ),
                         180,
@@ -249,7 +259,7 @@ export function App() {
                 });
         const save = async () => {
                 setShowConfirm(false);
-                setError("");
+                setError(null);
                 setBusy(true);
                 try {
                         const r = await bridge.save(draft);
@@ -280,13 +290,20 @@ export function App() {
                                 );
                         } catch (refreshError) {
                                 setError(
-                                        `Configuration was written and read back, but system state could not be refreshed: ${(refreshError as { message?: string }).message || String(refreshError)}`,
+                                        message("ui.configureOperationFailed", {
+                                                detail:
+                                                        (refreshError as { message?: string })
+                                                                .message || String(refreshError),
+                                        }),
                                 );
                         }
                 } catch (e) {
                         setError(
-                                (e as { message?: string }).message ||
-                                        String(e),
+                                message("ui.configureOperationFailed", {
+                                        detail:
+                                                (e as { message?: string }).message ||
+                                                String(e),
+                                }),
                         );
                 } finally {
                         setBusy(false);
@@ -296,27 +313,29 @@ export function App() {
                 return (
                         <main className="center">
                                 <div className="loader" />
-                                <h1>{t("Reading system state")}</h1>
-                                <p>{t("Inspecting UEFI access and NVIDIA adapters…")}</p>
+                                <h1>{t("ui.readingSystemState")}</h1>
+                                <p>{t("ui.inspectingUefiAccessAndNvidiaAdapters")}</p>
                         </main>
                 );
         if (!snap)
                 return (
                         <main className="center">
-                                <h1>{t("System state unavailable")}</h1>
+                                <h1>{t("ui.systemStateUnavailable")}</h1>
                                 <p>
-                                        {error ||
-                                                t("The native bridge did not return a snapshot.")}
+                                        {error
+                                                ? translateMessage(locale, error)
+                                                : t("ui.theNativeBridgeDidNotReturnASnapshot")}
                                 </p>
-                                <button onClick={() => load()}>{t("Try again")}</button>
+                                <button onClick={() => load()}>{t("ui.tryAgain")}</button>
                         </main>
                 );
         const rebarStatus = presentResizableBarStatus(rebarInspection);
         const motherboardSupport = presentMotherboardSupport(snap);
+        const systemNotices = presentSystemNotices(snap);
         return (
                 <div className="app">
                         {previewMode && (
-                                <div className="preview" role="status">{t("PREVIEW DATA · Browser fixture")}</div>
+                                <div className="preview" role="status">{t("ui.previewDataBrowserFixture")}</div>
                         )}
                         <header>
                                 <div className="product-heading">
@@ -326,8 +345,8 @@ export function App() {
                                         <div className="title-row">
                                                 <h1>
                                                         {surface === "configure"
-                                                                ? t("Firmware configuration")
-                                                                : t("Deployment workspace")}
+                                                                ? t("ui.firmwareConfiguration")
+                                                                : t("ui.deploymentWorkspace")}
                                                 </h1>
                                                 <button
                                                         ref={licenseButton}
@@ -338,16 +357,16 @@ export function App() {
                                                                 )
                                                         }
                                                 >
-                                                        {t("Licenses")}
+                                                        {t("ui.licenses")}
                                                 </button>
                                         </div>
                                 </div>
                                 <div className="header-actions">
                                         <label className="language-select">
-                                                <span>{t("Language")}</span>
+                                                <span>{t("ui.language")}</span>
                                                 <select
                                                         data-testid="language-select"
-                                                        aria-label={t("Language")}
+                                                        aria-label={t("ui.language")}
                                                         value={locale}
                                                         onChange={(event) => setLocale(event.target.value as "en" | "ko")}
                                                 >
@@ -357,7 +376,7 @@ export function App() {
                                         </label>
                                         <nav
                                                 className="surface-nav"
-                                                aria-label={t("Application workspace")}
+                                                aria-label={t("ui.applicationWorkspace")}
                                         >
                                                 <button
                                                         aria-current={
@@ -371,7 +390,7 @@ export function App() {
                                                                         "configure",
                                                                 )
                                                         }
-                                                >{t("Configure")}</button>
+                                                >{t("ui.configure")}</button>
                                                 <button
                                                         aria-current={
                                                                 surface ===
@@ -384,7 +403,7 @@ export function App() {
                                                                         "deploy",
                                                                 )
                                                         }
-                                                >{t("Deploy")}</button>
+                                                >{t("ui.deploy")}</button>
                                         </nav>
                                         {surface === "configure" && (
                                                 <span
@@ -395,27 +414,33 @@ export function App() {
                                                         }
                                                 >
                                                         {dirty
-                                                                ? t("UNSAVED EDITS")
-                                                                : t("IN SYNC")}
+                                                                ? t("ui.unsavedEdits")
+                                                                : t("ui.inSync")}
                                                 </span>
                                         )}
                                         <button
                                                 className="quiet"
                                                 onClick={() => void load(true)}
                                                 disabled={busy}
-                                        >{t("Refresh system")}</button>
+                                        >{t("ui.refreshSystem")}</button>
                                 </div>
                         </header>
                         <section
                                 className="rebar-status-strip"
-                                aria-label={t("Resizable BAR status")}
+                                aria-label={t("ui.resizableBarStatus")}
                         >
                                 <div
                                         className={`motherboard-support-status ${motherboardSupport.tone}`}
-                                        aria-label={`${t("Motherboard support")}: ${t(motherboardSupport.label)}`}
+                                        aria-label={t(
+                                                "ui.motherboardResizableBarSupportState",
+                                                { status: t(motherboardSupport.statusId) },
+                                        )}
                                 >
-                                        <span>{t("Motherboard support")}</span>
-                                        <strong>{t(motherboardSupport.label)}</strong>
+                                        <span>{t("ui.motherboardResizableBarSupport")}</span>
+                                        <strong aria-hidden="true">{motherboardSupport.symbol}</strong>
+                                        <span className="visually-hidden">
+                                                {t(motherboardSupport.statusId)}
+                                        </span>
                                         {motherboardSupport.boardProduct && (
                                                 <span>{motherboardSupport.boardProduct}</span>
                                         )}
@@ -424,25 +449,65 @@ export function App() {
                                         className={`rebar-current-status ${rebarStatus.tone}`}
                                         role="status"
                                         aria-live="polite"
-                                        aria-label={t(rebarStatus.heading)}
+                                        aria-label={t(rebarStatus.headingId)}
                                 >
-                                        <strong>{t(rebarStatus.heading)}</strong>
+                                        <strong>{t(rebarStatus.headingId)}</strong>
+                                        {rebarStatus.aggregateSymbol && (
+                                                <b
+                                                        className="rebar-aggregate-symbol"
+                                                        aria-hidden="true"
+                                                >
+                                                        {rebarStatus.aggregateSymbol}
+                                                </b>
+                                        )}
                                         {rebarStatus.gpus.length > 0 && (
                                                 <div className="rebar-status-gpus">
-                                                        {rebarStatus.gpus.map((gpu) => (
-                                                                <span key={gpu.pciBusId}>
-                                                                        <b>{gpu.productName}</b>
-                                                                        {gpu.bar1TotalBytes && (
+                                                        {rebarStatus.gpus.map((row) => (
+                                                                <span
+                                                                        className="rebar-gpu-row"
+                                                                        key={row.gpu.pciBusId}
+                                                                >
+                                                                        <b>{row.gpu.productName}</b>
+                                                                        {row.gpu.bar1TotalBytes && (
                                                                                 <>
-                                                                                        {" · "}BAR1 {bytes(gpu.bar1TotalBytes)}
+                                                                                        {" · "}BAR1 {bytes(row.gpu.bar1TotalBytes)}
                                                                                 </>
                                                                         )}
-                                                                        {rebarStatus.tone === "expanded" &&
-                                                                                rebarStatus.driverVersion && (
-                                                                                        <>
-                                                                                                {" · "}{t("Driver")} {rebarStatus.driverVersion}
-                                                                                        </>
+                                                                        {" · "}{t(row.apertureId)}
+                                                                        {rebarStatus.driverVersion && (
+                                                                                <>
+                                                                                        {" · "}{t("ui.driver")} {rebarStatus.driverVersion}
+                                                                                </>
+                                                                        )}
+                                                                        <span
+                                                                                className={`rebar-patch-state ${row.patchTone}`}
+                                                                                aria-label={t(
+                                                                                        "ui.patchConfigurationState",
+                                                                                        {
+                                                                                                status: t(row.patchStateId),
+                                                                                        },
                                                                                 )}
+                                                                        >
+                                                                                {" · "}{t("ui.patchConfiguration")}{" "}
+                                                                                <b aria-hidden="true">
+                                                                                        {row.patchTone === "not-needed"
+                                                                                                ? t(row.patchStateId)
+                                                                                                : row.patchSymbol}
+                                                                                </b>
+                                                                                <span className="visually-hidden">
+                                                                                        {t(row.patchStateId)}
+                                                                                </span>
+                                                                        </span>
+                                                                        {row.gpu.patchConfiguration.targetSizeBytes && (
+                                                                                <>
+                                                                                        {" · "}
+                                                                                        {t("ui.targetSize", {
+                                                                                                size: bytes(
+                                                                                                        row.gpu.patchConfiguration.targetSizeBytes,
+                                                                                                ),
+                                                                                        })}
+                                                                                </>
+                                                                        )}
                                                                 </span>
                                                         ))}
                                                 </div>
@@ -453,44 +518,44 @@ export function App() {
                                 <DeploymentWorkspace snapshot={snap} />
                         ) : (
                         <div className="workspace">
-                                <aside aria-label={t("System status")}>
-                                        <h2>{t("System gate")}</h2>
+                                <aside aria-label={t("ui.systemStatus")}>
+                                        <h2>{t("ui.systemGate")}</h2>
                                         <Status
-                                                label={t("Windows")}
+                                                label={t("ui.windows")}
                                                 ok={snap.platform.supported}
                                         />
                                         <Status
-                                                label={t("UEFI boot")}
+                                                label={t("ui.uefiBoot")}
                                                 ok={snap.platform.uefi}
                                         />
                                         <Status
-                                                label={t("Administrator")}
+                                                label={t("ui.administrator")}
                                                 ok={snap.platform.elevated}
                                         />
                                         <Status
-                                                label={t("Firmware access")}
+                                                label={t("ui.firmwareAccess")}
                                                 ok={snap.firmware.accessible}
                                         />
                                         <hr />
                                         <dl>
-                                                <dt>{t("Driver state")}</dt>
+                                                <dt>{t("ui.driverState")}</dt>
                                                 <dd>
                                                         {snap.driverStatus
-                                                                ? t(snap.driverStatus.label) :
-                                                                t("Unavailable")}
+                                                                ? t(driverStatusMessageId(snap.driverStatus)) :
+                                                                t("ui.unavailable")}
                                                 </dd>
-                                                <dt>{t("Saved variable")}</dt>
+                                                <dt>{t("ui.savedVariable")}</dt>
                                                 <dd>
                                                         {snap.firmware
                                                                 .configVariablePresent ===
                                                         null
-                                                                ? t("Unknown")
+                                                                ? t("ui.unknown")
                                                                 : snap.firmware
                                                                             .configVariablePresent
-                                                                  ? t("Present")
-                                                                  : t("Not present")}
+                                                                  ? t("ui.present")
+                                                                  : t("ui.notPresent")}
                                                 </dd>
-                                                <dt>{t("Architecture")}</dt>
+                                                <dt>{t("ui.architecture")}</dt>
                                                 <dd>
                                                         {
                                                                 snap.platform
@@ -504,19 +569,19 @@ export function App() {
                                                         onClick={() =>
                                                                 void bridge.elevate()
                                                         }
-                                                >{t("Restart as administrator")}</button>
+                                                >{t("ui.restartAsAdministrator")}</button>
                                         )}
                                         <div className="rail-note">
-                                                <strong>{t("Hardware changes")}</strong>
-                                                <p>{t("After changing a GPU or PCI topology, refresh the system and review the saved selectors.")}</p>
+                                                <strong>{t("ui.hardwareChanges")}</strong>
+                                                <p>{t("ui.afterChangingAGpuOrPciTopologyRefreshTheSystemAndReviewTheSavedSelectors")}</p>
                                         </div>
                                 </aside>
                                 <main className="content">
                                         <section className="intro">
                                                 <div>
-                                                        <span className="kicker">{t("ACTIVE SYSTEM / EDITABLE DRAFT")}</span>
-                                                        <h2>{t("Configure what firmware applies at next boot")}</h2>
-                                                        <p>{t("Changes are written to a UEFI variable and take effect after Windows restarts.")}</p>
+                                                        <span className="kicker">{t("ui.activeSystemEditableDraft")}</span>
+                                                        <h2>{t("ui.configureWhatFirmwareAppliesAtNextBoot")}</h2>
+                                                        <p>{t("ui.changesAreWrittenToAUefiVariableAndTakeEffectAfterWindowsRestarts")}</p>
                                                 </div>
                                                 <div className="count">
                                                         <b>
@@ -534,26 +599,24 @@ export function App() {
                                                         className="notice error"
                                                         role="alert"
                                                 >
-                                                        <strong>{t("Operation failed")}</strong>
-                                                        <span>{t(error)}</span>
+                                                        <strong>{t("ui.operationFailed")}</strong>
+                                                        <span>{translateMessage(locale, error)}</span>
                                                         <button
                                                                 onClick={() =>
-                                                                        setError(
-                                                                                "",
-                                                                        )
+                                                                        setError(null)
                                                                 }
-                                                                aria-label={t("Dismiss error")}
+                                                                aria-label={t("ui.dismissError")}
                                                         >
                                                                 ×
                                                         </button>
                                                 </div>
                                         )}
-                                        {snap.notices.map((n, i) => (
+                                        {systemNotices.map((notice) => (
                                                 <div
-                                                        className={`notice ${n.kind}`}
-                                                        key={i}
+                                                        className={`notice ${notice.tone}`}
+                                                        key={notice.id}
                                                 >
-                                                        {t(n.message)}
+                                                        {t(notice.id)}
                                                 </div>
                                         ))}
                                         <section className="panel">
@@ -562,30 +625,30 @@ export function App() {
                                                                 <span className="step">
                                                                         01
                                                                 </span>
-                                                                <h3>{t("Automatic policy")}</h3>
+                                                                <h3>{t("ui.automaticPolicy")}</h3>
                                                         </div>
-                                                        <p>{t("Choose the default behavior before adding device-specific exceptions.")}</p>
+                                                        <p>{t("ui.chooseTheDefaultBehaviorBeforeAddingDeviceSpecificExceptions")}</p>
                                                 </div>
                                                 <div
                                                         className="mode-grid"
                                                         role="radiogroup"
-                                                        aria-label={t("Automatic GPU policy")}
+                                                        aria-label={t("ui.automaticGpuPolicy")}
                                                 >
                                                         {[
                                                                 [
                                                                         0,
-                                                                        t("Off"),
-                                                                        t("Only explicit GPU rules are used."),
+                                                                        t("ui.off"),
+                                                                        t("ui.onlyExplicitGpuRulesAreUsed"),
                                                                 ],
                                                                 [
                                                                         1,
-                                                                        t("Registry only"),
-                                                                        t("Use sizes from the upstream Turing registry."),
+                                                                        t("ui.registryOnly"),
+                                                                        t("ui.useSizesFromTheUpstreamTuringRegistry"),
                                                                 ],
                                                                 [
                                                                         2,
-                                                                        t("Registry + fallback"),
-                                                                        t("Use the registry, or 2 GiB for otherwise unlisted Turing GPUs."),
+                                                                        t("ui.registryFallback"),
+                                                                        t("ui.useTheRegistryOr2GibForOtherwiseUnlistedTuringGpus"),
                                                                 ],
                                                         ].map(([v, l, d]) => (
                                                                 <label
@@ -629,7 +692,7 @@ export function App() {
                                                         ))}
                                                 </div>
                                                 <label className="field">
-                                                        <span>{t("Target PCI BAR size")}</span>
+                                                        <span>{t("ui.targetPciBarSize")}</span>
                                                         <select
                                                                 value={
                                                                         draft.targetPciBarSize
@@ -645,7 +708,7 @@ export function App() {
                                                                         })
                                                                 }
                                                         >
-                                                                <option value="0">{t("System default")}</option>
+                                                                <option value="0">{t("ui.systemDefault")}</option>
                                                                 {Array.from(
                                                                         {
                                                                                 length: 31,
@@ -670,11 +733,11 @@ export function App() {
                                                                                 </option>
                                                                         ),
                                                                 )}
-                                                                <option value="32">{t("Any supported size")}</option>
-                                                                <option value="64">{t("Selected GPUs only")}</option>
-                                                                <option value="65">{t("GPU straps only")}</option>
+                                                                <option value="32">{t("ui.anySupportedSize")}</option>
+                                                                <option value="64">{t("ui.selectedGpusOnly")}</option>
+                                                                <option value="65">{t("ui.gpuStrapsOnly")}</option>
                                                         </select>
-                                                        <small>{t("Special modes 64 and 65 limit PCI-side changes. Review validation errors before saving.")}</small>
+                                                        <small>{t("ui.specialModes64And65LimitPciSideChangesReviewValidationErrorsBeforeSaving")}</small>
                                                 </label>
                                         </section>
                                         <section className="panel">
@@ -683,14 +746,14 @@ export function App() {
                                                                 <span className="step">
                                                                         02
                                                                 </span>
-                                                                <h3>{t("Detected GPUs & rules")}</h3>
+                                                                <h3>{t("ui.detectedGpusRules")}</h3>
                                                         </div>
-                                                        <p>{t("Match rules by PCI location. Maximum eight.")}</p>
+                                                        <p>{t("ui.matchRulesByPciLocationMaximumEight")}</p>
                                                 </div>
                                                 {snap.devices.length === 0 ? (
                                                         <div className="empty">
-                                                                <strong>{t("No NVIDIA display adapters detected")}</strong>
-                                                                <span>{t("Refresh after verifying the device is present in Windows Device Manager.")}</span>
+                                                                <strong>{t("ui.noNvidiaDisplayAdaptersDetected")}</strong>
+                                                                <span>{t("ui.refreshAfterVerifyingTheDeviceIsPresentInWindowsDeviceManager")}</span>
                                                         </div>
                                                 ) : (
                                                         snap.devices.map(
@@ -771,7 +834,7 @@ export function App() {
                                                                                         </div>
                                                                                         <div className="gpu-facts">
                                                                                                 <span>
-                                                                                                        {t("Current BAR aperture")}{" "}
+                                                                                                        {t("ui.currentBarAperture")}{" "}
                                                                                                         <b>
                                                                                                                 {bytes(
                                                                                                                         g.currentBarSize,
@@ -779,19 +842,19 @@ export function App() {
                                                                                                         </b>
                                                                                                 </span>
                                                                                                 <span>
-                                                                                                        {t("Family")}{" "}
+                                                                                                        {t("ui.family")}{" "}
                                                                                                         <b>
                                                                                                                 {g.isTuring
                                                                                                                         ? "Turing"
-                                                                                                                        : t("Other")}
+                                                                                                                        : t("ui.other")}
                                                                                                         </b>
                                                                                                 </span>
                                                                                                 <span>
-                                                                                                        {t("Effective")}{" "}
+                                                                                                        {t("ui.effective")}{" "}
                                                                                                         <b>
                                                                                                                 {g.effectiveBarSizeSelector ===
                                                                                                                 null
-                                                                                                                        ? t("None")
+                                                                                                                        ? t("ui.none")
                                                                                                                         : sizes[
                                                                                                                                   g
                                                                                                                                           .effectiveBarSizeSelector
@@ -815,11 +878,11 @@ export function App() {
                                                                                                                 8
                                                                                                         }
                                                                                                 >
-                                                                                                        + {t("Add explicit rule")}
+                                                                                                        + {t("ui.addExplicitRule")}
                                                                                                 </button>
                                                                                         ) : (
                                                                                                 <div className="rule">
-                                                                                                        <label>{t("Match scope")}<select
+                                                                                                        <label>{t("ui.matchScope")}<select
                                                                                                                         value={
                                                                                                                                 draft
                                                                                                                                         .rules[
@@ -840,12 +903,12 @@ export function App() {
                                                                                                                                 )
                                                                                                                         }
                                                                                                                 >
-                                                                                                                        <option value="device">{t("Device ID")}</option>
-                                                                                                                        <option value="subsystem">{t("Subsystem")}</option>
-                                                                                                                        <option value="location">{t("PCI location")}</option>
+                                                                                                                        <option value="device">{t("ui.deviceId")}</option>
+                                                                                                                        <option value="subsystem">{t("ui.subsystem")}</option>
+                                                                                                                        <option value="location">{t("ui.pciLocation")}</option>
                                                                                                                 </select>
                                                                                                         </label>
-                                                                                                        <label>{t("Action / size")}<select
+                                                                                                        <label>{t("ui.actionSize")}<select
                                                                                                                         value={
                                                                                                                                 draft
                                                                                                                                         .rules[
@@ -875,7 +938,7 @@ export function App() {
                                                                                                                                 )
                                                                                                                         }
                                                                                                                 >
-                                                                                                                        <option value="">{t("No explicit size")}</option>
+                                                                                                                        <option value="">{t("ui.noExplicitSize")}</option>
                                                                                                                         {sizes.map(
                                                                                                                                 (
                                                                                                                                         s,
@@ -895,10 +958,10 @@ export function App() {
                                                                                                                                         </option>
                                                                                                                                 ),
                                                                                                                         )}
-                                                                                                                        <option value="254">{t("Exclude GPU")}</option>
+                                                                                                                        <option value="254">{t("ui.excludeGpu")}</option>
                                                                                                                 </select>
                                                                                                         </label>
-                                                                                                        <label>{t("Size-mask override")}<select
+                                                                                                        <label>{t("ui.sizeMaskOverride")}<select
                                                                                                                         value={
                                                                                                                                 draft
                                                                                                                                         .rules[
@@ -935,9 +998,9 @@ export function App() {
                                                                                                                                 )
                                                                                                                         }
                                                                                                                 >
-                                                                                                                        <option value="inherit">{t("Inherit global")}</option>
-                                                                                                                        <option value="true">{t("Force enabled")}</option>
-                                                                                                                        <option value="false">{t("Force disabled")}</option>
+                                                                                                                        <option value="inherit">{t("ui.inheritGlobal")}</option>
+                                                                                                                        <option value="true">{t("ui.forceEnabled")}</option>
+                                                                                                                        <option value="false">{t("ui.forceDisabled")}</option>
                                                                                                                 </select>
                                                                                                         </label>
                                                                                                         <button
@@ -956,7 +1019,7 @@ export function App() {
                                                                                                                                 },
                                                                                                                         )
                                                                                                                 }
-                                                                                                        >{t("Remove")}</button>
+                                                                                                        >{t("ui.remove")}</button>
                                                                                                 </div>
                                                                                         )}
                                                                                 </article>
@@ -966,8 +1029,8 @@ export function App() {
                                                 )}
                                                 {draft.rules.length > 0 && (
                                                         <div className="all-rules">
-                                                                <h4>{t("All configured rules")}</h4>
-                                                                <p>{t("Every saved scope remains directly editable, including overlapping priority rules.")}</p>
+                                                                <h4>{t("ui.allConfiguredRules")}</h4>
+                                                                <p>{t("ui.everySavedScopeRemainsDirectlyEditableIncludingOverlappingPriorityRules")}</p>
                                                                 {draft.rules.map(
                                                                         (
                                                                                 r,
@@ -977,8 +1040,8 @@ export function App() {
                                                                                         className="rule"
                                                                                         key={`${r.matchScope}-${r.deviceId}-${r.subsystemVendorId}-${r.subsystemDeviceId}-${r.bus}-${r.device}-${r.function}`}
                                                                                 >
-                                                                                        <label>{t("Match scope")}<select
-                                                                                                        aria-label={`Rule ${i + 1} match scope`}
+                                                                                        <label>{t("ui.matchScope")}<select
+                                                                                                        aria-label={t("ui.ruleMatchScope", { rule: i + 1 })}
                                                                                                         value={
                                                                                                                 r.matchScope
                                                                                                         }
@@ -995,13 +1058,13 @@ export function App() {
                                                                                                                 )
                                                                                                         }
                                                                                                 >
-                                                                                                        <option value="device">{t("Device ID")}</option>
-                                                                                                        <option value="subsystem">{t("Subsystem")}</option>
-                                                                                                        <option value="location">{t("PCI location")}</option>
+                                                                                                        <option value="device">{t("ui.deviceId")}</option>
+                                                                                                        <option value="subsystem">{t("ui.subsystem")}</option>
+                                                                                                        <option value="location">{t("ui.pciLocation")}</option>
                                                                                                 </select>
                                                                                         </label>
-                                                                                        <label>{t("Action / size")}<select
-                                                                                                        aria-label={`Rule ${i + 1} action / size`}
+                                                                                        <label>{t("ui.actionSize")}<select
+                                                                                                        aria-label={t("ui.ruleActionSize", { rule: i + 1 })}
                                                                                                         value={
                                                                                                                 r.barSizeSelector ??
                                                                                                                 ""
@@ -1027,7 +1090,7 @@ export function App() {
                                                                                                                 )
                                                                                                         }
                                                                                                 >
-                                                                                                        <option value="">{t("No explicit size")}</option>
+                                                                                                        <option value="">{t("ui.noExplicitSize")}</option>
                                                                                                         {sizes.map(
                                                                                                                 (
                                                                                                                         s,
@@ -1047,7 +1110,7 @@ export function App() {
                                                                                                                         </option>
                                                                                                                 ),
                                                                                                         )}
-                                                                                                        <option value="254">{t("Exclude GPU")}</option>
+                                                                                                        <option value="254">{t("ui.excludeGpu")}</option>
                                                                                                 </select>
                                                                                         </label>
                                                                                         <span className="rule-identity">
@@ -1093,9 +1156,9 @@ export function App() {
                                                                 <span className="step">
                                                                         03
                                                                 </span>
-                                                                <h3>{t("Firmware behavior")}</h3>
+                                                                <h3>{t("ui.firmwareBehavior")}</h3>
                                                         </div>
-                                                                <p>{t("Choose change detection, BAR mask, and resume behavior.")}</p>
+                                                                <p>{t("ui.chooseChangeDetectionBarMaskAndResumeBehavior")}</p>
                                                 </div>
                                                 <div className="checks">
                                                         <label>
@@ -1118,8 +1181,8 @@ export function App() {
                                                                         }
                                                                 />
                                                                 <span>
-                                                                        <strong>{t("Check Setup variable changes")}</strong>
-                                                                        <small>{t("Compare the Setup variable fingerprint before applying configuration.")}</small>
+                                                                        <strong>{t("ui.checkSetupVariableChanges")}</strong>
+                                                                        <small>{t("ui.compareTheSetupVariableFingerprintBeforeApplyingConfiguration")}</small>
                                                                 </span>
                                                         </label>
                                                         <label>
@@ -1142,8 +1205,8 @@ export function App() {
                                                                         }
                                                                 />
                                                                 <span>
-                                                                        <strong>{t("Override BAR size mask globally")}</strong>
-                                                                        <small>{t("Advertise the configured size when capability masks differ.")}</small>
+                                                                        <strong>{t("ui.overrideBarSizeMaskGlobally")}</strong>
+                                                                        <small>{t("ui.advertiseTheConfiguredSizeWhenCapabilityMasksDiffer")}</small>
                                                                 </span>
                                                         </label>
                                                         <label className="danger-check">
@@ -1166,8 +1229,8 @@ export function App() {
                                                                         }
                                                                 />
                                                                 <span>
-                                                                        <strong>{t("Skip S3 resume reconfiguration")}</strong>
-                                                                        <small>{t("Test S3 resume on this computer after enabling this option.")}</small>
+                                                                        <strong>{t("ui.skipS3ResumeReconfiguration")}</strong>
+                                                                        <small>{t("ui.testS3ResumeOnThisComputerAfterEnablingThisOption")}</small>
                                                                 </span>
                                                         </label>
                                                 </div>
@@ -1177,21 +1240,21 @@ export function App() {
                                                 aria-live="polite"
                                         >
                                                 <div>
-                                                        <span className="kicker">{t("VALIDATION")}</span>
+                                                        <span className="kicker">{t("ui.validation")}</span>
                                                         {!dirty ? (
-                                                                <h3>{t("No pending changes")}</h3>
+                                                                <h3>{t("ui.noPendingChanges")}</h3>
                                                         ) : !report ? (
-                                                                <h3>{t("Checking draft…")}</h3>
+                                                                <h3>{t("ui.checkingDraft")}</h3>
                                                         ) : report.valid ? (
                                                                 <>
-                                                                        <h3>{t("Draft is ready for review")}</h3>
+                                                                        <h3>{t("ui.draftIsReadyForReview")}</h3>
                                                                         <p>
                                                                                 {validationSummary(report.affectedGpuIds.length, report.encodedSize)}
                                                                         </p>
                                                                 </>
                                                         ) : (
                                                                 <>
-                                                                        <h3>{t("Draft needs correction")}</h3>
+                                                                        <h3>{t("ui.draftNeedsCorrection")}</h3>
                                                                         {report.errors.map(
                                                                                 (
                                                                                         x,
@@ -1202,7 +1265,7 @@ export function App() {
                                                                                                         x
                                                                                                 }
                                                                                         >
-                                                                                                {t(x)}
+                                                                                                {x}
                                                                                         </p>
                                                                                 ),
                                                                         )}
@@ -1225,7 +1288,7 @@ export function App() {
                                                                                 null,
                                                                         );
                                                                 }}
-                                                        >{t("Discard edits")}</button>
+                                                        >{t("ui.discardEdits")}</button>
                                                         <button
                                                                 ref={
                                                                         reviewButton
@@ -1244,15 +1307,22 @@ export function App() {
                                                                                 true,
                                                                         )
                                                                 }
-                                                        >{t("Review & save")}</button>
+                                                        >{t("ui.reviewSave")}</button>
                                                 </div>
                                         </section>
-                                        {report?.warnings.map((w) => (
+                                        {report && [
+                                                ...(draft.skipS3Resume
+                                                        ? ["ui.s3ResumeReconfigurationIsDisabledTestS3ResumeOnThisComputer" as const]
+                                                        : []),
+                                                ...(report.affectedGpuIds.length === 0 && report.encodedSize > 0
+                                                        ? ["ui.theCurrentSettingsDoNotSelectAnyDetectedNvidiaGpu" as const]
+                                                        : []),
+                                        ].map((warningId) => (
                                                 <div
                                                         className="notice warning"
-                                                        key={w}
+                                                        key={warningId}
                                                 >
-                                                        {t(w)}
+                                                        {t(warningId)}
                                                 </div>
                                         ))}
                                         {receipt && (
@@ -1260,7 +1330,7 @@ export function App() {
                                                         className="receipt"
                                                         role="status"
                                                 >
-                                                        <strong>{t("Configuration written and read back")}</strong>
+                                                        <strong>{t("ui.configurationWrittenAndReadBack")}</strong>
                                                         <span>
                                                                 {
                                                                         receipt.bytesWritten
@@ -1271,7 +1341,7 @@ export function App() {
                                                                         ? "present"
                                                                         : "removed"}
                                                         </span>
-                                                        <p>{t("Restart Windows when ready. The firmware driver cannot apply this configuration until the next boot.")}</p>
+                                                        <p>{t("ui.restartWindowsWhenReadyTheFirmwareDriverCannotApplyThisConfigurationUntilTheNextBoot")}</p>
                                                 </div>
                                         )}
                                 </main>
@@ -1289,12 +1359,12 @@ export function App() {
                                                 aria-modal="true"
                                                 aria-labelledby="confirm-title"
                                         >
-                                                <span className="kicker">{t("CONSEQUENTIAL WRITE")}</span>
-                                                <h2 id="confirm-title">{t("Write this draft to UEFI firmware?")}</h2>
-                                                <p>{t("The application will write and read back the NvStrapsReBar configuration variable. A restart is required before the driver can apply it.")}</p>
+                                                <span className="kicker">{t("ui.consequentialWrite")}</span>
+                                                <h2 id="confirm-title">{t("ui.writeThisDraftToUefiFirmware")}</h2>
+                                                <p>{t("ui.theApplicationWillWriteAndReadBackTheNvstrapsrebarConfigurationVariableARestartIsRequiredBeforeTheDriverCanApplyIt")}</p>
                                                 <div className="warning-box">
-                                                        <strong>{t("Before you continue")}</strong>
-                                                        <span>{t("Confirm the detected GPU and PCI topology match this machine. Hardware changes can make saved selectors stale.")}</span>
+                                                        <strong>{t("ui.beforeYouContinue")}</strong>
+                                                        <span>{t("ui.confirmTheDetectedGpuAndPciTopologyMatchThisMachineHardwareChangesCanMakeSavedSelectorsStale")}</span>
                                                 </div>
                                                 <div className="modal-actions">
                                                         <button
@@ -1305,13 +1375,13 @@ export function App() {
                                                                                 false,
                                                                         )
                                                                 }
-                                                        >{t("Cancel")}</button>
+                                                        >{t("ui.cancel")}</button>
                                                         <button
                                                                 className="primary danger-button"
                                                                 onClick={() =>
                                                                         void save()
                                                                 }
-                                                        >{t("Write configuration")}</button>
+                                                        >{t("ui.writeConfiguration")}</button>
                                                 </div>
                                         </div>
                                 </div>

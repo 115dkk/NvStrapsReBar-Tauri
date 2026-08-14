@@ -126,15 +126,80 @@ const previewResizableBarInspection: ResizableBarInspection = {
                         windowsBarSizeBytes: "8589934592",
                         state: "expanded",
                         reason: "BAR1 is larger than the legacy 256 MiB window and matches Windows",
+                        patchConfiguration: {
+                                state: "notNeeded",
+                                reasonCode: "alreadyExpanded",
+                                targetSelector: null,
+                                targetSizeBytes: null,
+                        },
                 },
         ],
         warnings: [],
 };
+export const PREVIEW_REBAR_STATE_KEY = "nvstraps-preview-rebar-state";
+const mixedPreviewGpu = {
+        ...gpu,
+        id: "pci-02-00-0",
+        name: "NVIDIA Quadro RTX 4000",
+        deviceId: 0x1eb1,
+        subsystemDeviceId: 0x12a0,
+        bus: 2,
+        bar0Base: "10737418240",
+        bar0Top: "11005853695",
+        currentBarSize: "268435456",
+        dedicatedVideoMemory: "8589934592",
+        recommendedBarSizeSelector: 7,
+        effectiveBarSizeSelector: null,
+};
+const mixedPreviewInspection: ResizableBarInspection = {
+        ...previewResizableBarInspection,
+        state: "mixed",
+        gpus: [
+                ...previewResizableBarInspection.gpus,
+                {
+                        pciBusId: "00000000:02:00.0",
+                        productName: mixedPreviewGpu.name,
+                        bar1TotalBytes: "268435456",
+                        windowsBarSizeBytes: "268435456",
+                        state: "legacy256MiB",
+                        reason: "BAR1 is using the legacy 256 MiB aperture",
+                        patchConfiguration: {
+                                state: "available",
+                                reasonCode: "automaticTargetAvailable",
+                                targetSelector: 7,
+                                targetSizeBytes: "8589934592",
+                        },
+                },
+        ],
+};
+const useMixedPreview = () =>
+        typeof sessionStorage !== "undefined" &&
+        sessionStorage.getItem(PREVIEW_REBAR_STATE_KEY) === "mixed";
+const currentPreviewSnapshot = (): SystemSnapshot => {
+        const value = structuredClone(previewSnapshot);
+        if (!useMixedPreview()) return value;
+        value.devices.push(structuredClone(mixedPreviewGpu));
+        value.machineIdentity?.gpus.push({
+                vendorId: mixedPreviewGpu.vendorId,
+                deviceId: mixedPreviewGpu.deviceId,
+                subsystemVendorId: mixedPreviewGpu.subsystemVendorId,
+                subsystemDeviceId: mixedPreviewGpu.subsystemDeviceId,
+                location: { bus: 2, device: 0, function: 0 },
+                bridgeLocation: { bus: 0, device: 2, function: 0 },
+                bar0Base: 10737418240,
+                bar0Top: 11005853695,
+        });
+        return value;
+};
 export const previewConfigureBridge: ConfigureBridge = {
-        snapshot: async () => structuredClone(previewSnapshot),
-        refresh: async () => structuredClone(previewSnapshot),
+        snapshot: async () => currentPreviewSnapshot(),
+        refresh: async () => currentPreviewSnapshot(),
         inspectResizableBarStatus: async () =>
-                structuredClone(previewResizableBarInspection),
+                structuredClone(
+                        useMixedPreview()
+                                ? mixedPreviewInspection
+                                : previewResizableBarInspection,
+                ),
         validate: async (draft) => {
                 const encodedSize = bytesFor(draft);
                 return {

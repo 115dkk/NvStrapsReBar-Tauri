@@ -170,6 +170,17 @@ button:disabled {
 .motherboard-support-status span:last-child {
         overflow-wrap: anywhere;
 }
+.visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+}
 .rebar-current-status::before {
         content: "";
         flex: 0 0 auto;
@@ -184,12 +195,21 @@ button:disabled {
 .rebar-current-status.legacy::before {
         background: var(--warn);
 }
+.rebar-current-status.mixed::before {
+        background: var(--warn);
+}
 .rebar-current-status.unavailable::before {
         background: var(--muted);
 }
 .rebar-current-status > strong {
         flex: 0 0 auto;
         color: var(--text);
+}
+.rebar-aggregate-symbol {
+        flex: 0 0 auto;
+        color: var(--warn);
+        font: 700 11px ui-monospace, Consolas, monospace;
+        letter-spacing: 0.08em;
 }
 .rebar-status-gpus {
         min-width: 0;
@@ -198,12 +218,21 @@ button:disabled {
         gap: 5px 18px;
         color: var(--muted);
 }
-.rebar-status-gpus span {
+.rebar-status-gpus .rebar-gpu-row {
         min-width: 0;
         overflow-wrap: anywhere;
 }
 .rebar-status-gpus b {
         color: var(--text);
+}
+.rebar-patch-state.available b {
+        color: var(--ok);
+}
+.rebar-patch-state.unavailable b {
+        color: var(--bad);
+}
+.rebar-patch-state.indeterminate b {
+        color: var(--warn);
 }
 .product,
 .kicker,
