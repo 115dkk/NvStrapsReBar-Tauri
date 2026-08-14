@@ -65,27 +65,27 @@ const baseSteps: readonly StepFixture[] = Object.freeze([
         [
                 "verifyProfile",
                 "automated",
-                "Verify the pinned machine, topology, BIOS, and source image",
+                "Compare current hardware, BIOS, topology, and source image",
         ],
         [
                 "confirmRecovery",
                 "physicalConfirmation",
-                "Confirm the pinned firmware recovery route",
+                "Record the firmware recovery route",
         ],
         [
                 "preserveOriginalFirmware",
                 "automated",
-                "Preserve and hash the exact original firmware image",
+                "Preserve and hash the source firmware image",
         ],
         [
                 "prepareRustDriver",
                 "automated",
-                "Build and verify the Rust DXE driver",
+                "Build and inspect the Rust DXE driver",
         ],
         [
                 "verifyPatchedArtifact",
                 "automated",
-                "Inject and verify the patched firmware artifact",
+                "Inject the driver and inspect the firmware artifact",
         ],
         [
                 "flashWithVendorRoute",
@@ -105,7 +105,7 @@ const baseSteps: readonly StepFixture[] = Object.freeze([
         [
                 "verifyDriverLoaded",
                 "automated",
-                "Verify the firmware driver status",
+                "Read the firmware driver status",
         ],
         [
                 "writeNvstrapsConfiguration",
@@ -549,9 +549,9 @@ const MANUAL_PREVIEW_FIXTURES = Object.freeze({
                 stepId: "flashWithVendorRoute" as const,
                 title: "Flash with the documented vendor route",
                 warnings: [
-                        "Use only the pinned vendor route and exported artifact.",
-                        "Confirm only after the vendor tool reports success; this is an operator attestation, not automatic flash verification.",
-                        "Keep the pinned recovery route available and do not interrupt power during the flash.",
+                        "Select the exported artifact in the documented vendor tool.",
+                        "Record completion after the vendor tool reports success.",
+                        "Keep power connected during flashing and keep the recovery files nearby.",
                 ],
         },
         setupNative: {
@@ -559,23 +559,23 @@ const MANUAL_PREVIEW_FIXTURES = Object.freeze({
                 title: "Confirm firmware setup values",
                 warnings: [
                         "Enable native ReBAR and Above 4G decoding, and disable CSM.",
-                        "Confirm only after saving these exact firmware setup values.",
+                        "Save these firmware setup values, then return to record the step.",
                 ],
         },
         setupLegacy: {
                 stepId: "configureFirmwareSetup" as const,
                 title: "Confirm firmware setup values",
                 warnings: [
-                        "Enable Above 4G decoding and disable CSM; do not claim native motherboard ReBAR.",
-                        "Confirm only after saving these exact firmware setup values.",
+                        "Enable Above 4G decoding and disable CSM. This legacy route uses NvStrapsReBar instead of native motherboard ReBAR.",
+                        "Save these firmware setup values, then return to record the step.",
                 ],
         },
         complete: {
                 stepId: "configureNvidiaApplications" as const,
                 title: "Configure NVIDIA application profiles",
                 warnings: [
-                        "Confirm only after applying and independently reviewing the intended per-application ReBAR policy.",
-                        "Installing or launching NVIDIA Profile Inspector does not satisfy this step.",
+                        "Apply and review the intended per-application ReBAR policy.",
+                        "Return after editing the policy and record the result.",
                 ],
         },
 });
@@ -590,7 +590,7 @@ const legacyAnalysis: LegacyFirmwareAnalysis = {
                                 {
                                         ruleId: "4b".repeat(32),
                                         description:
-                                                "Pinned Above 4G decoding compatibility rule",
+                                                "Above 4G decoding compatibility rule",
                                         sectionType: 16,
                                         requiredRisks: [],
                                         status: "applicable",
@@ -629,7 +629,7 @@ const legacyAnalysis: LegacyFirmwareAnalysis = {
                                         status: "blocked",
                                         expectedMatches: null,
                                         blockedReason:
-                                                "The compressed section cannot be proven safe by this build.",
+                                                "This build does not support the compressed section.",
                                         recommended: false,
                                 },
                         ],
@@ -664,7 +664,7 @@ export const previewDeploymentAdapter: DeploymentAdapter = {
                 const actual = firmwareFor(request.firmwarePath);
                 if (!sameFirmware(request.expectedFirmware, actual))
                         throw new Error(
-                                "The source firmware changed after inspection; inspect the exact image again.",
+                                "The source firmware changed after inspection; inspect this image again.",
                         );
                 const profileId = `nvstraps-${actual.sha256.slice(0, 16)}`;
                 const profileIdentity = clone(identity);
@@ -776,7 +776,7 @@ export const previewDeploymentAdapter: DeploymentAdapter = {
                         ],
                         manualGates: [
                                 "Use MSI M-FLASH to select the exported artifact.",
-                                "Do not interrupt power during vendor flashing.",
+                                "Keep power connected during vendor flashing.",
                         ],
                 },
                 manifestSha256: "b6".repeat(32),
@@ -792,7 +792,7 @@ export const previewDeploymentAdapter: DeploymentAdapter = {
                 forceCloseApplications: false,
                 warnings: [
                         "Save and close all work before confirming; Windows will restart immediately.",
-                        "This only opens firmware setup. It does not flash firmware or change settings.",
+                        "Windows opens the firmware setup screen. Continue there with the vendor instructions.",
                 ],
         }),
         rebootToFirmwareSetup: async (preview, confirmed) => {
@@ -941,8 +941,8 @@ export const previewDeploymentAdapter: DeploymentAdapter = {
                         forceCloseApplications: false,
                         warnings: [
                                 "Save and close all work before confirming; Windows will restart immediately.",
-                                "The command deliberately omits /f so applications are not explicitly force-closed.",
-                                "Accepting the reboot request does not complete the plan; the next app session must prove a later Windows boot.",
+                                "Windows restarts immediately. Applications receive the standard shutdown request.",
+                                "Return after Windows boots so the app can compare the new boot time.",
                         ],
                 };
         },

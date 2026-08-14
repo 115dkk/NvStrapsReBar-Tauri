@@ -115,7 +115,7 @@ const preview: ConfigureBridge = {
                                         : [],
                         warnings: draft.skipS3Resume
                                 ? [
-                                          "S3 resume reconfiguration is disabled; resume behavior must be verified on this machine.",
+                                          "S3 resume reconfiguration is disabled. Test S3 resume on this computer.",
                                   ]
                                 : [],
                         changed:

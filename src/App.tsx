@@ -240,7 +240,7 @@ export function App() {
                                 );
                         } catch (refreshError) {
                                 setError(
-                                        `Configuration was saved and verified, but system state could not be refreshed: ${(refreshError as { message?: string }).message || String(refreshError)}`,
+                                        `Configuration was written and read back, but system state could not be refreshed: ${(refreshError as { message?: string }).message || String(refreshError)}`,
                                 );
                         }
                 } catch (e) {
@@ -274,7 +274,7 @@ export function App() {
         return (
                 <div className="app">
                         {previewMode && (
-                                <div className="preview" role="status">{t("PREVIEW DATA · Browser fixture only · No firmware is being read or written")}</div>
+                                <div className="preview" role="status">{t("PREVIEW DATA · Browser fixture")}</div>
                         )}
                         <header>
                                 <div className="product-heading">
@@ -422,8 +422,8 @@ export function App() {
                                                 >{t("Restart as administrator")}</button>
                                         )}
                                         <div className="rail-note">
-                                                <strong>{t("Hardware safety")}</strong>
-                                                <p>{t("GPU or PCI topology changes can invalidate saved selectors. Refresh and validate after any hardware change.")}</p>
+                                                <strong>{t("Hardware changes")}</strong>
+                                                <p>{t("After changing a GPU or PCI topology, refresh the system and review the saved selectors.")}</p>
                                         </div>
                                 </aside>
                                 <main className="content">
@@ -431,7 +431,7 @@ export function App() {
                                                 <div>
                                                         <span className="kicker">{t("ACTIVE SYSTEM / EDITABLE DRAFT")}</span>
                                                         <h2>{t("Configure what firmware applies at next boot")}</h2>
-                                                        <p>{t("Changes are written to a UEFI variable. They do not take effect until Windows is restarted.")}</p>
+                                                        <p>{t("Changes are written to a UEFI variable and take effect after Windows restarts.")}</p>
                                                 </div>
                                                 <div className="count">
                                                         <b>
@@ -589,7 +589,7 @@ export function App() {
                                                                 <option value="64">{t("Selected GPUs only")}</option>
                                                                 <option value="65">{t("GPU straps only")}</option>
                                                         </select>
-                                                        <small>{t("Special modes 64 and 65 constrain PCI-side changes; validation remains authoritative.")}</small>
+                                                        <small>{t("Special modes 64 and 65 limit PCI-side changes. Review validation errors before saving.")}</small>
                                                 </label>
                                         </section>
                                         <section className="panel">
@@ -600,7 +600,7 @@ export function App() {
                                                                 </span>
                                                                 <h3>{t("Detected GPUs & rules")}</h3>
                                                         </div>
-                                                        <p>{t("Rules are matched most safely by PCI location. Maximum eight.")}</p>
+                                                        <p>{t("Match rules by PCI location. Maximum eight.")}</p>
                                                 </div>
                                                 {snap.devices.length === 0 ? (
                                                         <div className="empty">
@@ -1008,9 +1008,9 @@ export function App() {
                                                                 <span className="step">
                                                                         03
                                                                 </span>
-                                                                <h3>{t("Advanced safety")}</h3>
+                                                                <h3>{t("Firmware behavior")}</h3>
                                                         </div>
-                                                        <p>{t("Defaults favor change detection and conservative firmware behavior.")}</p>
+                                                                <p>{t("Choose change detection, BAR mask, and resume behavior.")}</p>
                                                 </div>
                                                 <div className="checks">
                                                         <label>
@@ -1033,8 +1033,8 @@ export function App() {
                                                                         }
                                                                 />
                                                                 <span>
-                                                                        <strong>{t("Guard against Setup variable changes")}</strong>
-                                                                        <small>{t("Keep the firmware setup fingerprint check enabled.")}</small>
+                                                                        <strong>{t("Check Setup variable changes")}</strong>
+                                                                        <small>{t("Compare the Setup variable fingerprint before applying configuration.")}</small>
                                                                 </span>
                                                         </label>
                                                         <label>
@@ -1082,7 +1082,7 @@ export function App() {
                                                                 />
                                                                 <span>
                                                                         <strong>{t("Skip S3 resume reconfiguration")}</strong>
-                                                                        <small>{t("Resume behavior must be verified on this machine.")}</small>
+                                                                        <small>{t("Test S3 resume on this computer after enabling this option.")}</small>
                                                                 </span>
                                                         </label>
                                                 </div>
@@ -1175,7 +1175,7 @@ export function App() {
                                                         className="receipt"
                                                         role="status"
                                                 >
-                                                        <strong>{t("Save verified by read-back")}</strong>
+                                                        <strong>{t("Configuration written and read back")}</strong>
                                                         <span>
                                                                 {
                                                                         receipt.bytesWritten

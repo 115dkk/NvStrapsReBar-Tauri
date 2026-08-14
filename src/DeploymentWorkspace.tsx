@@ -141,7 +141,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                         return (
                                 <div className="workflow-complete" role="status">
                                         <strong>{t("Deployment plan complete")}</strong>
-                                        <span>{t("Every durable gate has a persisted receipt.")}</span>
+                                        <span>{t("No remaining steps.")}</span>
                                 </div>
                         );
                 switch (nextAction) {
@@ -151,7 +151,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 className="primary"
                                                 onClick={prepare}
                                                 disabled={Boolean(busyAction)}
-                                        >{t("Prepare and verify firmware artifact")}</button>
+                                        >{t("Prepare and inspect firmware artifact")}</button>
                                 );
                         case "manual":
                                 return (
@@ -175,43 +175,43 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 className="primary"
                                                 onClick={verifyDriver}
                                                 disabled={Boolean(busyAction)}
-                                        >{t("Verify current boot + Rust DXE")}</button>
+                                        >{t("Check current boot + Rust DXE status")}</button>
                                 );
                         case "writeConfig":
                                 return (
                                         <div className="guarded-config">
                                                 {recommendationStatus === "pending" && (
-                                                        <p role="status">{t("Loading the backend-owned recommendation for this exact profile…")}</p>
+                                                        <p role="status">{t("Loading recommended configuration…")}</p>
                                                 )}
                                                 {recommendationStatus === "error" && (
                                                         <p className="blocked-copy" role="alert">
-                                                                {t(recommendationError)} {t("Use Configure or retry after reloading the exact profile.")}
+                                                                {t(recommendationError)} {t("Use Configure or reload this profile and try again.")}
                                                         </p>
                                                 )}
                                                 {configRecommendation && recommendationStatus === "ready" && (
                                                         <div className="recommended-config">
-                                                                <strong>{t("Backend-recommended deployment configuration")}</strong>
+                                                                <strong>{t("Recommended deployment configuration")}</strong>
                                                                 <dl className="recommendation-facts">
                                                                         <div><dt>{t("Turing GPUs")}</dt><dd>{configRecommendation.value.turingGpuCount}</dd></div>
                                                                         <div><dt>{t("Registry managed")}</dt><dd>{configRecommendation.value.registryManagedGpuCount}</dd></div>
-                                                                        <div><dt>{t("Exact fallback rules")}</dt><dd>{configRecommendation.value.exactFallbackRuleCount}</dd></div>
+                                                                        <div><dt>{t("Location-specific fallback rules")}</dt><dd>{configRecommendation.value.exactFallbackRuleCount}</dd></div>
                                                                 </dl>
                                                                 <code>
                                                                         {t("global mode")} {configRecommendation.value.draft.globalMode} · {t("target selector")} {configRecommendation.value.draft.targetPciBarSize} · {t("skip S3")} {String(configRecommendation.value.draft.skipS3Resume)} · {t("mask override")} {String(configRecommendation.value.draft.overrideBarSizeMask)} · {t("setup guard")} {String(configRecommendation.value.draft.guardSetupChanges)}
                                                                 </code>
                                                                 {configRecommendation.value.draft.rules.length > 0 ? (
-                                                                        <ul className="recommendation-rules" aria-label={t("Exact fallback rules")}>
+                                                                        <ul className="recommendation-rules" aria-label={t("Location-specific fallback rules")}>
                                                                                 {configRecommendation.value.draft.rules.map((rule) => (
                                                                                         <li key={`${rule.bus}-${rule.device}-${rule.function}`}>
                                                                                                 <strong>{rule.bus.toString(16).padStart(2, "0")}:{rule.device.toString(16).padStart(2, "0")}.{rule.function}</strong>
-                                                                                                <span>device {rule.deviceId.toString(16).padStart(4, "0")} · BAR selector {rule.barSizeSelector} · exact location only</span>
+                                                                                                <span>device {rule.deviceId.toString(16).padStart(4, "0")} · BAR selector {rule.barSizeSelector} · PCI location only</span>
                                                                                         </li>
                                                                                 ))}
                                                                         </ul>
                                                                 ) : (
                                                                         <p>{t("Every detected Turing GPU is covered by the built-in registry; no fallback rule is added.")}</p>
                                                                 )}
-                                                                <p>{t("This draft was generated and prevalidated by the backend for the current topology. To choose another policy or size, switch to Configure instead of confirming here.")}</p>
+                                                                <p>{t("This draft uses the current GPU and PCI topology. Switch to Configure to choose another policy or size.")}</p>
                                                         </div>
                                                 )}
                                                 <label className="consequence-check compact-check">
@@ -226,7 +226,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                 }
                                                         />
                                                         <span>
-                                                                <strong>{t("I reviewed this exact backend recommendation for the selected profile.")}</strong>
+                                                                <strong>{t("I reviewed this configuration for the selected profile.")}</strong>
                                                         </span>
                                                 </label>
                                                 <button
@@ -238,7 +238,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                 recommendationStatus !== "ready" ||
                                                                 !configRecommendation
                                                         }
-                                                >{t("Write and verify guarded configuration")}</button>
+                                                >{t("Write configuration and read it back")}</button>
                                         </div>
                                 );
                         case "configurationReboot":
@@ -253,7 +253,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         className="primary"
                                                         onClick={verifyConfigurationBoot}
                                                         disabled={Boolean(busyAction)}
-                                                >{t("Verify returned Windows boot")}</button>
+                                                >{t("Check Windows boot time")}</button>
                                         </div>
                                 );
                         case "collectBar":
@@ -262,7 +262,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 className="primary"
                                                 onClick={collectBar}
                                                 disabled={Boolean(busyAction)}
-                                        >{t("Collect and verify BAR1 evidence")}</button>
+                                        >{t("Collect BAR1 data")}</button>
                                 );
                         case "nvidiaPolicy":
                                 return (
@@ -273,7 +273,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                         className="quiet"
                                                                         onClick={installInspector}
                                                                         disabled={Boolean(busyAction)}
-                                                                >{t("Install verified Profile Inspector")}</button>
+                                                                >{t("Install Profile Inspector")}</button>
                                                         ) : (
                                                                 <>
                                                                         <button
@@ -289,7 +289,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                 </>
                                                         )}
                                                 </div>
-                                                <p>{t("Installing, backing up, or launching the editor does not complete policy application.")}</p>
+                                                <p>{t("After editing the NVIDIA policy, return here and record the result.")}</p>
                                                 <button
                                                         className="primary danger-button"
                                                         onClick={openManualConfirmation}
@@ -299,7 +299,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                 );
                         default:
                                 return (
-                                        <p className="blocked-copy" role="alert">{t("This durable step has no frontend action. Reload the plan or use Configure for configuration changes.")}</p>
+                                        <p className="blocked-copy" role="alert">{t("Complete this step in its owning tool, then reload the plan. Use Configure for configuration changes.")}</p>
                                 );
                 }
         };
@@ -307,12 +307,12 @@ export function DeploymentWorkspace({ snapshot }: Props) {
         return (
                 <div className="deployment-shell">
                         <aside className="deployment-rail" aria-label={t("Deployment status")}>
-                                <span className="kicker">{t("PINNED DEPLOYMENT")}</span>
+                                <span className="kicker">{t("DEPLOYMENT PROFILE")}</span>
                                 <h2>{selectedProfile?.displayName ?? t("No profile yet")}</h2>
                                 {selectedProfile ? (
                                         <>
                                                 <StatusLine
-                                                        label={t("Machine preflight")}
+                                                        label={t("Hardware check")}
                                                         state={
                                                                 preflightExact === false
                                                                         ? "bad"
@@ -348,42 +348,33 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 />
                                                 <hr />
                                                 <dl>
-                                                        <dt>{t("Profile ID")}</dt>
-                                                        <dd className="mono-wrap">
-                                                                {selectedProfile.profileId}
-                                                        </dd>
                                                         <dt>{t("Active gate")}</dt>
                                                         <dd>
                                                                 {activeStep
                                                                         ? t(activeStep.title)
                                                                         : t("No ready step")}
                                                         </dd>
-                                                        <dt>{t("Plan revision")}</dt>
-                                                        <dd>
-                                                                {plan?.revision ??
-                                                                        "—"}
-                                                        </dd>
                                                 </dl>
                                         </>
                                 ) : (
-                                        <p className="muted-copy">{t("Select a source image and pin it to this exact machine first.")}</p>
+                                        <p className="muted-copy">{t("Select a source image and create a profile for this computer first.")}</p>
                                 )}
                                 <div className="rail-note safety-note">
-                                        <strong>{t("Manual boundary")}</strong>
-                                        <p>{t("This app prepares and verifies a package. You perform vendor flashing, setup changes, power cycles, and hardware work.")}</p>
+                                        <strong>{t("Next steps")}</strong>
+                                        <p>{t("Prepare the package here. Use the vendor tool for flashing and the firmware screen for setup values.")}</p>
                                 </div>
                         </aside>
 
                         <main className="deployment-content">
                                 <section className="deployment-intro">
                                         <div>
-                                                <span className="kicker">{t("EXACT MACHINE / RECOVERABLE ARTIFACT")}</span>
-                                                <h2>{t("Prepare, hand off, then verify")}</h2>
-                                                <p>{t("Automated steps stop at signed evidence. Physical and firmware-screen steps stay visible as gates.")}</p>
+                                                <span className="kicker">{t("CURRENT HARDWARE / PREPARED FILES")}</span>
+                                                <h2>{t("Firmware preparation and installation")}</h2>
+                                                <p>{t("Prepare and inspect firmware files here. Flash the prepared image with the vendor tool, then return to record the result.")}</p>
                                         </div>
                                         <div className="truth-badge">
-                                                <strong>{t("NO AUTO-FLASH")}</strong>
-                                                <span>{t("Manual vendor handoff")}</span>
+                                                <strong>{t("FLASH WITH VENDOR TOOL")}</strong>
+                                                <span>{t("Use the prepared image")}</span>
                                         </div>
                                 </section>
 
@@ -411,13 +402,13 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                 <section className="journey-panel" aria-labelledby="source-title">
                                         <JourneyHeading
                                                 number="01"
-                                                title={t("Pin source & recovery")}
+                                                title={t("Source image and recovery files")}
                                                 id="source-title"
-                                                copy={t("Read and hash the exact vendor image, then document the install and recovery route.")}
+                                                copy={t("Select the vendor image, inspect its size and SHA-256, and record the installation and recovery instructions.")}
                                         />
                                         {msi && (
                                                 <div className="detected-route">
-                                                        <strong>{t("Exact MSI board recognized")}</strong>
+                                                        <strong>MSI {snapshot.machineIdentity?.boardProduct ?? t("board detected")}</strong>
                                                         <span>{t("Native ReBAR, M-FLASH, and Flash BIOS Button defaults are prefilled from the official manual. Confirm them below.")}</span>
                                                 </div>
                                         )}
@@ -434,7 +425,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         />
                                                 </label>
                                                 <label className="field span-2">
-                                                        <span>{t("Exact firmware image")}</span>
+                                                        <span>{t("Selected firmware image")}</span>
                                                         <div className="path-control">
                                                                 <input
                                                                         value={firmwarePath}
@@ -561,8 +552,8 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         <div className="legacy-analysis-head">
                                                                 <div>
                                                                         <span className="step">{t("READ-ONLY")}</span>
-                                                                        <h4 id="legacy-analysis-title">{t("Exact legacy patch analysis")}</h4>
-                                                                        <p>{t("Match counts come only from the pinned Rust analyzer. Analysis does not mutate or flash the image.")}</p>
+                                                                        <h4 id="legacy-analysis-title">{t("Legacy patch analysis")}</h4>
+                                                                        <p>{t("The Rust analyzer reports match counts for the selected source image.")}</p>
                                                                 </div>
                                                                 <button
                                                                         type="button"
@@ -574,10 +565,10 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                 >
                                                                         {legacyAnalysisStatus ===
                                                                         "pending"
-                                                                                ? t("Analyzing exact image…")
+                                                                                ? t("Analyzing image…")
                                                                                 : legacyAnalysisValid
                                                                                   ? t("Analyze again")
-                                                                                  : t("Analyze exact image")}
+                                                                                  : t("Analyze image")}
                                                                 </button>
                                                         </div>
                                                         <p
@@ -667,7 +658,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                                                                                                                 />
                                                                                                                                                                 <span>
                                                                                                                                                                         <strong>
-                                                                                                                                                                                {t(rule.description ?? "Pinned compatibility rule")}
+                                                                                                                                                                                {t(rule.description ?? "Compatibility rule")}
                                                                                                                                                                         </strong>
                                                                                                                                                                         <small>
                                                                                                                                                                                 {exactMatches(rule.expectedMatches!)} · {t("section")} 0x{rule.sectionType.toString(16).padStart(2, "0")}
@@ -702,10 +693,10 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                                                                                         key={rule.ruleId}
                                                                                                                                 >
                                                                                                                                         <strong>
-                                                                                                                                                {t("Blocked")} · {t(rule.description ?? "Pinned compatibility rule")}
+                                                                                                                                                {t("Blocked")} · {t(rule.description ?? "Compatibility rule")}
                                                                                                                                         </strong>
                                                                                                                                         <span>
-                                                                                                                                                {t(rule.blockedReason ?? "The analyzer could not prove a safe match.")}
+                                                                                                                                                {t(rule.blockedReason ?? "The analyzer found no supported match.")}
                                                                                                                                         </span>
                                                                                                                                 </div>
                                                                                                                         ),
@@ -722,7 +713,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                                         >
                                                                                                 <h5 id="legacy-risk-title">{t("Explicit risk acknowledgements")}</h5>
                                                                                                 <p>
-                                                                                                        {t("For each selected risk, describe this exact image and include fingerprint")} <code>{acknowledgementHash}</code>. {t("A generic confirmation is refused.")}
+                                                                                                        {t("For each selected risk, describe this image and include fingerprint")} <code>{acknowledgementHash}</code>. {t("Include the image-specific consequence.")}
                                                                                                 </p>
                                                                                                 {selectedLegacyRisks.map(
                                                                                                         (risk) => {
@@ -765,7 +756,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                                                                                                 }
                                                                                                                                         />
                                                                                                                                         <span>
-                                                                                                                                                <strong>{t("I reviewed this risk for the exact analyzed firmware.")}</strong>
+                                                                                                                                                <strong>{t("I reviewed this risk for the analyzed firmware.")}</strong>
                                                                                                                                         </span>
                                                                                                                                 </label>
                                                                                                                         </div>
@@ -790,7 +781,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 />
                                                 <span>
                                                         <strong>{t("I checked the vendor install and recovery instructions for this board.")}</strong>
-                                                        <small>{t("This confirmation records a documented route; it does not prove a recovery attempt.")}</small>
+                                                        <small>{t("This records the selected installation and recovery instructions.")}</small>
                                                 </span>
                                         </label>
                                         <div className="panel-actions">
@@ -811,8 +802,8 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         onClick={createProfile}
                                                 >
                                                         {busyAction === "profile"
-                                                                ? t("Pinning profile…")
-                                                                : t("Create machine-bound profile")}
+                                                                ? t("Creating profile…")
+                                                                : t("Create profile for this computer")}
                                                 </button>
                                         </div>
                                 </section>
@@ -820,9 +811,9 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                 <section className="journey-panel" aria-labelledby="artifact-title">
                                         <JourneyHeading
                                                 number="02"
-                                                title={t("Preflight & export")}
+                                                title={t("Check & export")}
                                                 id="artifact-title"
-                                                copy={t("Refuse drift, prepare the Rust firmware artifact, and export a read-back verified package.")}
+                                                copy={t("Compare the current hardware and source image, prepare the Rust firmware artifact, and export the package.")}
                                         />
                                         <label className="field profile-select">
                                                 <span>{t("Machine profile")}</span>
@@ -850,14 +841,14 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 <div className="active-workflow" aria-live="polite">
                                                         <div className="active-workflow-head">
                                                                 <div>
-                                                                        <span className="step">{t("ACTIVE STEP")} · {t("REVISION")} {plan.revision}</span>
+                                                                        <span className="step">{t("ACTIVE STEP")}</span>
                                                                         <h4>
                                                                                 {activeStep ? t(activeStep.title) : t("Deployment complete")}
                                                                         </h4>
                                                                         <p>
                                                                                 {activeStep
-                                                                                        ? t("Only this step can advance the durable plan. Completed receipts survive reload.")
-                                                                                        : t("No remaining step is ready; every gate has durable evidence.")}
+                                                                                        ? t("Complete the active step to continue.")
+                                                                                        : t("No remaining steps.")}
                                                                         </p>
                                                                 </div>
                                                                 <strong>
@@ -883,18 +874,18 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         )}
                                                         {installation && activeStep?.id === "configureNvidiaApplications" && (
                                                                 <div className="workflow-receipt">
-                                                                        <strong>Profile Inspector {installation.manifest.version} verified</strong>
-                                                                        <span>{t("Tool launch is a handoff only; policy remains incomplete until manual confirmation.")}</span>
+                                                                        <strong>Profile Inspector {installation.manifest.version} installed</strong>
+                                                                        <span>{t("Next: apply the NVIDIA policy, then record the result.")}</span>
                                                                 </div>
                                                         )}
                                                         {backup && activeStep?.id === "configureNvidiaApplications" && (
                                                                 <small className="verified-line mono-wrap">
-                                                                        Backup preserved: {backup.backupPath}
+                                                                        {t("Profile backup")}: {backup.backupPath}
                                                                 </small>
                                                         )}
                                                         {launch && activeStep?.id === "configureNvidiaApplications" && (
                                                                 <small className="verified-line">
-                                                                        Editor process {launch.processId} launched; the plan did not advance.
+                                                                        {t(`Editor process ${launch.processId} launched · next: edit the policy and record the result.`)}
                                                                 </small>
                                                         )}
                                                 </div>
@@ -917,7 +908,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                                                   : step.kind === "firmwareManual"
                                                                                                     ? t("Manual firmware gate")
                                                                                                     : step.kind === "externalTool"
-                                                                                                      ? t("Verified external tool")
+                                                                                                      ? t("External tool")
                                                                                                       : t("Restart gate")}
                                                                                 </span>
                                                                         </div>
@@ -930,15 +921,15 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 <button
                                                         onClick={compare}
                                                         disabled={Boolean(busyAction) || !selectedProfileId}
-                                                >{t("Run exact-machine preflight")}</button>
+                                                >{t("Check current hardware and source image")}</button>
                                         </div>
                                         {preparation?.patchedFirmware && (
                                                 <div className="artifact-receipt" role="status">
-                                                        <strong>{t("Patched artifact verified")}</strong>
+                                                        <strong>{t("Prepared firmware artifact")}</strong>
                                                         <span>
                                                                 {n(preparation.patchedFirmware.byteLength)} {t("bytes")} · SHA-256 {shortHash(preparation.patchedFirmware.sha256)}
                                                         </span>
-                                                        <small>{t("No BIOS flash has occurred.")}</small>
+                                                        <small>{t("Next: export this artifact for the vendor tool.")}</small>
                                                 </div>
                                         )}
                                         <div className="path-control export-control">
@@ -970,7 +961,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         <strong>{t("Package exported — manual handoff next")}</strong>
                                                         <span className="mono-wrap">{packageReceipt.packagePath}</span>
                                                         <small>
-                                                                {packageReceipt.manifest.files.length} files verified · manifest {shortHash(packageReceipt.manifestSha256)}
+                                                                {packageReceipt.manifest.files.length} files · manifest SHA-256 {shortHash(packageReceipt.manifestSha256)}
                                                         </small>
                                                 </div>
                                         )}
@@ -979,9 +970,9 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                 <section className="journey-panel" aria-labelledby="firmware-title">
                                         <JourneyHeading
                                                 number="03"
-                                                title={t("Manual boundaries remain explicit")}
+                                                title={t("Steps completed outside this app")}
                                                 id="firmware-title"
-                                                copy={t("Vendor flash, setup values, returned boot, and NVIDIA policy are never inferred from a local click.")}
+                                                copy={t("Use the vendor tool for flashing, set firmware values in the firmware screen, then return to continue the plan.")}
                                         />
                                         <div className="manual-gates">
                                                 <div>
@@ -991,13 +982,13 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 </div>
                                                 <div>
                                                         <span>{t("PHYSICAL")}</span>
-                                                        <strong>{t("Recovery readiness")}</strong>
-                                                        <p>{t("Keep the pinned recovery route and original image available before flashing.")}</p>
+                                                        <strong>{t("Recovery files")}</strong>
+                                                        <p>{t("Keep the selected recovery route and original image available before flashing.")}</p>
                                                 </div>
                                                 <div>
                                                         <span>{t("MANUAL")}</span>
                                                         <strong>{t("UEFI values")}</strong>
-                                                        <p>{t("Confirm Above 4G Decoding and Resizable BAR in firmware. The app does not change them.")}</p>
+                                                        <p>{t("Set Above 4G Decoding and Resizable BAR in the firmware screen.")}</p>
                                                 </div>
                                         </div>
                                 </section>
@@ -1015,7 +1006,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 <span className="kicker">{t("IMMEDIATE RESTART")}</span>
                                                 <h2 id="reboot-title">{t("Restart Windows into firmware setup?")}</h2>
                                                 <p>
-                                                        {t("This sends")} <code>{rebootPreview.command} {rebootPreview.arguments.join(" ")}</code>. {t("It does not flash firmware or change setup values.")}
+                                                        {t("This sends")} <code>{rebootPreview.command} {rebootPreview.arguments.join(" ")}</code>. {t("Windows opens the firmware setup screen; continue there with the vendor instructions.")}
                                                 </p>
                                                 <div className="warning-box">
                                                         {rebootPreview.warnings.map((warning) => (
@@ -1031,7 +1022,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         />
                                                         <span>
                                                                 <strong>{t("I saved and closed my work.")}</strong>
-                                                                <small>{t("The restart is immediate. Applications are not explicitly force-closed.")}</small>
+                                                                <small>{t("Windows restarts immediately. Save and close your work first.")}</small>
                                                         </span>
                                                 </label>
                                                 <div className="modal-actions">
@@ -1054,11 +1045,9 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 aria-modal="true"
                                                 aria-labelledby="manual-confirm-title"
                                         >
-                                                <span className="kicker">{t("OPERATOR ATTESTATION")} · {t("REVISION")} {manualPreview.planRevision}</span>
+                                                <span className="kicker">{t("RECORD COMPLETED STEP")}</span>
                                                 <h2 id="manual-confirm-title">{t(manualPreview.title)}</h2>
-                                                <p>
-                                                        {t("This records a durable attestation for only")} <code>{manualPreview.stepId}</code>. {t("It cannot prove the external operation automatically.")}
-                                                </p>
+                                                <p>{t("Review the result in the owning tool, then record this step.")}</p>
                                                 <div className="warning-box">
                                                         {manualPreview.warnings.map((warning) => (
                                                                 <span key={warning}>{t(warning)}</span>
@@ -1076,8 +1065,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                 }
                                                         />
                                                         <span>
-                                                                <strong>{t("I completed and independently reviewed this exact step.")}</strong>
-                                                                <small>{t("The token is bound to this profile, active step, and plan revision.")}</small>
+                                                                <strong>{t("I completed this step and reviewed the result.")}</strong>
                                                         </span>
                                                 </label>
                                                 <div className="modal-actions">
@@ -1100,10 +1088,10 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 aria-modal="true"
                                                 aria-labelledby="configuration-reboot-title"
                                         >
-                                                <span className="kicker">{t("RESTART REQUEST · PLAN DOES NOT ADVANCE")}</span>
+                                                <span className="kicker">{t("RESTART REQUEST")}</span>
                                                 <h2 id="configuration-reboot-title">{t("Restart Windows after configuration?")}</h2>
                                                 <p>
-                                                        {t("This sends")} <code>{configurationRebootPreview.command} {configurationRebootPreview.arguments.join(" ")}</code>. {t("A later Windows boot must be verified separately.")}
+                                                        {t("This sends")} <code>{configurationRebootPreview.command} {configurationRebootPreview.arguments.join(" ")}</code>. {t("Return after Windows boots so the app can compare the new boot time.")}
                                                 </p>
                                                 <div className="warning-box">
                                                         {configurationRebootPreview.warnings.map((warning) => (
@@ -1119,7 +1107,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         />
                                                         <span>
                                                                 <strong>{t("I saved and closed my work.")}</strong>
-                                                                <small>{t("The command omits /f and the restart request itself does not complete this step.")}</small>
+                                                                <small>{t("Windows restarts immediately. Return after Windows boots to continue.")}</small>
                                                         </span>
                                                 </label>
                                                 <div className="modal-actions">
