@@ -67,12 +67,6 @@ pub enum ResizableBarApertureState {
     Indeterminate,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub enum ResizableBarSupportState {
-    Unknown,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResizableBarGpuInspection {
@@ -89,7 +83,6 @@ pub struct ResizableBarGpuInspection {
 pub struct ResizableBarInspection {
     pub driver_version: String,
     pub captured_at: String,
-    pub support_state: ResizableBarSupportState,
     pub state: ResizableBarApertureState,
     pub gpus: Vec<ResizableBarGpuInspection>,
     pub warnings: Vec<String>,
@@ -353,7 +346,6 @@ fn build_inspection(evidence: &NvidiaSmiEvidence, devices: &[GpuDevice]) -> Resi
     ResizableBarInspection {
         driver_version: evidence.driver_version.clone(),
         captured_at: evidence.captured_at.clone(),
-        support_state: ResizableBarSupportState::Unknown,
         state,
         gpus,
         warnings,
@@ -830,7 +822,6 @@ mod tests {
         );
         let value = serde_json::to_value(inspection).unwrap();
         assert_eq!(value["state"], "expanded");
-        assert_eq!(value["supportState"], "unknown");
         assert_eq!(
             value["gpus"][0]["windowsBarSizeBytes"],
             EXPANDED.to_string()

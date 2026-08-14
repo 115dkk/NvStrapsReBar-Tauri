@@ -5,6 +5,7 @@ mod deployment_workflow;
 mod devices;
 mod error;
 mod firmware;
+mod hardware_support;
 mod machine;
 mod nvidia_smi;
 mod profile_inspector;

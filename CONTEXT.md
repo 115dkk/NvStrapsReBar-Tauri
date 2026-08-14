@@ -95,10 +95,21 @@ only Rust remains authoritative for durable plan transitions.
 A narrowly verified handoff to software the repository does not own. Current external adapters
 are the installed `nvidia-smi.exe` and a pinned official NVIDIA Profile Inspector release.
 
+### Hardware support determination
+
+The repository-owned Rust Module that classifies motherboard native Resizable BAR support and
+target GPU-family support from the current Machine Identity. Its versioned compiled catalog and
+canonical GPU predicates are Implementation details behind one typed Interface. A stable catalog
+ID lets adapters select board-specific defaults without repeating identity rules. A missing board
+catalog entry means unknown, not unsupported. Support determination is independent from observing
+the current BAR aperture.
+
 ## Load-bearing invariants
 
 - Repository-owned runtime and build code is Rust or TypeScript; the RIIR gate rejects C/C++ and
   the removed EDK2 build path.
+- Hardware support knowledge is compiled into the Rust release; it does not depend on an external
+  database or service. Known capability and current activation are reported as separate facts.
 - Source firmware is never overwritten, flashed, or treated as interchangeable by file name.
 - A Machine Profile and Deployment Plan are bound to the same profile ID, source SHA-256, and
   recovery route.

@@ -18,6 +18,7 @@ use crate::{
         CONFIG_VARIABLE_NAME, STATUS_VARIABLE_NAME, inspect_access, read_variable,
         relaunch_elevated, write_variable,
     },
+    hardware_support::{HardwareSupportAssessment, determine_hardware_support},
     machine::collect_machine_identity,
     status::DriverStatus,
 };
@@ -45,6 +46,7 @@ pub struct SystemSnapshot {
     pub config: Option<ConfigView>,
     pub devices: Vec<GpuDevice>,
     pub machine_identity: Option<MachineIdentity>,
+    pub hardware_support: HardwareSupportAssessment,
     pub notices: Vec<Notice>,
 }
 
@@ -326,6 +328,7 @@ fn refresh_snapshot(state: &AppState) -> BackendResult<SystemSnapshot> {
         access.privilege_enabled,
         access_error.is_some(),
     );
+    let hardware_support = determine_hardware_support(machine_identity.as_ref(), &devices);
     let snapshot = SystemSnapshot {
         schema_version: 1,
         platform: PlatformInfo {
@@ -345,6 +348,7 @@ fn refresh_snapshot(state: &AppState) -> BackendResult<SystemSnapshot> {
         config: config_view,
         devices: devices.clone(),
         machine_identity,
+        hardware_support,
         notices,
     };
 
