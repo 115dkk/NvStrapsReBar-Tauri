@@ -101,6 +101,28 @@ describe("i18n locale policy", () => {
                 expect(translate("ko", "Hardware check found 1 difference; deployment remains blocked until the selected profile matches.")).toBe("하드웨어 확인 결과 1개 항목이 다릅니다. 선택한 프로필과 일치해야 배포를 계속할 수 있습니다.");
                 expect(translate("en", "Next step")).toBe("Next step");
                 expect(translate("ko", "Next step")).toBe("다음 단계");
+                expect(translate("ko", "Checking Resizable BAR…")).toBe(
+                        "Resizable BAR 상태 확인 중…",
+                );
+                expect(translate("ko", "Resizable BAR active")).toBe(
+                        "Resizable BAR 활성",
+                );
+                expect(
+                        translate("ko", "BAR1 is using the 256 MiB aperture"),
+                ).toBe("BAR1 256 MiB 메모리 창 사용 중");
+                expect(
+                        translate("ko", "Resizable BAR status unavailable"),
+                ).toBe("Resizable BAR 상태 확인 불가");
+                expect(translate("ko", "Current BAR aperture")).toBe(
+                        "현재 BAR 메모리 창",
+                );
+                expect(translate("ko", "Motherboard support")).toBe(
+                        "메인보드 지원",
+                );
+                expect(translate("ko", "Supported")).toBe("지원됨");
+                expect(translate("ko", "Not in current support list")).toBe(
+                        "현재 지원 목록에 없음",
+                );
 
                 const stepTitles = [
                         "Compare current hardware, BIOS, topology, and source image",

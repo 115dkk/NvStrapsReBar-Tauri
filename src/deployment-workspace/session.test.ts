@@ -30,6 +30,18 @@ const snapshot: SystemSnapshot = {
         config: null,
         devices: [],
         machineIdentity: null,
+        hardwareSupport: {
+                motherboardNativeResizableBar: {
+                        state: "unknown",
+                        reasonCode: "machineIdentityUnavailable",
+                        catalogId: null,
+                },
+                targetGpuFamily: {
+                        state: "unknown",
+                        reasonCode: "noGpusDetected",
+                },
+                overallState: "unknown",
+        },
         notices: [],
 };
 const profile = (id: string): MachineProfile => ({
@@ -117,6 +129,33 @@ const adapter = (overrides: Partial<DeploymentAdapter>): DeploymentAdapter =>
 
 describe("DeploymentWorkspaceSession", () => {
         beforeEach(() => vi.restoreAllMocks());
+
+        it("uses the Rust catalog ID for MSI route defaults", () => {
+                const catalogSnapshot = structuredClone(snapshot);
+                catalogSnapshot.hardwareSupport.motherboardNativeResizableBar = {
+                        state: "supported",
+                        reasonCode: "exactMotherboardCatalogMatch",
+                        catalogId: "msi-pro-z690-a-ddr4-ms-7d25",
+                };
+                const session = createDeploymentWorkspaceSession(
+                        catalogSnapshot,
+                        adapter({
+                                listMachineProfiles: async () => [],
+                                getNvidiaProfileInspectorInstallation:
+                                        async () => null,
+                        }),
+                );
+
+                expect(session.view()).toMatchObject({
+                        displayName: "PRO Z690-A DDR4 · RTX 2080 SUPER",
+                        recoveryMethod: "usbFlashback",
+                        instructionsUrl: expect.stringContaining(
+                                "PROZ690-AWIFIDDR4",
+                        ),
+                        installNote:
+                                "Use M-FLASH to select the exported vendor-format image.",
+                });
+        });
 
         it("projects the literal step immediately after the active plan step", async () => {
                 const owner = profile("p1");

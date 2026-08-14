@@ -23,6 +23,7 @@ import type {
         RecoveryMethod,
         StepId,
 } from "./contract";
+import { usesMsiProZ690Route } from "../hardware-support";
 
 const MSI_MANUAL =
         "https://download.msi.com/archive/mnu_exe/mb/PROZ690-AWIFIDDR4_PROZ690-ADDR4100x150.pdf";
@@ -432,12 +433,7 @@ class Session implements DeploymentWorkspaceSession {
                 snapshot: SystemSnapshot,
                 private adapter: DeploymentAdapter,
         ) {
-                const msi =
-                        snapshot.machineIdentity?.boardManufacturer ===
-                                "Micro-Star International Co., Ltd." &&
-                        snapshot.machineIdentity.boardProduct ===
-                                "PRO Z690-A DDR4(MS-7D25)" &&
-                        snapshot.machineIdentity.boardVersion === "1.0";
+                const msi = usesMsiProZ690Route(snapshot);
                 this.state = {
                         snapshot,
                         displayName: msi

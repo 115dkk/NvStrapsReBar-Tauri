@@ -135,6 +135,76 @@ button:disabled {
         border-bottom: 1px solid var(--line);
         background: #15191c;
 }
+.rebar-status-strip {
+        min-height: 50px;
+        padding: 9px 28px;
+        display: grid;
+        grid-template-columns: minmax(280px, max-content) minmax(0, 1fr);
+        align-items: stretch;
+        gap: 18px;
+        border-bottom: 1px solid var(--line);
+        background: #171d20;
+        font-size: 12px;
+}
+.motherboard-support-status,
+.rebar-current-status {
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+}
+.motherboard-support-status {
+        padding-right: 18px;
+        border-right: 1px solid var(--line);
+        color: var(--muted);
+}
+.motherboard-support-status strong {
+        color: var(--text);
+}
+.motherboard-support-status.supported strong {
+        color: var(--ok);
+}
+.motherboard-support-status.unsupported strong {
+        color: var(--bad);
+}
+.motherboard-support-status span:last-child {
+        overflow-wrap: anywhere;
+}
+.rebar-current-status::before {
+        content: "";
+        flex: 0 0 auto;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #77818a;
+}
+.rebar-current-status.expanded::before {
+        background: var(--ok);
+}
+.rebar-current-status.legacy::before {
+        background: var(--warn);
+}
+.rebar-current-status.unavailable::before {
+        background: var(--muted);
+}
+.rebar-current-status > strong {
+        flex: 0 0 auto;
+        color: var(--text);
+}
+.rebar-status-gpus {
+        min-width: 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px 18px;
+        color: var(--muted);
+}
+.rebar-status-gpus span {
+        min-width: 0;
+        overflow-wrap: anywhere;
+}
+.rebar-status-gpus b {
+        color: var(--text);
+}
 .product,
 .kicker,
 .step {
@@ -189,7 +259,7 @@ h1 {
 .workspace {
         display: grid;
         grid-template-columns: 238px minmax(0, 1fr);
-        min-height: calc(100vh - 86px);
+        min-height: calc(100vh - 136px);
 }
 aside {
         padding: 27px 22px;
@@ -197,7 +267,7 @@ aside {
         background: #161a1e;
         position: sticky;
         top: 0;
-        height: calc(100vh - 86px);
+        height: calc(100vh - 136px);
         overflow: auto;
 }
 aside h2 {
@@ -238,12 +308,12 @@ aside hr {
 .deployment-shell {
         display: grid;
         grid-template-columns: 238px minmax(0, 1fr);
-        min-height: calc(100vh - 86px);
+        min-height: calc(100vh - 136px);
 }
 .deployment-rail {
         position: sticky;
         top: 0;
-        height: calc(100vh - 86px);
+        height: calc(100vh - 136px);
 }
 .deployment-rail h2 {
         margin: 8px 0 22px;
@@ -885,6 +955,14 @@ aside hr {
         }
         .header-actions {
                 gap: 8px;
+        }
+        .rebar-status-strip {
+                padding-inline: 18px;
+                gap: 12px;
+                grid-template-columns: minmax(260px, max-content) minmax(0, 1fr);
+        }
+        .motherboard-support-status {
+                padding-right: 12px;
         }
         .surface-nav button {
                 padding-inline: 9px;

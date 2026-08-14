@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import type { SystemSnapshot } from "./types";
 import { useI18n } from "./i18n";
+import { usesMsiProZ690Route } from "./hardware-support";
 import {
         createDeploymentWorkspaceSession,
         type DeploymentWorkspaceIntent,
@@ -110,9 +111,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
         const setShowReboot = (value: boolean) => { if (!value) send({ type: "closeModals" }); };
         const setShowManual = setShowReboot;
         const setShowConfigurationReboot = setShowReboot;
-        const msi = snapshot.machineIdentity?.boardManufacturer === "Micro-Star International Co., Ltd." &&
-                snapshot.machineIdentity.boardProduct === "PRO Z690-A DDR4(MS-7D25)" &&
-                snapshot.machineIdentity.boardVersion === "1.0";
+        const msi = usesMsiProZ690Route(snapshot);
         const stepCompleted = (stepId: string) =>
                 plan?.steps.find((step) => step.id === stepId)?.state === "completed";
         const chooseFirmware = () => send({ type: "chooseFirmware" });

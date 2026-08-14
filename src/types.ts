@@ -38,6 +38,46 @@ export type GpuDevice = {
 };
 export type ApiError = { code: string; message: string; recoverable: boolean };
 
+export type ResizableBarApertureState =
+        | "expanded"
+        | "legacy256MiB"
+        | "indeterminate";
+export type ResizableBarInspection = {
+        driverVersion: string;
+        capturedAt: string;
+        state: ResizableBarApertureState;
+        gpus: {
+                pciBusId: string;
+                productName: string;
+                bar1TotalBytes: string | null;
+                windowsBarSizeBytes: string;
+                state: ResizableBarApertureState;
+                reason: string;
+        }[];
+        warnings: string[];
+};
+
+export type HardwareSupportState = "supported" | "unsupported" | "unknown";
+export type HardwareSupportAssessment = {
+        motherboardNativeResizableBar: {
+                state: HardwareSupportState;
+                reasonCode:
+                        | "exactMotherboardCatalogMatch"
+                        | "motherboardNotInCatalog"
+                        | "machineIdentityUnavailable";
+                catalogId: string | null;
+        };
+        targetGpuFamily: {
+                state: HardwareSupportState;
+                reasonCode:
+                        | "allDetectedGpusTuring"
+                        | "detectedGpuOutsideTuringFamily"
+                        | "mixedTuringAndNonTuringGpus"
+                        | "noGpusDetected";
+        };
+        overallState: HardwareSupportState;
+};
+
 export type PciLocation = { bus: number; device: number; function: number };
 export type GpuFingerprint = {
         vendorId: number;
@@ -89,6 +129,7 @@ export type SystemSnapshot = {
         } | null;
         devices: GpuDevice[];
         machineIdentity: MachineIdentity | null;
+        hardwareSupport: HardwareSupportAssessment;
         notices: { kind: string; message: string }[];
 };
 export type ValidationReport = {

@@ -15,6 +15,7 @@ const ko: Record<string, string> = {
         "Inspecting UEFI access and NVIDIA adapters…": "UEFI 접근 권한과 NVIDIA 어댑터를 확인하고 있습니다…",
         "System state unavailable": "시스템 상태를 확인할 수 없음", "The native bridge did not return a snapshot.": "네이티브 브리지에서 시스템 정보를 받지 못했습니다.",
         "Try again": "다시 시도", "PREVIEW DATA · Browser fixture": "미리보기 데이터 · 브라우저 테스트 전용",
+        "Resizable BAR status": "Resizable BAR 상태", "Motherboard support": "메인보드 지원", Supported: "지원됨", Unsupported: "지원되지 않음", "Not in current support list": "현재 지원 목록에 없음", "Motherboard identity unavailable": "메인보드 정보 확인 불가", "Checking Resizable BAR…": "Resizable BAR 상태 확인 중…", "Resizable BAR active": "Resizable BAR 활성", "Resizable BAR status unavailable": "Resizable BAR 상태 확인 불가", "BAR1 is using the 256 MiB aperture": "BAR1 256 MiB 메모리 창 사용 중", Driver: "드라이버", "Current BAR aperture": "현재 BAR 메모리 창",
         "Firmware configuration": "펌웨어 구성", "Deployment workspace": "배포 작업 공간", "Application workspace": "작업 공간", Configure: "구성", Deploy: "배포",
         "UNSAVED EDITS": "저장하지 않은 변경 사항", "IN SYNC": "동기화됨", "Refresh system": "시스템 새로 고침", "System status": "시스템 상태", "System gate": "시스템 점검",
         Windows: "Windows", "UEFI boot": "UEFI 부팅", Administrator: "관리자 권한", "Firmware access": "펌웨어 접근", "Driver state": "드라이버 상태", Unavailable: "사용할 수 없음",
