@@ -50,6 +50,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                 routeConfirmed, legacyAnalysis, legacyAnalysisStatus,
                 legacyAnalysisError, selectedLegacyRules, legacyAcknowledgements,
                 profiles, selectedProfileId, selectedProfile, plan, activeStep,
+                nextStep,
                 nextAction, preflightExact, preparation, destination,
                 packageReceipt, rebootPreview, showReboot, savedWork,
                 manualPreview, showManual, manualConfirmed,
@@ -109,7 +110,6 @@ export function DeploymentWorkspace({ snapshot }: Props) {
         const setShowReboot = (value: boolean) => { if (!value) send({ type: "closeModals" }); };
         const setShowManual = setShowReboot;
         const setShowConfigurationReboot = setShowReboot;
-        const setActivity = (value: null) => { if (value === null) send({ type: "dismissActivity" }); };
         const msi = snapshot.machineIdentity?.boardManufacturer === "Micro-Star International Co., Ltd." &&
                 snapshot.machineIdentity.boardProduct === "PRO Z690-A DDR4(MS-7D25)" &&
                 snapshot.machineIdentity.boardVersion === "1.0";
@@ -359,10 +359,12 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                 ) : (
                                         <p className="muted-copy">{t("Select a source image and create a profile for this computer first.")}</p>
                                 )}
-                                <div className="rail-note safety-note">
-                                        <strong>{t("Next steps")}</strong>
-                                        <p>{t("Prepare the package here. Use the vendor tool for flashing and the firmware screen for setup values.")}</p>
-                                </div>
+                                {nextStep && (
+                                        <div className="rail-note safety-note">
+                                                <strong>{t("Next step")}</strong>
+                                                <p>{t(nextStep.title)}</p>
+                                        </div>
+                                )}
                         </aside>
 
                         <main className="deployment-content">
@@ -386,16 +388,8 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                 ? "alert"
                                                                 : "status"
                                                 }
-                                        >
-                                                <span>{t(activity.text)}</span>
-                                                <button
-                                                        aria-label={t("Dismiss operation status")}
-                                                        onClick={() =>
-                                                                setActivity(null)
-                                                        }
                                                 >
-                                                        ×
-                                                </button>
+                                                        <span>{t(activity.text)}</span>
                                         </div>
                                 )}
 

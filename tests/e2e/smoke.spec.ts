@@ -302,6 +302,7 @@ test("durable deployment completes in order and distinguishes requests from rece
         await page.getByRole("dialog").getByLabel("I completed this step and reviewed the result.").check();
         await page.getByRole("dialog").getByRole("button", { name: "Record completed step" }).click();
         await expect(page.getByText("Deployment plan complete", { exact: true })).toBeVisible();
+        await expect(page.locator(".deployment-rail .rail-note")).toHaveCount(0);
 });
 
 test("deployment remains reachable without horizontal overflow at 900px", async ({
