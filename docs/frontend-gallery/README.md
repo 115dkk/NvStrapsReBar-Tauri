@@ -1,7 +1,8 @@
 # Frontend gallery
 
-This is a visual tour of the current NvStrapsReBar Tauri frontend, from guarded
-configuration to the recoverable deployment workflow.
+This is a visual archive of the NvStrapsReBar Tauri frontend, from guarded
+configuration to the deployment workflow. The current factual-copy surfaces
+are shown first; earlier captures remain below as revision history.
 
 > [!IMPORTANT]
 > These captures come from the production Chromium build running the
@@ -13,6 +14,59 @@ configuration to the recoverable deployment workflow.
 The 900 px captures show the app's supported minimum **desktop** window. The
 gallery uses one image per section so it remains comfortable to browse on a
 phone; it does not imply a mobile app or a 390 px application viewport.
+
+## Current factual-copy surfaces — `ffe4de9`
+
+These four captures show the current English and Korean deployment copy. The UI
+states detected hardware, selected files, operation results, and the next user
+action without presenting internal profile IDs, plan revisions, receipts, or
+backend ownership as reassurance.
+
+### 13. Select the firmware image
+
+The English deployment screen names the detected MSI board and selected image,
+including its size and SHA-256. It tells the user to continue with the vendor
+tool instead of describing the app's internal safety mechanisms.
+
+[Open full-size image](13-factual-english-deployment-1180x760.png)
+
+![Current English firmware selection at 1180 by 760 pixels](13-factual-english-deployment-1180x760.png)
+
+### 14. Review the recommended configuration
+
+The active step shows the current GPU and PCI-topology recommendation, the
+configuration values, and the review action. The sidebar keeps the profile
+display name and active step while internal IDs and plan revisions stay out of
+the routine UI.
+
+[Open full-size image](14-factual-english-recommendation-1180x760.png)
+
+![Current English deployment recommendation at 1180 by 760 pixels](14-factual-english-recommendation-1180x760.png)
+
+### 15. 펌웨어 이미지 선택
+
+한국어 화면도 감지한 MSI 보드, 선택한 이미지, 크기, SHA-256을 그대로
+보여줍니다. 앱의 안전성을 설명하는 대신 제조사 도구에서 이어서 진행할
+작업을 안내합니다.
+
+[원본 크기로 보기](15-factual-korean-deployment-1180x760.png)
+
+![현재 한국어 펌웨어 이미지 선택 화면 1180×760](15-factual-korean-deployment-1180x760.png)
+
+### 16. 권장 배포 구성 검토
+
+최소 지원 폭 900 px에서 현재 GPU와 PCI 구성에 맞춘 값, 검토 확인란,
+다음 작업을 확인할 수 있습니다. 프로필 ID나 계획 리비전 같은 내부 정보는
+화면에 표시하지 않습니다.
+
+[원본 크기로 보기](16-factual-korean-recommendation-900x760.png)
+
+![현재 한국어 권장 배포 구성 화면 900×760](16-factual-korean-recommendation-900x760.png)
+
+## Earlier interface captures
+
+The captures below are retained as visual revision history. Their older labels
+and workflow copy do not describe the current `ffe4de9` interface.
 
 ## 1. Configure at a glance
 
@@ -139,3 +193,4 @@ Pretendard v1.3.9의 저작권 고지와 SIL OFL 1.1 전문을 앱 안에서 확
 Captured on Windows with Chromium 151.0.7922.34, 1x device scale, and reduced
 motion. Original English capture source: `7794b6d`. Initial Korean capture
 source: `e53b28b`. Pretendard gallery capture source: `9492711`.
+Current factual-copy capture source: `ffe4de9`.
