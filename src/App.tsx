@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bridge, previewMode } from "./bridge";
 import { DeploymentWorkspace } from "./DeploymentWorkspace";
 import { useI18n } from "./i18n";
+import { ThirdPartyLicensesDialog } from "./ThirdPartyLicensesDialog";
 import {
         DEFAULT_DRAFT,
         type ConfigDraft,
@@ -79,13 +80,16 @@ export function App() {
                 [error, setError] = useState(""),
                 [busy, setBusy] = useState(true),
                 [showConfirm, setShowConfirm] = useState(false),
+                [showLicenses, setShowLicenses] = useState(false),
                 [receipt, setReceipt] = useState<SaveReceipt | null>(null),
                 [surface, setSurface] = useState<"configure" | "deploy">(
                         "configure",
                 );
         const validationSequence = useRef(0),
                 reviewButton = useRef<HTMLButtonElement>(null),
-                dialog = useRef<HTMLDivElement>(null);
+                dialog = useRef<HTMLDivElement>(null),
+                licenseButton = useRef<HTMLButtonElement>(null);
+        const closeLicenses = useCallback(() => setShowLicenses(false), []);
         const dirty = useMemo(
                 () => JSON.stringify(draft) !== JSON.stringify(baseline),
                 [draft, baseline],
@@ -273,15 +277,28 @@ export function App() {
                                 <div className="preview" role="status">{t("PREVIEW DATA · Browser fixture only · No firmware is being read or written")}</div>
                         )}
                         <header>
-                                <div>
+                                <div className="product-heading">
                                         <span className="product">
                                                 NVSTRAPS / REBAR
                                         </span>
-                                        <h1>
-                                                {surface === "configure"
-                                                        ? t("Firmware configuration")
-                                                        : t("Deployment workspace")}
-                                        </h1>
+                                        <div className="title-row">
+                                                <h1>
+                                                        {surface === "configure"
+                                                                ? t("Firmware configuration")
+                                                                : t("Deployment workspace")}
+                                                </h1>
+                                                <button
+                                                        ref={licenseButton}
+                                                        className="license-button quiet"
+                                                        onClick={() =>
+                                                                setShowLicenses(
+                                                                        true,
+                                                                )
+                                                        }
+                                                >
+                                                        {t("Licenses")}
+                                                </button>
+                                        </div>
                                 </div>
                                 <div className="header-actions">
                                         <label className="language-select">
@@ -1213,6 +1230,12 @@ export function App() {
                                                 </div>
                                         </div>
                                 </div>
+                        )}
+                        {showLicenses && (
+                                <ThirdPartyLicensesDialog
+                                        onClose={closeLicenses}
+                                        returnFocus={licenseButton}
+                                />
                         )}
                 </div>
         );

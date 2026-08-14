@@ -9,6 +9,9 @@ declare global {
 
 const ko: Record<string, string> = {
         Language: "언어", "Reading system state": "시스템 상태를 읽는 중",
+        Licenses: "라이선스", "THIRD-PARTY SOFTWARE": "서드파티 소프트웨어", "Open-source licenses": "오픈 소스 라이선스", Close: "닫기",
+        "Pretendard v1.3.9 is bundled with this application under the SIL Open Font License 1.1.": "Pretendard v1.3.9는 이 앱에 포함되어 있으며 SIL 오픈 폰트 라이선스 1.1에 따라 배포됩니다.",
+        "Full license text": "라이선스 전문", "Loading the bundled license text…": "내장된 라이선스 전문을 불러오는 중…", "The bundled license text could not be loaded.": "내장된 라이선스 전문을 불러오지 못했습니다.",
         "Inspecting UEFI access and NVIDIA adapters…": "UEFI 접근 권한과 NVIDIA 어댑터를 확인하고 있습니다…",
         "System state unavailable": "시스템 상태를 확인할 수 없음", "The native bridge did not return a snapshot.": "네이티브 브리지에서 시스템 정보를 받지 못했습니다.",
         "Try again": "다시 시도", "PREVIEW DATA · Browser fixture only · No firmware is being read or written": "미리보기 데이터 · 브라우저 테스트 전용 · 펌웨어를 읽거나 쓰지 않음",
