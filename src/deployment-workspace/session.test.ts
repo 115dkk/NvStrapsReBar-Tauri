@@ -551,9 +551,12 @@ describe("DeploymentWorkspaceSession", () => {
                         expect(session.view().plan?.revision).toBe(
                                 before.revision,
                         );
-                        expect(session.view().activity?.text).toContain(
-                                message,
-                        );
+                        expect(session.view().activity?.message).toMatchObject({
+                                id: "ui.deploymentOperationFailed",
+                                values: {
+                                        detail: expect.stringContaining(message),
+                                },
+                        });
                 },
         );
 
@@ -589,9 +592,9 @@ describe("DeploymentWorkspaceSession", () => {
                 await session.dispatch({ type: "setSavedWork", value: true });
                 await session.dispatch({ type: "requestConfigurationReboot" });
                 expect(session.view().plan?.revision).toBe(3);
-                expect(session.view().workflowReceipt?.detail).toBe(
-                        "Return after Windows boots, then check the boot time.",
-                );
+                expect(session.view().workflowReceipt?.detail).toEqual({
+                        id: "ui.returnAfterWindowsBootsThenCheckTheBootTime",
+                });
         });
 
         it("binds a manual preview to the current profile, step and revision", async () => {
@@ -619,7 +622,12 @@ describe("DeploymentWorkspaceSession", () => {
                 await tick();
                 await session.dispatch({ type: "openManual" });
                 expect(session.view().showManual).toBe(false);
-                expect(session.view().activity?.text).toContain("plan changed");
+                expect(session.view().activity?.message).toMatchObject({
+                        id: "ui.deploymentOperationFailed",
+                        values: {
+                                detail: expect.stringContaining("plan changed"),
+                        },
+                });
                 expect(confirm).not.toHaveBeenCalled();
         });
 

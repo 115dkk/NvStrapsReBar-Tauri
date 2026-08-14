@@ -1,4 +1,9 @@
-import type { ResizableBarInspection } from "./types";
+import type {
+        ResizableBarApertureState,
+        ResizableBarInspection,
+        ResizableBarPatchConfiguration,
+} from "./types";
+import type { StaticMessageId } from "./i18n-catalog";
 
 export type ResizableBarInspectionLoadState =
         | { status: "loading" }
@@ -6,15 +11,60 @@ export type ResizableBarInspectionLoadState =
         | { status: "error" };
 
 export type ResizableBarStatusPresentation = {
-        tone: "loading" | "expanded" | "legacy" | "unavailable";
-        heading:
-                | "Checking Resizable BAR…"
-                | "Resizable BAR active"
-                | "BAR1 is using the 256 MiB aperture"
-                | "Resizable BAR status unavailable";
+        tone: "loading" | "expanded" | "legacy" | "mixed" | "unavailable";
+        headingId: StaticMessageId;
+        aggregateSymbol: "MIX" | null;
         driverVersion: string | null;
-        gpus: ResizableBarInspection["gpus"];
+        gpus: ResizableBarGpuPresentation[];
 };
+
+export type ResizableBarGpuPresentation = {
+        gpu: ResizableBarInspection["gpus"][number];
+        apertureId: StaticMessageId;
+        patchStateId: StaticMessageId;
+        patchSymbol: "O" | "X" | "?" | "—";
+        patchTone: "available" | "unavailable" | "indeterminate" | "not-needed";
+};
+
+const apertureIds: Record<ResizableBarApertureState, StaticMessageId> = {
+        expanded: "ui.apertureExpanded",
+        legacy256MiB: "ui.apertureLegacy256Mib",
+        indeterminate: "ui.apertureIndeterminate",
+};
+
+const patchPresentation: Record<
+        ResizableBarPatchConfiguration["state"],
+        Pick<ResizableBarGpuPresentation, "patchStateId" | "patchSymbol" | "patchTone">
+> = {
+        notNeeded: {
+                patchStateId: "ui.configurationNotNeeded",
+                patchSymbol: "—",
+                patchTone: "not-needed",
+        },
+        available: {
+                patchStateId: "ui.patchConfigurationAvailable",
+                patchSymbol: "O",
+                patchTone: "available",
+        },
+        unavailable: {
+                patchStateId: "ui.patchConfigurationUnavailable",
+                patchSymbol: "X",
+                patchTone: "unavailable",
+        },
+        indeterminate: {
+                patchStateId: "ui.patchConfigurationIndeterminate",
+                patchSymbol: "?",
+                patchTone: "indeterminate",
+        },
+};
+
+const presentGpu = (
+        gpu: ResizableBarInspection["gpus"][number],
+): ResizableBarGpuPresentation => ({
+        gpu,
+        apertureId: apertureIds[gpu.state],
+        ...patchPresentation[gpu.patchConfiguration.state],
+});
 
 export function createRequestGenerationGuard() {
         let generation = 0;
@@ -30,16 +80,21 @@ export function presentResizableBarStatus(
         if (state.status === "loading")
                 return {
                         tone: "loading",
-                        heading: "Checking Resizable BAR…",
+                        headingId: "ui.checkingResizableBar",
+                        aggregateSymbol: null,
                         driverVersion: null,
                         gpus: [],
                 };
         if (state.status === "error" || state.inspection.state === "indeterminate")
                 return {
                         tone: "unavailable",
-                        heading: "Resizable BAR status unavailable",
+                        headingId: "ui.resizableBarStatusUnavailable",
+                        aggregateSymbol: null,
                         driverVersion: null,
-                        gpus: [],
+                        gpus:
+                                state.status === "ready"
+                                        ? state.inspection.gpus.map(presentGpu)
+                                        : [],
                 };
         if (
                 state.inspection.gpus.length === 0 ||
@@ -49,24 +104,35 @@ export function presentResizableBarStatus(
         )
                 return {
                         tone: "unavailable",
-                        heading: "Resizable BAR status unavailable",
+                        headingId: "ui.resizableBarStatusUnavailable",
+                        aggregateSymbol: null,
                         driverVersion: null,
-                        gpus: [],
+                        gpus: state.inspection.gpus.map(presentGpu),
+                };
+        if (state.inspection.state === "mixed")
+                return {
+                        tone: "mixed",
+                        headingId: "ui.mixedResizableBarApertures",
+                        aggregateSymbol: "MIX",
+                        driverVersion: state.inspection.driverVersion,
+                        gpus: state.inspection.gpus.map(presentGpu),
                 };
         if (state.inspection.state === "legacy256MiB")
                 return {
                         tone: "legacy",
-                        heading: "BAR1 is using the 256 MiB aperture",
+                        headingId: "ui.bar1IsUsingThe256MibAperture",
+                        aggregateSymbol: null,
                         driverVersion: state.inspection.driverVersion,
                         gpus: state.inspection.gpus.filter(
                                 (gpu) => gpu.state === "legacy256MiB",
-                        ),
+                        ).map(presentGpu),
                 };
         return {
                 tone: "expanded",
-                heading: "Resizable BAR active",
+                headingId: "ui.resizableBarActive",
+                aggregateSymbol: null,
                 driverVersion: state.inspection.driverVersion,
-                gpus: state.inspection.gpus,
+                gpus: state.inspection.gpus.map(presentGpu),
         };
 }
 

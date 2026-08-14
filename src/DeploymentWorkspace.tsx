@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import type { SystemSnapshot } from "./types";
-import { useI18n } from "./i18n";
+import { translateMessage, useI18n } from "./i18n";
 import { usesMsiProZ690Route } from "./hardware-support";
 import {
         createDeploymentWorkspaceSession,
@@ -12,29 +12,27 @@ import type {
         LegacyPatchRisk,
         RecoveryMethod,
 } from "./deployment-workspace/contract";
+import {
+        catalogLabelIds,
+        configurationRebootWarningIds,
+        firmwareRebootWarningIds,
+        manualWarningIds,
+        legacyRuleBlockedReasonId,
+        legacyRuleDescriptionId,
+        riskLabelIds,
+        stepKindIds,
+        stepStateIds,
+        stepTitleIds,
+} from "./deployment-workspace/messages";
 
 const shortHash = (value?: string) =>
         value ? `${value.slice(0, 10)}…${value.slice(-8)}` : "—";
 const legacyRuleKey = (catalog: string, ruleId: string) =>
         `${catalog}:${ruleId}`;
-const catalogLabels = {
-        general: "General",
-        haswellAbove4g: "Haswell Above 4G",
-        ivyBridgeUsb3: "Ivy Bridge USB 3",
-        haswellUsb3: "Haswell USB 3",
-        broadwellUsb3: "Broadwell USB 3",
-} as const;
-const riskLabels: Record<LegacyPatchRisk, string> = {
-        dsdtModification: "DSDT modification",
-        nvramWhitelist: "NVRAM whitelist change",
-        usbControllerBlacklist: "USB controller blacklist",
-        experimentalX79: "Experimental X79 patch",
-};
-
 type Props = { snapshot: SystemSnapshot };
 
 export function DeploymentWorkspace({ snapshot }: Props) {
-        const { t, n, exactMatches, absentRules } = useI18n();
+        const { locale, t, n, exactMatches, absentRules } = useI18n();
         const session = useMemo(
                 () => createDeploymentWorkspaceSession(snapshot),
                 [snapshot],
@@ -48,10 +46,11 @@ export function DeploymentWorkspace({ snapshot }: Props) {
         const {
                 displayName, boardPath, firmwarePath, firmware, recoveryMethod,
                 installMethod, instructionsUrl, recoveryNote, installNote,
+                recoveryNotePresetId, installNotePresetId,
                 routeConfirmed, legacyAnalysis, legacyAnalysisStatus,
                 legacyAnalysisError, selectedLegacyRules, legacyAcknowledgements,
                 profiles, selectedProfileId, selectedProfile, plan, activeStep,
-                nextStep,
+                nextStep, activeStepTitleId, nextStepTitleId,
                 nextAction, preflightExact, preparation, destination,
                 packageReceipt, rebootPreview, showReboot, savedWork,
                 manualPreview, showManual, manualConfirmed,
@@ -139,8 +138,8 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                 if (nextAction === "complete")
                         return (
                                 <div className="workflow-complete" role="status">
-                                        <strong>{t("Deployment plan complete")}</strong>
-                                        <span>{t("No remaining steps.")}</span>
+                                        <strong>{t("ui.deploymentPlanComplete")}</strong>
+                                        <span>{t("ui.noRemainingSteps")}</span>
                                 </div>
                         );
                 switch (nextAction) {
@@ -150,7 +149,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 className="primary"
                                                 onClick={prepare}
                                                 disabled={Boolean(busyAction)}
-                                        >{t("Prepare and inspect firmware artifact")}</button>
+                                        >{t("ui.prepareAndInspectFirmwareArtifact")}</button>
                                 );
                         case "manual":
                                 return (
@@ -160,12 +159,12 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         className="quiet"
                                                         onClick={previewReboot}
                                                         disabled={Boolean(busyAction)}
-                                                >{t("Review restart to firmware UI")}</button>
+                                                >{t("ui.reviewRestartToFirmwareUi")}</button>
                                                 <button
                                                         className="primary danger-button"
                                                         onClick={openManualConfirmation}
                                                         disabled={Boolean(busyAction)}
-                                                >{t("Review & confirm completed step")}</button>
+                                                >{t("ui.reviewConfirmCompletedStep")}</button>
                                         </div>
                                 );
                         case "verifyDriver":
@@ -174,43 +173,50 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 className="primary"
                                                 onClick={verifyDriver}
                                                 disabled={Boolean(busyAction)}
-                                        >{t("Check current boot + Rust DXE status")}</button>
+                                        >{t("ui.checkCurrentBootRustDxeStatus")}</button>
                                 );
                         case "writeConfig":
                                 return (
                                         <div className="guarded-config">
                                                 {recommendationStatus === "pending" && (
-                                                        <p role="status">{t("Loading recommended configuration…")}</p>
+                                                        <p role="status">{t("ui.loadingRecommendedConfiguration")}</p>
                                                 )}
                                                 {recommendationStatus === "error" && (
                                                         <p className="blocked-copy" role="alert">
-                                                                {t(recommendationError)} {t("Use Configure or reload this profile and try again.")}
+                                                                {recommendationError &&
+                                                                        translateMessage(locale, recommendationError)}{" "}
+                                                                {t("ui.useConfigureOrReloadThisProfileAndTryAgain")}
                                                         </p>
                                                 )}
                                                 {configRecommendation && recommendationStatus === "ready" && (
                                                         <div className="recommended-config">
-                                                                <strong>{t("Recommended deployment configuration")}</strong>
+                                                                <strong>{t("ui.recommendedDeploymentConfiguration")}</strong>
                                                                 <dl className="recommendation-facts">
-                                                                        <div><dt>{t("Turing GPUs")}</dt><dd>{configRecommendation.value.turingGpuCount}</dd></div>
-                                                                        <div><dt>{t("Registry managed")}</dt><dd>{configRecommendation.value.registryManagedGpuCount}</dd></div>
-                                                                        <div><dt>{t("Location-specific fallback rules")}</dt><dd>{configRecommendation.value.exactFallbackRuleCount}</dd></div>
+                                                                        <div><dt>{t("ui.turingGpus")}</dt><dd>{configRecommendation.value.turingGpuCount}</dd></div>
+                                                                        <div><dt>{t("ui.registryManaged")}</dt><dd>{configRecommendation.value.registryManagedGpuCount}</dd></div>
+                                                                        <div><dt>{t("ui.locationSpecificFallbackRules")}</dt><dd>{configRecommendation.value.exactFallbackRuleCount}</dd></div>
                                                                 </dl>
                                                                 <code>
-                                                                        {t("global mode")} {configRecommendation.value.draft.globalMode} · {t("target selector")} {configRecommendation.value.draft.targetPciBarSize} · {t("skip S3")} {String(configRecommendation.value.draft.skipS3Resume)} · {t("mask override")} {String(configRecommendation.value.draft.overrideBarSizeMask)} · {t("setup guard")} {String(configRecommendation.value.draft.guardSetupChanges)}
+                                                                        {t("ui.globalMode")} {configRecommendation.value.draft.globalMode} · {t("ui.targetSelector")} {configRecommendation.value.draft.targetPciBarSize} · {t("ui.skipS3")} {String(configRecommendation.value.draft.skipS3Resume)} · {t("ui.maskOverride")} {String(configRecommendation.value.draft.overrideBarSizeMask)} · {t("ui.setupGuard")} {String(configRecommendation.value.draft.guardSetupChanges)}
                                                                 </code>
                                                                 {configRecommendation.value.draft.rules.length > 0 ? (
-                                                                        <ul className="recommendation-rules" aria-label={t("Location-specific fallback rules")}>
+                                                                        <ul className="recommendation-rules" aria-label={t("ui.locationSpecificFallbackRules")}>
                                                                                 {configRecommendation.value.draft.rules.map((rule) => (
                                                                                         <li key={`${rule.bus}-${rule.device}-${rule.function}`}>
                                                                                                 <strong>{rule.bus.toString(16).padStart(2, "0")}:{rule.device.toString(16).padStart(2, "0")}.{rule.function}</strong>
-                                                                                                <span>device {rule.deviceId.toString(16).padStart(4, "0")} · BAR selector {rule.barSizeSelector} · PCI location only</span>
+                                                                                                <span>
+                                                                                                        {t("ui.fallbackRuleFact", {
+                                                                                                                deviceId: rule.deviceId.toString(16).padStart(4, "0"),
+                                                                                                                selector: rule.barSizeSelector ?? "—",
+                                                                                                        })}
+                                                                                                </span>
                                                                                         </li>
                                                                                 ))}
                                                                         </ul>
                                                                 ) : (
-                                                                        <p>{t("Every detected Turing GPU is covered by the built-in registry; no fallback rule is added.")}</p>
+                                                                        <p>{t("ui.everyDetectedTuringGpuIsCoveredByTheBuiltInRegistryNoFallbackRuleIsAdded")}</p>
                                                                 )}
-                                                                <p>{t("This draft uses the current GPU and PCI topology. Switch to Configure to choose another policy or size.")}</p>
+                                                                <p>{t("ui.thisDraftUsesTheCurrentGpuAndPciTopologySwitchToConfigureToChooseAnotherPolicyOrSize")}</p>
                                                         </div>
                                                 )}
                                                 <label className="consequence-check compact-check">
@@ -225,7 +231,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                 }
                                                         />
                                                         <span>
-                                                                <strong>{t("I reviewed this configuration for the selected profile.")}</strong>
+                                                                <strong>{t("ui.iReviewedThisConfigurationForTheSelectedProfile")}</strong>
                                                         </span>
                                                 </label>
                                                 <button
@@ -237,7 +243,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                 recommendationStatus !== "ready" ||
                                                                 !configRecommendation
                                                         }
-                                                >{t("Write configuration and read it back")}</button>
+                                                >{t("ui.writeConfigurationAndReadItBack")}</button>
                                         </div>
                                 );
                         case "configurationReboot":
@@ -247,12 +253,12 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         className="quiet"
                                                         onClick={openConfigurationReboot}
                                                         disabled={Boolean(busyAction)}
-                                                >{t("Review restart after configuration")}</button>
+                                                >{t("ui.reviewRestartAfterConfiguration")}</button>
                                                 <button
                                                         className="primary"
                                                         onClick={verifyConfigurationBoot}
                                                         disabled={Boolean(busyAction)}
-                                                >{t("Check Windows boot time")}</button>
+                                                >{t("ui.checkWindowsBootTime")}</button>
                                         </div>
                                 );
                         case "collectBar":
@@ -261,7 +267,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 className="primary"
                                                 onClick={collectBar}
                                                 disabled={Boolean(busyAction)}
-                                        >{t("Collect BAR1 data")}</button>
+                                        >{t("ui.collectBar1Data")}</button>
                                 );
                         case "nvidiaPolicy":
                                 return (
@@ -272,46 +278,46 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                         className="quiet"
                                                                         onClick={installInspector}
                                                                         disabled={Boolean(busyAction)}
-                                                                >{t("Install Profile Inspector")}</button>
+                                                                >{t("ui.installProfileInspector")}</button>
                                                         ) : (
                                                                 <>
                                                                         <button
                                                                                 className="quiet"
                                                                                 onClick={backupProfiles}
                                                                                 disabled={Boolean(busyAction)}
-                                                                        >{t("Back up profiles")}</button>
+                                                                        >{t("ui.backUpProfiles")}</button>
                                                                         <button
                                                                                 className="quiet"
                                                                                 onClick={launchInspector}
                                                                                 disabled={Boolean(busyAction)}
-                                                                        >{t("Back up & launch editor")}</button>
+                                                                        >{t("ui.backUpLaunchEditor")}</button>
                                                                 </>
                                                         )}
                                                 </div>
-                                                <p>{t("After editing the NVIDIA policy, return here and record the result.")}</p>
+                                                <p>{t("ui.afterEditingTheNvidiaPolicyReturnHereAndRecordTheResult")}</p>
                                                 <button
                                                         className="primary danger-button"
                                                         onClick={openManualConfirmation}
                                                         disabled={Boolean(busyAction)}
-                                                >{t("Review & confirm applied NVIDIA policy")}</button>
+                                                >{t("ui.reviewConfirmAppliedNvidiaPolicy")}</button>
                                         </div>
                                 );
                         default:
                                 return (
-                                        <p className="blocked-copy" role="alert">{t("Complete this step in its owning tool, then reload the plan. Use Configure for configuration changes.")}</p>
+                                        <p className="blocked-copy" role="alert">{t("ui.completeThisStepInItsOwningToolThenReloadThePlanUseConfigureForConfigurationChanges")}</p>
                                 );
                 }
         };
 
         return (
                 <div className="deployment-shell">
-                        <aside className="deployment-rail" aria-label={t("Deployment status")}>
-                                <span className="kicker">{t("DEPLOYMENT PROFILE")}</span>
-                                <h2>{selectedProfile?.displayName ?? t("No profile yet")}</h2>
+                        <aside className="deployment-rail" aria-label={t("ui.deploymentStatus")}>
+                                <span className="kicker">{t("ui.deploymentProfile")}</span>
+                                <h2>{selectedProfile?.displayName ?? t("ui.noProfileYet")}</h2>
                                 {selectedProfile ? (
                                         <>
                                                 <StatusLine
-                                                        label={t("Hardware check")}
+                                                        label={t("ui.hardwareCheck")}
                                                         state={
                                                                 preflightExact === false
                                                                         ? "bad"
@@ -322,7 +328,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         }
                                                 />
                                                 <StatusLine
-                                                        label={t("Artifact prepared")}
+                                                        label={t("ui.artifactPrepared")}
                                                         state={
                                                                 stepCompleted("verifyPatchedArtifact")
                                                                         ? "ok"
@@ -330,7 +336,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         }
                                                 />
                                                 <StatusLine
-                                                        label={t("Package exported")}
+                                                        label={t("ui.packageExported")}
                                                         state={
                                                                 packageReceipt
                                                                         ? "ok"
@@ -338,7 +344,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         }
                                                 />
                                                 <StatusLine
-                                                        label={t("BAR1 observed")}
+                                                        label={t("ui.bar1Observed")}
                                                         state={
                                                                 stepCompleted("verifyResizableBar")
                                                                         ? "ok"
@@ -347,21 +353,21 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 />
                                                 <hr />
                                                 <dl>
-                                                        <dt>{t("Active gate")}</dt>
+                                                        <dt>{t("ui.activeGate")}</dt>
                                                         <dd>
                                                                 {activeStep
-                                                                        ? t(activeStep.title)
-                                                                        : t("No ready step")}
+                                                                        ? t(activeStepTitleId!)
+                                                                        : t("ui.noReadyStep")}
                                                         </dd>
                                                 </dl>
                                         </>
                                 ) : (
-                                        <p className="muted-copy">{t("Select a source image and create a profile for this computer first.")}</p>
+                                        <p className="muted-copy">{t("ui.selectASourceImageAndCreateAProfileForThisComputerFirst")}</p>
                                 )}
                                 {nextStep && (
                                         <div className="rail-note safety-note">
-                                                <strong>{t("Next step")}</strong>
-                                                <p>{t(nextStep.title)}</p>
+                                                <strong>{t("ui.nextStep")}</strong>
+                                                <p>{t(nextStepTitleId!)}</p>
                                         </div>
                                 )}
                         </aside>
@@ -369,13 +375,13 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                         <main className="deployment-content">
                                 <section className="deployment-intro">
                                         <div>
-                                                <span className="kicker">{t("CURRENT HARDWARE / PREPARED FILES")}</span>
-                                                <h2>{t("Firmware preparation and installation")}</h2>
-                                                <p>{t("Prepare and inspect firmware files here. Flash the prepared image with the vendor tool, then return to record the result.")}</p>
+                                                <span className="kicker">{t("ui.currentHardwarePreparedFiles")}</span>
+                                                <h2>{t("ui.firmwarePreparationAndInstallation")}</h2>
+                                                <p>{t("ui.prepareAndInspectFirmwareFilesHereFlashThePreparedImageWithTheVendorToolThenReturnToRecordTheResult")}</p>
                                         </div>
                                         <div className="truth-badge">
-                                                <strong>{t("FLASH WITH VENDOR TOOL")}</strong>
-                                                <span>{t("Use the prepared image")}</span>
+                                                <strong>{t("ui.flashWithVendorTool")}</strong>
+                                                <span>{t("ui.useThePreparedImage")}</span>
                                         </div>
                                 </section>
 
@@ -388,26 +394,26 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                 : "status"
                                                 }
                                                 >
-                                                        <span>{t(activity.text)}</span>
+                                                        <span>{translateMessage(locale, activity.message)}</span>
                                         </div>
                                 )}
 
                                 <section className="journey-panel" aria-labelledby="source-title">
                                         <JourneyHeading
                                                 number="01"
-                                                title={t("Source image and recovery files")}
+                                                title={t("ui.sourceImageAndRecoveryFiles")}
                                                 id="source-title"
-                                                copy={t("Select the vendor image, inspect its size and SHA-256, and record the installation and recovery instructions.")}
+                                                copy={t("ui.selectTheVendorImageInspectItsSizeAndSha256AndRecordTheInstallationAndRecoveryInstructions")}
                                         />
                                         {msi && (
                                                 <div className="detected-route">
-                                                        <strong>MSI {snapshot.machineIdentity?.boardProduct ?? t("board detected")}</strong>
-                                                        <span>{t("Native ReBAR, M-FLASH, and Flash BIOS Button defaults are prefilled from the official manual. Confirm them below.")}</span>
+                                                        <strong>MSI {snapshot.machineIdentity?.boardProduct ?? t("ui.boardDetected")}</strong>
+                                                        <span>{t("ui.nativeRebarMFlashAndFlashBiosButtonDefaultsArePrefilledFromTheOfficialManualConfirmThemBelow")}</span>
                                                 </div>
                                         )}
                                         <div className="form-grid">
                                                 <label className="field span-2">
-                                                        <span>{t("Profile name")}</span>
+                                                        <span>{t("ui.profileName")}</span>
                                                         <input
                                                                 value={displayName}
                                                                 onChange={(event) =>
@@ -418,11 +424,11 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         />
                                                 </label>
                                                 <label className="field span-2">
-                                                        <span>{t("Selected firmware image")}</span>
+                                                        <span>{t("ui.selectedFirmwareImage")}</span>
                                                         <div className="path-control">
                                                                 <input
                                                                         value={firmwarePath}
-                                                                        placeholder={t("Choose a vendor BIOS image or enter an absolute path")}
+                                                                        placeholder={t("ui.chooseAVendorBiosImageOrEnterAnAbsolutePath")}
                                                 onChange={(event) => {
                                                                                 setFirmwarePath(
                                                                                         event.target.value,
@@ -432,7 +438,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                 <button
                                                                         onClick={chooseFirmware}
                                                                         disabled={Boolean(busyAction)}
-                                                                >{t("Choose file")}</button>
+                                                                >{t("ui.chooseFile")}</button>
                                                                 <button
                                                                         className="quiet"
                                                                         onClick={inspectManualPath}
@@ -441,7 +447,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                                 !firmwarePath ||
                                                                                 Boolean(firmware)
                                                                         }
-                                                                >{t("Inspect")}</button>
+                                                                >{t("ui.inspect")}</button>
                                                         </div>
                                                         {firmware && (
                                                                 <small className="verified-line">
@@ -456,7 +462,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         )}
                                                 </label>
                                                 <label className="field">
-                                                        <span>{t("Board path")}</span>
+                                                        <span>{t("ui.boardPath")}</span>
                                                         <select
                                                                 value={boardPath}
                                                                 onChange={(event) => {
@@ -465,12 +471,12 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                         );
                                                                 }}
                                                         >
-                                                                <option value="nativeResizableBar">{t("Native Resizable BAR")}</option>
-                                                                <option value="legacyAbove4g">{t("Legacy Above 4G")}</option>
+                                                                <option value="nativeResizableBar">{t("ui.nativeResizableBar")}</option>
+                                                                <option value="legacyAbove4g">{t("ui.legacyAbove4g")}</option>
                                                         </select>
                                                 </label>
                                                 <label className="field">
-                                                        <span>{t("Vendor install route")}</span>
+                                                        <span>{t("ui.vendorInstallRoute")}</span>
                                                         <select
                                                                 value={installMethod}
                                                                 onChange={(event) =>
@@ -479,14 +485,14 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                         )
                                                                 }
                                                         >
-                                                                <option value="firmwareSetupUtility">{t("Firmware setup utility")}</option>
-                                                                <option value="usbFlashback">{t("USB flashback")}</option>
-                                                                <option value="vendorWindowsUtility">{t("Vendor Windows utility")}</option>
-                                                                <option value="externalSpiProgrammer">{t("External SPI programmer")}</option>
+                                                                <option value="firmwareSetupUtility">{t("ui.firmwareSetupUtility")}</option>
+                                                                <option value="usbFlashback">{t("ui.usbFlashback")}</option>
+                                                                <option value="vendorWindowsUtility">{t("ui.vendorWindowsUtility")}</option>
+                                                                <option value="externalSpiProgrammer">{t("ui.externalSpiProgrammer")}</option>
                                                         </select>
                                                 </label>
                                                 <label className="field">
-                                                        <span>{t("Recovery route")}</span>
+                                                        <span>{t("ui.recoveryRoute")}</span>
                                                         <select
                                                                 value={recoveryMethod}
                                                                 onChange={(event) =>
@@ -495,15 +501,15 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                         )
                                                                 }
                                                         >
-                                                                <option value="usbFlashback">{t("USB flashback")}</option>
-                                                                <option value="dualBios">{t("Dual BIOS")}</option>
-                                                                <option value="vendorRecovery">{t("Vendor recovery")}</option>
-                                                                <option value="externalSpiProgrammer">{t("External SPI programmer")}</option>
-                                                                <option value="none">{t("None — profile will be refused")}</option>
+                                                                <option value="usbFlashback">{t("ui.usbFlashback")}</option>
+                                                                <option value="dualBios">{t("ui.dualBios")}</option>
+                                                                <option value="vendorRecovery">{t("ui.vendorRecovery")}</option>
+                                                                <option value="externalSpiProgrammer">{t("ui.externalSpiProgrammer")}</option>
+                                                                <option value="none">{t("ui.noneProfileWillBeRefused")}</option>
                                                         </select>
                                                 </label>
                                                 <label className="field">
-                                                        <span>{t("Official instructions URL")}</span>
+                                                        <span>{t("ui.officialInstructionsUrl")}</span>
                                                         <input
                                                                 type="url"
                                                                 value={instructionsUrl}
@@ -515,9 +521,13 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         />
                                                 </label>
                                                 <label className="field span-2">
-                                                        <span>{t("Install handoff note")}</span>
+                                                        <span>{t("ui.installHandoffNote")}</span>
                                                         <input
-                                                                value={t(installNote)}
+                                                                value={
+                                                                        installNotePresetId
+                                                                                ? t(installNotePresetId)
+                                                                                : installNote
+                                                                }
                                                                 onChange={(event) =>
                                                                         setInstallNote(
                                                                                 event.target.value,
@@ -526,9 +536,13 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         />
                                                 </label>
                                                 <label className="field span-2">
-                                                        <span>{t("Recovery note")}</span>
+                                                        <span>{t("ui.recoveryNote")}</span>
                                                         <input
-                                                                value={t(recoveryNote)}
+                                                                value={
+                                                                        recoveryNotePresetId
+                                                                                ? t(recoveryNotePresetId)
+                                                                                : recoveryNote
+                                                                }
                                                                 onChange={(event) =>
                                                                         setRecoveryNote(
                                                                                 event.target.value,
@@ -544,9 +558,9 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 >
                                                         <div className="legacy-analysis-head">
                                                                 <div>
-                                                                        <span className="step">{t("READ-ONLY")}</span>
-                                                                        <h4 id="legacy-analysis-title">{t("Legacy patch analysis")}</h4>
-                                                                        <p>{t("The Rust analyzer reports match counts for the selected source image.")}</p>
+                                                                        <span className="step">{t("ui.readOnly")}</span>
+                                                                        <h4 id="legacy-analysis-title">{t("ui.legacyPatchAnalysis")}</h4>
+                                                                        <p>{t("ui.theRustAnalyzerReportsMatchCountsForTheSelectedSourceImage")}</p>
                                                                 </div>
                                                                 <button
                                                                         type="button"
@@ -558,10 +572,10 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                 >
                                                                         {legacyAnalysisStatus ===
                                                                         "pending"
-                                                                                ? t("Analyzing image…")
+                                                                                ? t("ui.analyzingImage")
                                                                                 : legacyAnalysisValid
-                                                                                  ? t("Analyze again")
-                                                                                  : t("Analyze image")}
+                                                                                  ? t("ui.analyzeAgain")
+                                                                                  : t("ui.analyzeImage")}
                                                                 </button>
                                                         </div>
                                                         <p
@@ -569,13 +583,14 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                 role="status"
                                                                 aria-live="polite"
                                                         >
-                                                                {t(legacyNextAction)}
+                                                                {legacyNextAction &&
+                                                                        translateMessage(locale, legacyNextAction)}
                                                         </p>
                                                         {legacyAnalysis &&
                                                                 legacyAnalysisValid && (
                                                                         <div className="legacy-results">
                                                                                 <div className="legacy-fingerprint">
-                                                                                        <span>{t("Analyzed source")}</span>
+                                                                                        <span>{t("ui.analyzedSource")}</span>
                                                                                         <strong>
                                                                                                 {legacyAnalysis.value.firmware.fileName} · {Math.round(legacyAnalysis.value.firmware.byteLength / 1048576)} MiB
                                                                                         </strong>
@@ -612,14 +627,14 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                                                                 <div className="legacy-catalog-head">
                                                                                                                         <div>
                                                                                                                                 <h5 id={`catalog-${catalog.catalog}`}>
-                                                                                                                                        {t(catalogLabels[catalog.catalog])}
+                                                                                                                                        {t(catalogLabelIds[catalog.catalog])}
                                                                                                                                 </h5>
                                                                                                                                 <small>
-                                                                                                                                        {n(applicable.length)} {t("applicable")} · {n(absent.length)} {t("absent")} · {n(blocked.length)} {t("blocked")}
+                                                                                                                                        {n(applicable.length)} {t("ui.applicable")} · {n(absent.length)} {t("ui.absent")} · {n(blocked.length)} {t("ui.blockedState")}
                                                                                                                                 </small>
                                                                                                                         </div>
                                                                                                                         <span className="mono-wrap">
-                                                                                                                                {t("source")} {shortHash(catalog.sourceSha256)}
+                                                                                                                                {t("ui.source")} {shortHash(catalog.sourceSha256)}
                                                                                                                         </span>
                                                                                                                 </div>
                                                                                                                 {applicable.length >
@@ -651,20 +666,20 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                                                                                                                 />
                                                                                                                                                                 <span>
                                                                                                                                                                         <strong>
-                                                                                                                                                                                {t(rule.description ?? "Compatibility rule")}
+                                                                                                                                                                                {t(legacyRuleDescriptionId(rule.ruleId))}
                                                                                                                                                                         </strong>
                                                                                                                                                                         <small>
-                                                                                                                                                                                {exactMatches(rule.expectedMatches!)} · {t("section")} 0x{rule.sectionType.toString(16).padStart(2, "0")}
+                                                                                                                                                                                {exactMatches(rule.expectedMatches!)} · {t("ui.section")} 0x{rule.sectionType.toString(16).padStart(2, "0")}
                                                                                                                                                                         </small>
                                                                                                                                                                         {rule.requiredRisks.length >
                                                                                                                                                                                 0 && (
                                                                                                                                                                                 <em>
-                                                                                                                                                                                        {t("Requires")} {rule.requiredRisks.map((risk) => t(riskLabels[risk])).join(" · ")}
+                                                                                                                                                                                        {t("ui.requires")} {rule.requiredRisks.map((risk) => t(riskLabelIds[risk])).join(" · ")}
                                                                                                                                                                                 </em>
                                                                                                                                                                         )}
                                                                                                                                                                 </span>
                                                                                                                                                                 {rule.recommended && (
-                                                                                                                                                                        <b>{t("RECOMMENDED")}</b>
+                                                                                                                                                                        <b>{t("ui.recommended")}</b>
                                                                                                                                                                 )}
                                                                                                                                                         </label>
                                                                                                                                                 );
@@ -672,7 +687,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                                                                                 )}
                                                                                                                         </div>
                                                                                                                 ) : (
-                                                                                                                        <p className="legacy-empty">{t("No applicable rules in this catalog.")}</p>
+                                                                                                                        <p className="legacy-empty">{t("ui.noApplicableRulesInThisCatalog")}</p>
                                                                                                                 )}
                                                                                                                 {absent.length > 0 && (
                                                                                                                         <p className="legacy-absent">
@@ -686,10 +701,10 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                                                                                         key={rule.ruleId}
                                                                                                                                 >
                                                                                                                                         <strong>
-                                                                                                                                                {t("Blocked")} · {t(rule.description ?? "Compatibility rule")}
+                                                                                                                                                {t("ui.blocked")} · {t(legacyRuleDescriptionId(rule.ruleId))}
                                                                                                                                         </strong>
                                                                                                                                         <span>
-                                                                                                                                                {t(rule.blockedReason ?? "The analyzer found no supported match.")}
+                                                                                                                                                {t(legacyRuleBlockedReasonId(rule.ruleId))}
                                                                                                                                         </span>
                                                                                                                                 </div>
                                                                                                                         ),
@@ -704,9 +719,9 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                                                 className="legacy-risk-panel"
                                                                                                 aria-labelledby="legacy-risk-title"
                                                                                         >
-                                                                                                <h5 id="legacy-risk-title">{t("Explicit risk acknowledgements")}</h5>
+                                                                                                <h5 id="legacy-risk-title">{t("ui.explicitRiskAcknowledgements")}</h5>
                                                                                                 <p>
-                                                                                                        {t("For each selected risk, describe this image and include fingerprint")} <code>{acknowledgementHash}</code>. {t("Include the image-specific consequence.")}
+                                                                                                        {t("ui.forEachSelectedRiskDescribeThisImageAndIncludeFingerprint")} <code>{acknowledgementHash}</code>. {t("ui.includeTheImageSpecificConsequence")}
                                                                                                 </p>
                                                                                                 {selectedLegacyRisks.map(
                                                                                                         (risk) => {
@@ -722,9 +737,9 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                                                                         >
                                                                                                                                 <label htmlFor={noteId}>
                                                                                                                                         <strong>
-                                                                                                                                                {t(riskLabels[risk])}
+                                                                                                                                                {t(riskLabelIds[risk])}
                                                                                                                                         </strong>
-                                                                                                                                        <span>{t("Image-specific acknowledgement note")}</span>
+                                                                                                                                        <span>{t("ui.imageSpecificAcknowledgementNote")}</span>
                                                                                                                                 </label>
                                                                                                                                 <textarea
                                                                                                                                         id={noteId}
@@ -749,7 +764,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                                                                                                 }
                                                                                                                                         />
                                                                                                                                         <span>
-                                                                                                                                                <strong>{t("I reviewed this risk for the analyzed firmware.")}</strong>
+                                                                                                                                                <strong>{t("ui.iReviewedThisRiskForTheAnalyzedFirmware")}</strong>
                                                                                                                                         </span>
                                                                                                                                 </label>
                                                                                                                         </div>
@@ -773,8 +788,8 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         }
                                                 />
                                                 <span>
-                                                        <strong>{t("I checked the vendor install and recovery instructions for this board.")}</strong>
-                                                        <small>{t("This records the selected installation and recovery instructions.")}</small>
+                                                        <strong>{t("ui.iCheckedTheVendorInstallAndRecoveryInstructionsForThisBoard")}</strong>
+                                                        <small>{t("ui.thisRecordsTheSelectedInstallationAndRecoveryInstructions")}</small>
                                                 </span>
                                         </label>
                                         <div className="panel-actions">
@@ -795,8 +810,8 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         onClick={createProfile}
                                                 >
                                                         {busyAction === "profile"
-                                                                ? t("Creating profile…")
-                                                                : t("Create profile for this computer")}
+                                                                ? t("ui.creatingProfile")
+                                                                : t("ui.createProfileForThisComputer")}
                                                 </button>
                                         </div>
                                 </section>
@@ -804,12 +819,12 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                 <section className="journey-panel" aria-labelledby="artifact-title">
                                         <JourneyHeading
                                                 number="02"
-                                                title={t("Check & export")}
+                                                title={t("ui.checkExport")}
                                                 id="artifact-title"
-                                                copy={t("Compare the current hardware and source image, prepare the Rust firmware artifact, and export the package.")}
+                                                copy={t("ui.compareTheCurrentHardwareAndSourceImagePrepareTheRustFirmwareArtifactAndExportThePackage")}
                                         />
                                         <label className="field profile-select">
-                                                <span>{t("Machine profile")}</span>
+                                                <span>{t("ui.machineProfile")}</span>
                                                 <select
                                                         value={selectedProfileId}
                                                         disabled={Boolean(busyAction)}
@@ -818,7 +833,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         }
                                                 >
                                                         {!profiles.length && (
-                                                                <option value="">{t("No stored profiles")}</option>
+                                                                <option value="">{t("ui.noStoredProfiles")}</option>
                                                         )}
                                                         {profiles.map((profile) => (
                                                                 <option
@@ -834,14 +849,14 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 <div className="active-workflow" aria-live="polite">
                                                         <div className="active-workflow-head">
                                                                 <div>
-                                                                        <span className="step">{t("ACTIVE STEP")}</span>
+                                                                        <span className="step">{t("ui.activeStep")}</span>
                                                                         <h4>
-                                                                                {activeStep ? t(activeStep.title) : t("Deployment complete")}
+                                                                                {activeStepTitleId ? t(activeStepTitleId) : t("ui.deploymentComplete")}
                                                                         </h4>
                                                                         <p>
                                                                                 {activeStep
-                                                                                        ? t("Complete the active step to continue.")
-                                                                                        : t("No remaining steps.")}
+                                                                                        ? t("ui.completeTheActiveStepToContinue")
+                                                                                        : t("ui.noRemainingSteps")}
                                                                         </p>
                                                                 </div>
                                                                 <strong>
@@ -853,8 +868,8 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         </div>
                                                         {workflowReceipt && (
                                                                 <div className="workflow-receipt" role="status">
-                                                                        <strong>{t(workflowReceipt.title)}</strong>
-                                                                        <span>{t(workflowReceipt.detail)}</span>
+                                                                        <strong>{translateMessage(locale, workflowReceipt.title)}</strong>
+                                                                        <span>{translateMessage(locale, workflowReceipt.detail)}</span>
                                                                 </div>
                                                         )}
                                                         {barEvidence && (
@@ -867,24 +882,30 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         )}
                                                         {installation && activeStep?.id === "configureNvidiaApplications" && (
                                                                 <div className="workflow-receipt">
-                                                                        <strong>Profile Inspector {installation.manifest.version} installed</strong>
-                                                                        <span>{t("Next: apply the NVIDIA policy, then record the result.")}</span>
+                                                                        <strong>
+                                                                                {t("ui.profileInspectorVersionInstalled", {
+                                                                                        version: installation.manifest.version,
+                                                                                })}
+                                                                        </strong>
+                                                                        <span>{t("ui.nextApplyTheNvidiaPolicyThenRecordTheResult")}</span>
                                                                 </div>
                                                         )}
                                                         {backup && activeStep?.id === "configureNvidiaApplications" && (
                                                                 <small className="verified-line mono-wrap">
-                                                                        {t("Profile backup")}: {backup.backupPath}
+                                                                        {t("ui.profileBackup")}: {backup.backupPath}
                                                                 </small>
                                                         )}
                                                         {launch && activeStep?.id === "configureNvidiaApplications" && (
                                                                 <small className="verified-line">
-                                                                        {t(`Editor process ${launch.processId} launched · next: edit the policy and record the result.`)}
+                                                                        {t("ui.editorProcessLaunched", {
+                                                                                processId: launch.processId,
+                                                                        })}
                                                                 </small>
                                                         )}
                                                 </div>
                                         )}
                                         {plan && (
-                                                <ol className="plan-list" aria-label={t("Deployment plan")}>
+                                                <ol className="plan-list" aria-label={t("ui.deploymentPlan")}>
                                                         {plan.steps.map((step) => (
                                                                 <li
                                                                         key={step.id}
@@ -892,20 +913,12 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                 >
                                                                         <i aria-hidden="true" />
                                                                         <div>
-                                                                                <strong>{t(step.title)}</strong>
+                                                                                <strong>{t(stepTitleIds[step.id])}</strong>
                                                                                 <span>
-                                                                                        {step.kind === "automated"
-                                                                                                ? t("Automated")
-                                                                                                : step.kind === "physicalConfirmation"
-                                                                                                  ? t("Physical confirmation")
-                                                                                                  : step.kind === "firmwareManual"
-                                                                                                    ? t("Manual firmware gate")
-                                                                                                    : step.kind === "externalTool"
-                                                                                                      ? t("External tool")
-                                                                                                      : t("Restart gate")}
+                                                                                        {t(stepKindIds[step.kind])}
                                                                                 </span>
                                                                         </div>
-                                                                        <b>{step.state}</b>
+                                                                        <b>{t(stepStateIds[step.state])}</b>
                                                                 </li>
                                                         ))}
                                                 </ol>
@@ -914,22 +927,22 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 <button
                                                         onClick={compare}
                                                         disabled={Boolean(busyAction) || !selectedProfileId}
-                                                >{t("Check current hardware and source image")}</button>
+                                                >{t("ui.checkCurrentHardwareAndSourceImage")}</button>
                                         </div>
                                         {preparation?.patchedFirmware && (
                                                 <div className="artifact-receipt" role="status">
-                                                        <strong>{t("Prepared firmware artifact")}</strong>
+                                                        <strong>{t("ui.preparedFirmwareArtifact")}</strong>
                                                         <span>
-                                                                {n(preparation.patchedFirmware.byteLength)} {t("bytes")} · SHA-256 {shortHash(preparation.patchedFirmware.sha256)}
+                                                                {n(preparation.patchedFirmware.byteLength)} {t("ui.bytes")} · SHA-256 {shortHash(preparation.patchedFirmware.sha256)}
                                                         </span>
-                                                        <small>{t("Next: export this artifact for the vendor tool.")}</small>
+                                                        <small>{t("ui.nextExportThisArtifactForTheVendorTool")}</small>
                                                 </div>
                                         )}
                                         <div className="path-control export-control">
                                                 <input
-                                                        aria-label={t("Deployment package destination")}
+                                                        aria-label={t("ui.deploymentPackageDestination")}
                                                         value={destination}
-                                                        placeholder={t("Choose an empty destination folder")}
+                                                        placeholder={t("ui.chooseAnEmptyDestinationFolder")}
                                                         onChange={(event) =>
                                                                 setDestination(event.target.value)
                                                         }
@@ -938,7 +951,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         className="quiet"
                                                         onClick={chooseDestination}
                                                         disabled={Boolean(busyAction)}
-                                                >{t("Choose folder")}</button>
+                                                >{t("ui.chooseFolder")}</button>
                                                 <button
                                                         className="primary"
                                                         onClick={exportPackage}
@@ -947,11 +960,11 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                 plan?.steps.find((step) => step.id === "verifyPatchedArtifact")?.state !== "completed" ||
                                                                 !destination
                                                         }
-                                                >{t("Export package")}</button>
+                                                >{t("ui.exportPackage")}</button>
                                         </div>
                                         {packageReceipt && (
                                                 <div className="artifact-receipt" role="status">
-                                                        <strong>{t("Package exported — manual handoff next")}</strong>
+                                                        <strong>{t("ui.packageExportedManualHandoffNext")}</strong>
                                                         <span className="mono-wrap">{packageReceipt.packagePath}</span>
                                                         <small>
                                                                 {packageReceipt.manifest.files.length} files · manifest SHA-256 {shortHash(packageReceipt.manifestSha256)}
@@ -963,25 +976,25 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                 <section className="journey-panel" aria-labelledby="firmware-title">
                                         <JourneyHeading
                                                 number="03"
-                                                title={t("Steps completed outside this app")}
+                                                title={t("ui.stepsCompletedOutsideThisApp")}
                                                 id="firmware-title"
-                                                copy={t("Use the vendor tool for flashing, set firmware values in the firmware screen, then return to continue the plan.")}
+                                                copy={t("ui.useTheVendorToolForFlashingSetFirmwareValuesInTheFirmwareScreenThenReturnToContinueThePlan")}
                                         />
                                         <div className="manual-gates">
                                                 <div>
-                                                        <span>{t("MANUAL")}</span>
-                                                        <strong>{t("Vendor flash")}</strong>
-                                                        <p>{t("Select the exported artifact in the documented vendor utility. Keep power stable.")}</p>
+                                                        <span>{t("ui.manual")}</span>
+                                                        <strong>{t("ui.vendorFlash")}</strong>
+                                                        <p>{t("ui.selectTheExportedArtifactInTheDocumentedVendorUtilityKeepPowerStable")}</p>
                                                 </div>
                                                 <div>
-                                                        <span>{t("PHYSICAL")}</span>
-                                                        <strong>{t("Recovery files")}</strong>
-                                                        <p>{t("Keep the selected recovery route and original image available before flashing.")}</p>
+                                                        <span>{t("ui.physical")}</span>
+                                                        <strong>{t("ui.recoveryFiles")}</strong>
+                                                        <p>{t("ui.keepTheSelectedRecoveryRouteAndOriginalImageAvailableBeforeFlashing")}</p>
                                                 </div>
                                                 <div>
-                                                        <span>{t("MANUAL")}</span>
-                                                        <strong>{t("UEFI values")}</strong>
-                                                        <p>{t("Set Above 4G Decoding and Resizable BAR in the firmware screen.")}</p>
+                                                        <span>{t("ui.manual")}</span>
+                                                        <strong>{t("ui.uefiValues")}</strong>
+                                                        <p>{t("ui.setAbove4gDecodingAndResizableBarInTheFirmwareScreen")}</p>
                                                 </div>
                                         </div>
                                 </section>
@@ -996,14 +1009,14 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 aria-modal="true"
                                                 aria-labelledby="reboot-title"
                                         >
-                                                <span className="kicker">{t("IMMEDIATE RESTART")}</span>
-                                                <h2 id="reboot-title">{t("Restart Windows into firmware setup?")}</h2>
+                                                <span className="kicker">{t("ui.immediateRestart")}</span>
+                                                <h2 id="reboot-title">{t("ui.restartWindowsIntoFirmwareSetup")}</h2>
                                                 <p>
-                                                        {t("This sends")} <code>{rebootPreview.command} {rebootPreview.arguments.join(" ")}</code>. {t("Windows opens the firmware setup screen; continue there with the vendor instructions.")}
+                                                        {t("ui.thisSends")} <code>{rebootPreview.command} {rebootPreview.arguments.join(" ")}</code>. {t("ui.windowsOpensTheFirmwareSetupScreenContinueThereWithTheVendorInstructions")}
                                                 </p>
                                                 <div className="warning-box">
-                                                        {rebootPreview.warnings.map((warning) => (
-                                                                <span key={warning}>{t(warning)}</span>
+                                                        {firmwareRebootWarningIds.map((warningId) => (
+                                                                <span key={warningId}>{t(warningId)}</span>
                                                         ))}
                                                 </div>
                                                 <label className="consequence-check">
@@ -1014,17 +1027,17 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                 onChange={(event) => setSavedWork(event.target.checked)}
                                                         />
                                                         <span>
-                                                                <strong>{t("I saved and closed my work.")}</strong>
-                                                                <small>{t("Windows restarts immediately. Save and close your work first.")}</small>
+                                                                <strong>{t("ui.iSavedAndClosedMyWork")}</strong>
+                                                                <small>{t("ui.windowsRestartsImmediatelySaveAndCloseYourWorkFirst")}</small>
                                                         </span>
                                                 </label>
                                                 <div className="modal-actions">
-                                                        <button className="quiet" onClick={() => setShowReboot(false)}>{t("Cancel")}</button>
+                                                        <button className="quiet" onClick={() => setShowReboot(false)}>{t("ui.cancel")}</button>
                                                         <button
                                                                 className="primary danger-button"
                                                                 disabled={!savedWork}
                                                                 onClick={reboot}
-                                                        >{t("Restart to firmware UI")}</button>
+                                                        >{t("ui.restartToFirmwareUi")}</button>
                                                 </div>
                                         </div>
                                 </div>
@@ -1038,12 +1051,17 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 aria-modal="true"
                                                 aria-labelledby="manual-confirm-title"
                                         >
-                                                <span className="kicker">{t("RECORD COMPLETED STEP")}</span>
-                                                <h2 id="manual-confirm-title">{t(manualPreview.title)}</h2>
-                                                <p>{t("Review the result in the owning tool, then record this step.")}</p>
+                                                <span className="kicker">{t("ui.recordCompletedStepKicker")}</span>
+                                                <h2 id="manual-confirm-title">
+                                                        {t(stepTitleIds[manualPreview.stepId])}
+                                                </h2>
+                                                <p>{t("ui.reviewTheResultInTheOwningToolThenRecordThisStep")}</p>
                                                 <div className="warning-box">
-                                                        {manualPreview.warnings.map((warning) => (
-                                                                <span key={warning}>{t(warning)}</span>
+                                                        {manualWarningIds(
+                                                                manualPreview.stepId,
+                                                                boardPath === "legacyAbove4g",
+                                                        ).map((warningId) => (
+                                                                <span key={warningId}>{t(warningId)}</span>
                                                         ))}
                                                 </div>
                                                 <label className="consequence-check">
@@ -1058,16 +1076,16 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                 }
                                                         />
                                                         <span>
-                                                                <strong>{t("I completed this step and reviewed the result.")}</strong>
+                                                                <strong>{t("ui.iCompletedThisStepAndReviewedTheResult")}</strong>
                                                         </span>
                                                 </label>
                                                 <div className="modal-actions">
-                                                        <button className="quiet" onClick={() => setShowManual(false)}>{t("Cancel")}</button>
+                                                        <button className="quiet" onClick={() => setShowManual(false)}>{t("ui.cancel")}</button>
                                                         <button
                                                                 className="primary danger-button"
                                                                 disabled={!manualConfirmed || Boolean(busyAction)}
                                                                 onClick={confirmManual}
-                                                        >{t("Record completed step")}</button>
+                                                        >{t("ui.recordCompletedStep")}</button>
                                                 </div>
                                         </div>
                                 </div>
@@ -1081,14 +1099,14 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 aria-modal="true"
                                                 aria-labelledby="configuration-reboot-title"
                                         >
-                                                <span className="kicker">{t("RESTART REQUEST")}</span>
-                                                <h2 id="configuration-reboot-title">{t("Restart Windows after configuration?")}</h2>
+                                                <span className="kicker">{t("ui.restartRequest")}</span>
+                                                <h2 id="configuration-reboot-title">{t("ui.restartWindowsAfterConfiguration")}</h2>
                                                 <p>
-                                                        {t("This sends")} <code>{configurationRebootPreview.command} {configurationRebootPreview.arguments.join(" ")}</code>. {t("Return after Windows boots so the app can compare the new boot time.")}
+                                                        {t("ui.thisSends")} <code>{configurationRebootPreview.command} {configurationRebootPreview.arguments.join(" ")}</code>. {t("ui.returnAfterWindowsBootsSoTheAppCanCompareTheNewBootTime")}
                                                 </p>
                                                 <div className="warning-box">
-                                                        {configurationRebootPreview.warnings.map((warning) => (
-                                                                <span key={warning}>{t(warning)}</span>
+                                                        {configurationRebootWarningIds.map((warningId) => (
+                                                                <span key={warningId}>{t(warningId)}</span>
                                                         ))}
                                                 </div>
                                                 <label className="consequence-check">
@@ -1099,17 +1117,17 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                 onChange={(event) => setSavedWork(event.target.checked)}
                                                         />
                                                         <span>
-                                                                <strong>{t("I saved and closed my work.")}</strong>
-                                                                <small>{t("Windows restarts immediately. Return after Windows boots to continue.")}</small>
+                                                                <strong>{t("ui.iSavedAndClosedMyWork")}</strong>
+                                                                <small>{t("ui.windowsRestartsImmediatelyReturnAfterWindowsBootsToContinue")}</small>
                                                         </span>
                                                 </label>
                                                 <div className="modal-actions">
-                                                        <button className="quiet" onClick={() => setShowConfigurationReboot(false)}>{t("Cancel")}</button>
+                                                        <button className="quiet" onClick={() => setShowConfigurationReboot(false)}>{t("ui.cancel")}</button>
                                                         <button
                                                                 className="primary danger-button"
                                                                 disabled={!savedWork || Boolean(busyAction)}
                                                                 onClick={requestConfigurationReboot}
-                                                        >{t("Request restart")}</button>
+                                                        >{t("ui.requestRestart")}</button>
                                                 </div>
                                         </div>
                                 </div>

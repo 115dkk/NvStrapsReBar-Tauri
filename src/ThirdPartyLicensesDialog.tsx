@@ -91,10 +91,10 @@ export function ThirdPartyLicensesDialog({
                                 <div className="license-modal-head">
                                         <div>
                                                 <span className="kicker">
-                                                        {t("THIRD-PARTY SOFTWARE")}
+                                                        {t("ui.thirdPartySoftware")}
                                                 </span>
                                                 <h2 id="licenses-title">
-                                                        {t("Open-source licenses")}
+                                                        {t("ui.openSourceLicenses")}
                                                 </h2>
                                         </div>
                                         <button
@@ -102,12 +102,12 @@ export function ThirdPartyLicensesDialog({
                                                 autoFocus
                                                 onClick={onClose}
                                         >
-                                                {t("Close")}
+                                                {t("ui.close")}
                                         </button>
                                 </div>
                                 <p>
                                         {t(
-                                                "Pretendard v1.3.9 is bundled with this application under the SIL Open Font License 1.1.",
+                                                "ui.pretendardV139IsBundledWithThisApplicationUnderTheSilOpenFontLicense11",
                                         )}
                                 </p>
                                 <div className="license-attribution">
@@ -121,11 +121,11 @@ export function ThirdPartyLicensesDialog({
                                                 &apos;Pretendard&apos;
                                         </span>
                                 </div>
-                                <h3>{t("Full license text")}</h3>
+                                <h3>{t("ui.fullLicenseText")}</h3>
                                 {loadFailed ? (
                                         <p role="alert">
                                                 {t(
-                                                        "The bundled license text could not be loaded.",
+                                                        "ui.theBundledLicenseTextCouldNotBeLoaded",
                                                 )}
                                         </p>
                                 ) : licenseText ? (
@@ -139,7 +139,7 @@ export function ThirdPartyLicensesDialog({
                                 ) : (
                                         <p role="status">
                                                 {t(
-                                                        "Loading the bundled license text…",
+                                                        "ui.loadingTheBundledLicenseText",
                                                 )}
                                         </p>
                                 )}

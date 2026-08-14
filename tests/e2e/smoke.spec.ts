@@ -184,7 +184,6 @@ test("durable deployment completes in order and distinguishes requests from rece
         await expect(
                 page.getByText(
                         "Machine profile created · source image fingerprint recorded.",
-                        { exact: true },
                 ),
         ).toBeVisible();
 
@@ -396,7 +395,6 @@ test("machine preflight mismatch is an error and never claims an exact match", a
         await expect(
                 page.getByText(
                         "Hardware check found 1 difference; deployment remains blocked until the selected profile matches.",
-                        { exact: true },
                 ),
         ).toBeVisible();
         await expect(
@@ -428,7 +426,7 @@ test("unknown Turing recommendation pins an exact-location fallback rule", async
                 "PCI location only",
         );
         await expect(page.getByRole("list", { name: "Location-specific fallback rules" })).toContainText(
-                "device 1f81",
+                "Device 1f81",
         );
         await expect(page.getByRole("list", { name: "Location-specific fallback rules" })).toContainText(
                 "BAR selector 5",
@@ -462,7 +460,6 @@ test("malformed plan-changing receipt becomes an error without false success", a
         await expect(
                 page.getByText(
                         "The backend returned a deployment receipt for a different profile contract.",
-                        { exact: true },
                 ),
         ).toBeVisible();
         await expect(
@@ -498,7 +495,6 @@ test("unexpected receipt revision delta is rejected without advancing the active
         await expect(
                 page.getByText(
                         "The backend returned an unexpected deployment plan revision.",
-                        { exact: true },
                 ),
         ).toBeVisible();
         await expect(
@@ -522,9 +518,8 @@ test("non-guarded recommendation is rejected before confirmation", async ({
         );
         await reachRecommendedConfiguration(page, undefined, false);
         await expect(
-                page.getByText(
+                page.locator(".blocked-copy").getByText(
                         "The backend returned an inconsistent deployment configuration recommendation.",
-                        { exact: true },
                 ),
         ).toBeVisible();
         await expect(
@@ -704,7 +699,6 @@ test("legacy selections are invalidated by path and fingerprint drift", async ({
         await expect(
                 page.getByText(
                         "The firmware fingerprint changed between inspection and analysis.",
-                        { exact: true },
                 ),
         ).toBeVisible();
         await expect(

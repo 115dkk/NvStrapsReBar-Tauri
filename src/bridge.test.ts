@@ -38,6 +38,12 @@ describe("ConfigureBridge Resizable BAR inspection", () => {
                                         windowsBarSizeBytes: "8589934592",
                                         state: "expanded",
                                         reason: "BAR1 is larger than the legacy 256 MiB window and matches Windows",
+                                        patchConfiguration: {
+                                                state: "notNeeded",
+                                                reasonCode: "alreadyExpanded",
+                                                targetSelector: null,
+                                                targetSizeBytes: null,
+                                        },
                                 },
                         ],
                         warnings: [],

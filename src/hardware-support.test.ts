@@ -53,7 +53,8 @@ const snapshot = (state: "supported" | "unknown"): SystemSnapshot => ({
 describe("motherboard support presenter", () => {
         it("shows a catalog match with the board product as evidence", () => {
                 expect(presentMotherboardSupport(snapshot("supported"))).toEqual({
-                        label: "Supported",
+                        statusId: "ui.supported",
+                        symbol: "O",
                         tone: "supported",
                         boardProduct: "PRO Z690-A DDR4(MS-7D25)",
                 });
@@ -62,10 +63,11 @@ describe("motherboard support presenter", () => {
         it("keeps a board outside the current catalog unknown", () => {
                 const result = presentMotherboardSupport(snapshot("unknown"));
                 expect(result).toEqual({
-                        label: "Not in current support list",
+                        statusId: "ui.notInCurrentSupportList",
+                        symbol: "?",
                         tone: "unknown",
                         boardProduct: "PRO Z690-A DDR4(MS-7D25)",
                 });
-                expect(result.label).not.toBe("Unsupported");
+                expect(result.statusId).not.toBe("ui.unsupported");
         });
 });
