@@ -171,3 +171,10 @@ external owners rather than being misrepresented as rewritten code.
 This work builds on findings from [envytools](https://github.com/envytools/envytools), @mupuf,
 @Xelafic, and the original [ReBarUEFI](https://github.com/xCuri0/ReBarUEFI) project. The pinned
 legacy patch catalogs retain their upstream provenance and hashes.
+
+## Licenses
+
+Repository-owned source code is distributed under the [MIT license](LICENSE). The bundled
+Pretendard Variable font remains under the SIL Open Font License 1.1; it is not relicensed under
+MIT. See [third-party notices](THIRD_PARTY_NOTICES.md) for its pinned provenance and hashes, or use
+the application's **Licenses** button to read its copyright notice and full OFL text offline.

@@ -1,5 +1,14 @@
+@font-face {
+        font-family: "Pretendard Variable";
+        src: url("./assets/fonts/PretendardVariable.woff2") format("woff2-variations");
+        font-style: normal;
+        font-weight: 45 920;
+        font-display: swap;
+}
+
 :root {
         -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
         font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif;
         color: #d9dde2;
         background: #111417;
@@ -14,6 +23,32 @@
         --ok: #63b68a;
         --warn: #d6a85d;
         --bad: #df6b63;
+        --ko-weight-body: 400;
+        --ko-weight-supporting: 450;
+        --ko-weight-label: 550;
+        --ko-weight-button: 650;
+        --ko-weight-section: 680;
+        --ko-weight-page: 720;
+}
+html:lang(ko) {
+        font-family: "Pretendard Variable", Pretendard, "Segoe UI Variable Text",
+                "Segoe UI", "Malgun Gothic", sans-serif;
+        font-weight: var(--ko-weight-body);
+}
+html:lang(ko) :where(.muted-copy, .intro p, .deployment-intro p, .section-head p, .journey-head p, .field small, .rail-note p, .modal p) {
+        font-weight: var(--ko-weight-supporting);
+}
+html:lang(ko) :where(label, .field > span) {
+        font-weight: var(--ko-weight-label);
+}
+html:lang(ko) button {
+        font-weight: var(--ko-weight-button);
+}
+html:lang(ko) :where(h2, h3, h4, h5) {
+        font-weight: var(--ko-weight-section);
+}
+html:lang(ko) h1 {
+        font-weight: var(--ko-weight-page);
 }
 * {
         box-sizing: border-box;
@@ -114,6 +149,24 @@ h1 {
         font-size: 22px;
         margin: 5px 0 0;
         letter-spacing: -0.02em;
+}
+.product-heading {
+        min-width: 0;
+}
+.title-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+}
+.title-row h1 {
+        min-width: 0;
+}
+.license-button {
+        min-height: 40px;
+        padding: 6px 10px;
+        color: var(--muted);
+        font-size: 11px;
+        white-space: nowrap;
 }
 .header-actions {
         display: flex;
@@ -1317,6 +1370,55 @@ dd {
         justify-content: flex-end;
         gap: 9px;
 }
+.license-modal {
+        width: min(700px, 100%);
+        max-height: min(680px, calc(100vh - 48px));
+        display: flex;
+        flex-direction: column;
+}
+.license-modal-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 20px;
+}
+.license-modal-head h2 {
+        margin-bottom: 0;
+        text-wrap: balance;
+}
+.license-attribution {
+        display: grid;
+        gap: 4px;
+        padding: 13px 15px;
+        border-left: 3px solid var(--accent);
+        background: #191d21;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+}
+.license-attribution strong {
+        color: var(--ink);
+        font-size: 13px;
+}
+.license-modal h3 {
+        margin: 18px 0 8px;
+        font-size: 13px;
+}
+.license-text {
+        min-height: 160px;
+        margin: 0;
+        overflow: auto;
+        padding: 14px 16px;
+        border: 1px solid var(--line);
+        background: #111417;
+        color: #c6ccd1;
+        font: 400 11px/1.55 ui-monospace, Consolas, monospace;
+        white-space: pre-wrap;
+}
+.license-text:focus-visible {
+        outline: 2px solid #f3a071;
+        outline-offset: 2px;
+}
 .danger-button {
         background: #c95e3f;
 }
@@ -1435,6 +1537,11 @@ dd {
         font: 600 12px system-ui, sans-serif;
         text-transform: none;
         letter-spacing: 0;
+}
+html:lang(ko) .language-select select {
+        font-family: "Pretendard Variable", Pretendard, "Segoe UI", "Malgun Gothic",
+                sans-serif;
+        font-weight: var(--ko-weight-button);
 }
 @media (max-width: 900px) {
         .language-select span {
