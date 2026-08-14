@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import type { SystemSnapshot } from "./types";
+import { useI18n } from "./i18n";
 import {
         createDeploymentWorkspaceSession,
         type DeploymentWorkspaceIntent,
@@ -32,6 +33,7 @@ const riskLabels: Record<LegacyPatchRisk, string> = {
 type Props = { snapshot: SystemSnapshot };
 
 export function DeploymentWorkspace({ snapshot }: Props) {
+        const { t, n, exactMatches, absentRules } = useI18n();
         const session = useMemo(
                 () => createDeploymentWorkspaceSession(snapshot),
                 [snapshot],
@@ -138,8 +140,8 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                 if (nextAction === "complete")
                         return (
                                 <div className="workflow-complete" role="status">
-                                        <strong>Deployment plan complete</strong>
-                                        <span>Every durable gate has a persisted receipt.</span>
+                                        <strong>{t("Deployment plan complete")}</strong>
+                                        <span>{t("Every durable gate has a persisted receipt.")}</span>
                                 </div>
                         );
                 switch (nextAction) {
@@ -149,9 +151,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 className="primary"
                                                 onClick={prepare}
                                                 disabled={Boolean(busyAction)}
-                                        >
-                                                Prepare and verify firmware artifact
-                                        </button>
+                                        >{t("Prepare and verify firmware artifact")}</button>
                                 );
                         case "manual":
                                 return (
@@ -161,16 +161,12 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         className="quiet"
                                                         onClick={previewReboot}
                                                         disabled={Boolean(busyAction)}
-                                                >
-                                                        Review restart to firmware UI
-                                                </button>
+                                                >{t("Review restart to firmware UI")}</button>
                                                 <button
                                                         className="primary danger-button"
                                                         onClick={openManualConfirmation}
                                                         disabled={Boolean(busyAction)}
-                                                >
-                                                        Review & confirm completed step
-                                                </button>
+                                                >{t("Review & confirm completed step")}</button>
                                         </div>
                                 );
                         case "verifyDriver":
@@ -179,34 +175,32 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 className="primary"
                                                 onClick={verifyDriver}
                                                 disabled={Boolean(busyAction)}
-                                        >
-                                                Verify current boot + Rust DXE
-                                        </button>
+                                        >{t("Verify current boot + Rust DXE")}</button>
                                 );
                         case "writeConfig":
                                 return (
                                         <div className="guarded-config">
                                                 {recommendationStatus === "pending" && (
-                                                        <p role="status">Loading the backend-owned recommendation for this exact profile…</p>
+                                                        <p role="status">{t("Loading the backend-owned recommendation for this exact profile…")}</p>
                                                 )}
                                                 {recommendationStatus === "error" && (
                                                         <p className="blocked-copy" role="alert">
-                                                                {recommendationError} Use Configure or retry after reloading the exact profile.
+                                                                {t(recommendationError)} {t("Use Configure or retry after reloading the exact profile.")}
                                                         </p>
                                                 )}
                                                 {configRecommendation && recommendationStatus === "ready" && (
                                                         <div className="recommended-config">
-                                                                <strong>Backend-recommended deployment configuration</strong>
+                                                                <strong>{t("Backend-recommended deployment configuration")}</strong>
                                                                 <dl className="recommendation-facts">
-                                                                        <div><dt>Turing GPUs</dt><dd>{configRecommendation.value.turingGpuCount}</dd></div>
-                                                                        <div><dt>Registry managed</dt><dd>{configRecommendation.value.registryManagedGpuCount}</dd></div>
-                                                                        <div><dt>Exact fallback rules</dt><dd>{configRecommendation.value.exactFallbackRuleCount}</dd></div>
+                                                                        <div><dt>{t("Turing GPUs")}</dt><dd>{configRecommendation.value.turingGpuCount}</dd></div>
+                                                                        <div><dt>{t("Registry managed")}</dt><dd>{configRecommendation.value.registryManagedGpuCount}</dd></div>
+                                                                        <div><dt>{t("Exact fallback rules")}</dt><dd>{configRecommendation.value.exactFallbackRuleCount}</dd></div>
                                                                 </dl>
                                                                 <code>
-                                                                        global mode {configRecommendation.value.draft.globalMode} · target selector {configRecommendation.value.draft.targetPciBarSize} · skip S3 {String(configRecommendation.value.draft.skipS3Resume)} · mask override {String(configRecommendation.value.draft.overrideBarSizeMask)} · setup guard {String(configRecommendation.value.draft.guardSetupChanges)}
+                                                                        {t("global mode")} {configRecommendation.value.draft.globalMode} · {t("target selector")} {configRecommendation.value.draft.targetPciBarSize} · {t("skip S3")} {String(configRecommendation.value.draft.skipS3Resume)} · {t("mask override")} {String(configRecommendation.value.draft.overrideBarSizeMask)} · {t("setup guard")} {String(configRecommendation.value.draft.guardSetupChanges)}
                                                                 </code>
                                                                 {configRecommendation.value.draft.rules.length > 0 ? (
-                                                                        <ul className="recommendation-rules" aria-label="Exact fallback rules">
+                                                                        <ul className="recommendation-rules" aria-label={t("Exact fallback rules")}>
                                                                                 {configRecommendation.value.draft.rules.map((rule) => (
                                                                                         <li key={`${rule.bus}-${rule.device}-${rule.function}`}>
                                                                                                 <strong>{rule.bus.toString(16).padStart(2, "0")}:{rule.device.toString(16).padStart(2, "0")}.{rule.function}</strong>
@@ -215,11 +209,9 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                                 ))}
                                                                         </ul>
                                                                 ) : (
-                                                                        <p>Every detected Turing GPU is covered by the built-in registry; no fallback rule is added.</p>
+                                                                        <p>{t("Every detected Turing GPU is covered by the built-in registry; no fallback rule is added.")}</p>
                                                                 )}
-                                                                <p>
-                                                                        This draft was generated and prevalidated by the backend for the current topology. To choose another policy or size, switch to Configure instead of confirming here.
-                                                                </p>
+                                                                <p>{t("This draft was generated and prevalidated by the backend for the current topology. To choose another policy or size, switch to Configure instead of confirming here.")}</p>
                                                         </div>
                                                 )}
                                                 <label className="consequence-check compact-check">
@@ -234,9 +226,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                 }
                                                         />
                                                         <span>
-                                                                <strong>
-                                                                        I reviewed this exact backend recommendation for the selected profile.
-                                                                </strong>
+                                                                <strong>{t("I reviewed this exact backend recommendation for the selected profile.")}</strong>
                                                         </span>
                                                 </label>
                                                 <button
@@ -248,9 +238,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                 recommendationStatus !== "ready" ||
                                                                 !configRecommendation
                                                         }
-                                                >
-                                                        Write and verify guarded configuration
-                                                </button>
+                                                >{t("Write and verify guarded configuration")}</button>
                                         </div>
                                 );
                         case "configurationReboot":
@@ -260,16 +248,12 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         className="quiet"
                                                         onClick={openConfigurationReboot}
                                                         disabled={Boolean(busyAction)}
-                                                >
-                                                        Review restart after configuration
-                                                </button>
+                                                >{t("Review restart after configuration")}</button>
                                                 <button
                                                         className="primary"
                                                         onClick={verifyConfigurationBoot}
                                                         disabled={Boolean(busyAction)}
-                                                >
-                                                        Verify returned Windows boot
-                                                </button>
+                                                >{t("Verify returned Windows boot")}</button>
                                         </div>
                                 );
                         case "collectBar":
@@ -278,9 +262,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 className="primary"
                                                 onClick={collectBar}
                                                 disabled={Boolean(busyAction)}
-                                        >
-                                                Collect and verify BAR1 evidence
-                                        </button>
+                                        >{t("Collect and verify BAR1 evidence")}</button>
                                 );
                         case "nvidiaPolicy":
                                 return (
@@ -291,58 +273,46 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                         className="quiet"
                                                                         onClick={installInspector}
                                                                         disabled={Boolean(busyAction)}
-                                                                >
-                                                                        Install verified Profile Inspector
-                                                                </button>
+                                                                >{t("Install verified Profile Inspector")}</button>
                                                         ) : (
                                                                 <>
                                                                         <button
                                                                                 className="quiet"
                                                                                 onClick={backupProfiles}
                                                                                 disabled={Boolean(busyAction)}
-                                                                        >
-                                                                                Back up profiles
-                                                                        </button>
+                                                                        >{t("Back up profiles")}</button>
                                                                         <button
                                                                                 className="quiet"
                                                                                 onClick={launchInspector}
                                                                                 disabled={Boolean(busyAction)}
-                                                                        >
-                                                                                Back up & launch editor
-                                                                        </button>
+                                                                        >{t("Back up & launch editor")}</button>
                                                                 </>
                                                         )}
                                                 </div>
-                                                <p>
-                                                        Installing, backing up, or launching the editor does not complete policy application.
-                                                </p>
+                                                <p>{t("Installing, backing up, or launching the editor does not complete policy application.")}</p>
                                                 <button
                                                         className="primary danger-button"
                                                         onClick={openManualConfirmation}
                                                         disabled={Boolean(busyAction)}
-                                                >
-                                                        Review & confirm applied NVIDIA policy
-                                                </button>
+                                                >{t("Review & confirm applied NVIDIA policy")}</button>
                                         </div>
                                 );
                         default:
                                 return (
-                                        <p className="blocked-copy" role="alert">
-                                                This durable step has no frontend action. Reload the plan or use Configure for configuration changes.
-                                        </p>
+                                        <p className="blocked-copy" role="alert">{t("This durable step has no frontend action. Reload the plan or use Configure for configuration changes.")}</p>
                                 );
                 }
         };
 
         return (
                 <div className="deployment-shell">
-                        <aside className="deployment-rail" aria-label="Deployment status">
-                                <span className="kicker">PINNED DEPLOYMENT</span>
-                                <h2>{selectedProfile?.displayName ?? "No profile yet"}</h2>
+                        <aside className="deployment-rail" aria-label={t("Deployment status")}>
+                                <span className="kicker">{t("PINNED DEPLOYMENT")}</span>
+                                <h2>{selectedProfile?.displayName ?? t("No profile yet")}</h2>
                                 {selectedProfile ? (
                                         <>
                                                 <StatusLine
-                                                        label="Machine preflight"
+                                                        label={t("Machine preflight")}
                                                         state={
                                                                 preflightExact === false
                                                                         ? "bad"
@@ -353,7 +323,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         }
                                                 />
                                                 <StatusLine
-                                                        label="Artifact prepared"
+                                                        label={t("Artifact prepared")}
                                                         state={
                                                                 stepCompleted("verifyPatchedArtifact")
                                                                         ? "ok"
@@ -361,7 +331,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         }
                                                 />
                                                 <StatusLine
-                                                        label="Package exported"
+                                                        label={t("Package exported")}
                                                         state={
                                                                 packageReceipt
                                                                         ? "ok"
@@ -369,7 +339,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         }
                                                 />
                                                 <StatusLine
-                                                        label="BAR1 observed"
+                                                        label={t("BAR1 observed")}
                                                         state={
                                                                 stepCompleted("verifyResizableBar")
                                                                         ? "ok"
@@ -378,16 +348,17 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 />
                                                 <hr />
                                                 <dl>
-                                                        <dt>Profile ID</dt>
+                                                        <dt>{t("Profile ID")}</dt>
                                                         <dd className="mono-wrap">
                                                                 {selectedProfile.profileId}
                                                         </dd>
-                                                        <dt>Active gate</dt>
+                                                        <dt>{t("Active gate")}</dt>
                                                         <dd>
-                                                                {activeStep?.title ??
-                                                                        "No ready step"}
+                                                                {activeStep
+                                                                        ? t(activeStep.title)
+                                                                        : t("No ready step")}
                                                         </dd>
-                                                        <dt>Plan revision</dt>
+                                                        <dt>{t("Plan revision")}</dt>
                                                         <dd>
                                                                 {plan?.revision ??
                                                                         "—"}
@@ -395,39 +366,24 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 </dl>
                                         </>
                                 ) : (
-                                        <p className="muted-copy">
-                                                Select a source image and pin it
-                                                to this exact machine first.
-                                        </p>
+                                        <p className="muted-copy">{t("Select a source image and pin it to this exact machine first.")}</p>
                                 )}
                                 <div className="rail-note safety-note">
-                                        <strong>Manual boundary</strong>
-                                        <p>
-                                                This app prepares and verifies a
-                                                package. You perform vendor
-                                                flashing, setup changes, power
-                                                cycles, and hardware work.
-                                        </p>
+                                        <strong>{t("Manual boundary")}</strong>
+                                        <p>{t("This app prepares and verifies a package. You perform vendor flashing, setup changes, power cycles, and hardware work.")}</p>
                                 </div>
                         </aside>
 
                         <main className="deployment-content">
                                 <section className="deployment-intro">
                                         <div>
-                                                <span className="kicker">
-                                                        EXACT MACHINE / RECOVERABLE ARTIFACT
-                                                </span>
-                                                <h2>Prepare, hand off, then verify</h2>
-                                                <p>
-                                                        Automated steps stop at
-                                                        signed evidence. Physical
-                                                        and firmware-screen steps
-                                                        stay visible as gates.
-                                                </p>
+                                                <span className="kicker">{t("EXACT MACHINE / RECOVERABLE ARTIFACT")}</span>
+                                                <h2>{t("Prepare, hand off, then verify")}</h2>
+                                                <p>{t("Automated steps stop at signed evidence. Physical and firmware-screen steps stay visible as gates.")}</p>
                                         </div>
                                         <div className="truth-badge">
-                                                <strong>NO AUTO-FLASH</strong>
-                                                <span>Manual vendor handoff</span>
+                                                <strong>{t("NO AUTO-FLASH")}</strong>
+                                                <span>{t("Manual vendor handoff")}</span>
                                         </div>
                                 </section>
 
@@ -440,9 +396,9 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                 : "status"
                                                 }
                                         >
-                                                <span>{activity.text}</span>
+                                                <span>{t(activity.text)}</span>
                                                 <button
-                                                        aria-label="Dismiss operation status"
+                                                        aria-label={t("Dismiss operation status")}
                                                         onClick={() =>
                                                                 setActivity(null)
                                                         }
@@ -455,26 +411,19 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                 <section className="journey-panel" aria-labelledby="source-title">
                                         <JourneyHeading
                                                 number="01"
-                                                title="Pin source & recovery"
+                                                title={t("Pin source & recovery")}
                                                 id="source-title"
-                                                copy="Read and hash the exact vendor image, then document the install and recovery route."
+                                                copy={t("Read and hash the exact vendor image, then document the install and recovery route.")}
                                         />
                                         {msi && (
                                                 <div className="detected-route">
-                                                        <strong>Exact MSI board recognized</strong>
-                                                        <span>
-                                                                Native ReBAR,
-                                                                M-FLASH, and Flash
-                                                                BIOS Button defaults
-                                                                are prefilled from
-                                                                the official manual.
-                                                                Confirm them below.
-                                                        </span>
+                                                        <strong>{t("Exact MSI board recognized")}</strong>
+                                                        <span>{t("Native ReBAR, M-FLASH, and Flash BIOS Button defaults are prefilled from the official manual. Confirm them below.")}</span>
                                                 </div>
                                         )}
                                         <div className="form-grid">
                                                 <label className="field span-2">
-                                                        <span>Profile name</span>
+                                                        <span>{t("Profile name")}</span>
                                                         <input
                                                                 value={displayName}
                                                                 onChange={(event) =>
@@ -485,11 +434,11 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         />
                                                 </label>
                                                 <label className="field span-2">
-                                                        <span>Exact firmware image</span>
+                                                        <span>{t("Exact firmware image")}</span>
                                                         <div className="path-control">
                                                                 <input
                                                                         value={firmwarePath}
-                                                                        placeholder="Choose a vendor BIOS image or enter an absolute path"
+                                                                        placeholder={t("Choose a vendor BIOS image or enter an absolute path")}
                                                 onChange={(event) => {
                                                                                 setFirmwarePath(
                                                                                         event.target.value,
@@ -499,9 +448,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                 <button
                                                                         onClick={chooseFirmware}
                                                                         disabled={Boolean(busyAction)}
-                                                                >
-                                                                        Choose file
-                                                                </button>
+                                                                >{t("Choose file")}</button>
                                                                 <button
                                                                         className="quiet"
                                                                         onClick={inspectManualPath}
@@ -510,9 +457,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                                 !firmwarePath ||
                                                                                 Boolean(firmware)
                                                                         }
-                                                                >
-                                                                        Inspect
-                                                                </button>
+                                                                >{t("Inspect")}</button>
                                                         </div>
                                                         {firmware && (
                                                                 <small className="verified-line">
@@ -527,7 +472,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         )}
                                                 </label>
                                                 <label className="field">
-                                                        <span>Board path</span>
+                                                        <span>{t("Board path")}</span>
                                                         <select
                                                                 value={boardPath}
                                                                 onChange={(event) => {
@@ -536,16 +481,12 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                         );
                                                                 }}
                                                         >
-                                                                <option value="nativeResizableBar">
-                                                                        Native Resizable BAR
-                                                                </option>
-                                                                <option value="legacyAbove4g">
-                                                                        Legacy Above 4G
-                                                                </option>
+                                                                <option value="nativeResizableBar">{t("Native Resizable BAR")}</option>
+                                                                <option value="legacyAbove4g">{t("Legacy Above 4G")}</option>
                                                         </select>
                                                 </label>
                                                 <label className="field">
-                                                        <span>Vendor install route</span>
+                                                        <span>{t("Vendor install route")}</span>
                                                         <select
                                                                 value={installMethod}
                                                                 onChange={(event) =>
@@ -554,22 +495,14 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                         )
                                                                 }
                                                         >
-                                                                <option value="firmwareSetupUtility">
-                                                                        Firmware setup utility
-                                                                </option>
-                                                                <option value="usbFlashback">
-                                                                        USB flashback
-                                                                </option>
-                                                                <option value="vendorWindowsUtility">
-                                                                        Vendor Windows utility
-                                                                </option>
-                                                                <option value="externalSpiProgrammer">
-                                                                        External SPI programmer
-                                                                </option>
+                                                                <option value="firmwareSetupUtility">{t("Firmware setup utility")}</option>
+                                                                <option value="usbFlashback">{t("USB flashback")}</option>
+                                                                <option value="vendorWindowsUtility">{t("Vendor Windows utility")}</option>
+                                                                <option value="externalSpiProgrammer">{t("External SPI programmer")}</option>
                                                         </select>
                                                 </label>
                                                 <label className="field">
-                                                        <span>Recovery route</span>
+                                                        <span>{t("Recovery route")}</span>
                                                         <select
                                                                 value={recoveryMethod}
                                                                 onChange={(event) =>
@@ -578,15 +511,15 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                         )
                                                                 }
                                                         >
-                                                                <option value="usbFlashback">USB flashback</option>
-                                                                <option value="dualBios">Dual BIOS</option>
-                                                                <option value="vendorRecovery">Vendor recovery</option>
-                                                                <option value="externalSpiProgrammer">External SPI programmer</option>
-                                                                <option value="none">None — profile will be refused</option>
+                                                                <option value="usbFlashback">{t("USB flashback")}</option>
+                                                                <option value="dualBios">{t("Dual BIOS")}</option>
+                                                                <option value="vendorRecovery">{t("Vendor recovery")}</option>
+                                                                <option value="externalSpiProgrammer">{t("External SPI programmer")}</option>
+                                                                <option value="none">{t("None — profile will be refused")}</option>
                                                         </select>
                                                 </label>
                                                 <label className="field">
-                                                        <span>Official instructions URL</span>
+                                                        <span>{t("Official instructions URL")}</span>
                                                         <input
                                                                 type="url"
                                                                 value={instructionsUrl}
@@ -598,9 +531,9 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         />
                                                 </label>
                                                 <label className="field span-2">
-                                                        <span>Install handoff note</span>
+                                                        <span>{t("Install handoff note")}</span>
                                                         <input
-                                                                value={installNote}
+                                                                value={t(installNote)}
                                                                 onChange={(event) =>
                                                                         setInstallNote(
                                                                                 event.target.value,
@@ -609,9 +542,9 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         />
                                                 </label>
                                                 <label className="field span-2">
-                                                        <span>Recovery note</span>
+                                                        <span>{t("Recovery note")}</span>
                                                         <input
-                                                                value={recoveryNote}
+                                                                value={t(recoveryNote)}
                                                                 onChange={(event) =>
                                                                         setRecoveryNote(
                                                                                 event.target.value,
@@ -627,13 +560,9 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 >
                                                         <div className="legacy-analysis-head">
                                                                 <div>
-                                                                        <span className="step">READ-ONLY</span>
-                                                                        <h4 id="legacy-analysis-title">
-                                                                                Exact legacy patch analysis
-                                                                        </h4>
-                                                                        <p>
-                                                                                Match counts come only from the pinned Rust analyzer. Analysis does not mutate or flash the image.
-                                                                        </p>
+                                                                        <span className="step">{t("READ-ONLY")}</span>
+                                                                        <h4 id="legacy-analysis-title">{t("Exact legacy patch analysis")}</h4>
+                                                                        <p>{t("Match counts come only from the pinned Rust analyzer. Analysis does not mutate or flash the image.")}</p>
                                                                 </div>
                                                                 <button
                                                                         type="button"
@@ -645,10 +574,10 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                 >
                                                                         {legacyAnalysisStatus ===
                                                                         "pending"
-                                                                                ? "Analyzing exact image…"
+                                                                                ? t("Analyzing exact image…")
                                                                                 : legacyAnalysisValid
-                                                                                  ? "Analyze again"
-                                                                                  : "Analyze exact image"}
+                                                                                  ? t("Analyze again")
+                                                                                  : t("Analyze exact image")}
                                                                 </button>
                                                         </div>
                                                         <p
@@ -656,13 +585,13 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                 role="status"
                                                                 aria-live="polite"
                                                         >
-                                                                {legacyNextAction}
+                                                                {t(legacyNextAction)}
                                                         </p>
                                                         {legacyAnalysis &&
                                                                 legacyAnalysisValid && (
                                                                         <div className="legacy-results">
                                                                                 <div className="legacy-fingerprint">
-                                                                                        <span>Analyzed source</span>
+                                                                                        <span>{t("Analyzed source")}</span>
                                                                                         <strong>
                                                                                                 {legacyAnalysis.value.firmware.fileName} · {Math.round(legacyAnalysis.value.firmware.byteLength / 1048576)} MiB
                                                                                         </strong>
@@ -699,14 +628,14 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                                                                 <div className="legacy-catalog-head">
                                                                                                                         <div>
                                                                                                                                 <h5 id={`catalog-${catalog.catalog}`}>
-                                                                                                                                        {catalogLabels[catalog.catalog]}
+                                                                                                                                        {t(catalogLabels[catalog.catalog])}
                                                                                                                                 </h5>
                                                                                                                                 <small>
-                                                                                                                                        {applicable.length} applicable · {absent.length} absent · {blocked.length} blocked
+                                                                                                                                        {n(applicable.length)} {t("applicable")} · {n(absent.length)} {t("absent")} · {n(blocked.length)} {t("blocked")}
                                                                                                                                 </small>
                                                                                                                         </div>
                                                                                                                         <span className="mono-wrap">
-                                                                                                                                source {shortHash(catalog.sourceSha256)}
+                                                                                                                                {t("source")} {shortHash(catalog.sourceSha256)}
                                                                                                                         </span>
                                                                                                                 </div>
                                                                                                                 {applicable.length >
@@ -738,21 +667,20 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                                                                                                                 />
                                                                                                                                                                 <span>
                                                                                                                                                                         <strong>
-                                                                                                                                                                                {rule.description ??
-                                                                                                                                                                                        "Pinned compatibility rule"}
+                                                                                                                                                                                {t(rule.description ?? "Pinned compatibility rule")}
                                                                                                                                                                         </strong>
                                                                                                                                                                         <small>
-                                                                                                                                                                                {rule.expectedMatches} exact {rule.expectedMatches === 1 ? "match" : "matches"} · section 0x{rule.sectionType.toString(16).padStart(2, "0")}
+                                                                                                                                                                                {exactMatches(rule.expectedMatches!)} · {t("section")} 0x{rule.sectionType.toString(16).padStart(2, "0")}
                                                                                                                                                                         </small>
                                                                                                                                                                         {rule.requiredRisks.length >
                                                                                                                                                                                 0 && (
                                                                                                                                                                                 <em>
-                                                                                                                                                                                        Requires {rule.requiredRisks.map((risk) => riskLabels[risk]).join(", ")}
+                                                                                                                                                                                        {t("Requires")} {rule.requiredRisks.map((risk) => t(riskLabels[risk])).join(" · ")}
                                                                                                                                                                                 </em>
                                                                                                                                                                         )}
                                                                                                                                                                 </span>
                                                                                                                                                                 {rule.recommended && (
-                                                                                                                                                                        <b>RECOMMENDED</b>
+                                                                                                                                                                        <b>{t("RECOMMENDED")}</b>
                                                                                                                                                                 )}
                                                                                                                                                         </label>
                                                                                                                                                 );
@@ -760,13 +688,11 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                                                                                 )}
                                                                                                                         </div>
                                                                                                                 ) : (
-                                                                                                                        <p className="legacy-empty">
-                                                                                                                                No applicable rules in this catalog.
-                                                                                                                        </p>
+                                                                                                                        <p className="legacy-empty">{t("No applicable rules in this catalog.")}</p>
                                                                                                                 )}
                                                                                                                 {absent.length > 0 && (
                                                                                                                         <p className="legacy-absent">
-                                                                                                                                {absent.length} rule{absent.length === 1 ? " is" : "s are"} absent from this image and cannot be selected.
+                                                                                                                                {absentRules(absent.length)}
                                                                                                                         </p>
                                                                                                                 )}
                                                                                                                 {blocked.map(
@@ -776,10 +702,10 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                                                                                         key={rule.ruleId}
                                                                                                                                 >
                                                                                                                                         <strong>
-                                                                                                                                                Blocked · {rule.description ?? "Pinned compatibility rule"}
+                                                                                                                                                {t("Blocked")} · {t(rule.description ?? "Pinned compatibility rule")}
                                                                                                                                         </strong>
                                                                                                                                         <span>
-                                                                                                                                                {rule.blockedReason ?? "The analyzer could not prove a safe match."}
+                                                                                                                                                {t(rule.blockedReason ?? "The analyzer could not prove a safe match.")}
                                                                                                                                         </span>
                                                                                                                                 </div>
                                                                                                                         ),
@@ -794,11 +720,9 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                                                 className="legacy-risk-panel"
                                                                                                 aria-labelledby="legacy-risk-title"
                                                                                         >
-                                                                                                <h5 id="legacy-risk-title">
-                                                                                                        Explicit risk acknowledgements
-                                                                                                </h5>
+                                                                                                <h5 id="legacy-risk-title">{t("Explicit risk acknowledgements")}</h5>
                                                                                                 <p>
-                                                                                                        For each selected risk, describe this exact image and include fingerprint <code>{acknowledgementHash}</code>. A generic confirmation is refused.
+                                                                                                        {t("For each selected risk, describe this exact image and include fingerprint")} <code>{acknowledgementHash}</code>. {t("A generic confirmation is refused.")}
                                                                                                 </p>
                                                                                                 {selectedLegacyRisks.map(
                                                                                                         (risk) => {
@@ -814,11 +738,9 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                                                                         >
                                                                                                                                 <label htmlFor={noteId}>
                                                                                                                                         <strong>
-                                                                                                                                                {riskLabels[risk]}
+                                                                                                                                                {t(riskLabels[risk])}
                                                                                                                                         </strong>
-                                                                                                                                        <span>
-                                                                                                                                                Image-specific acknowledgement note
-                                                                                                                                        </span>
+                                                                                                                                        <span>{t("Image-specific acknowledgement note")}</span>
                                                                                                                                 </label>
                                                                                                                                 <textarea
                                                                                                                                         id={noteId}
@@ -843,9 +765,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                                                                                                 }
                                                                                                                                         />
                                                                                                                                         <span>
-                                                                                                                                                <strong>
-                                                                                                                                                        I reviewed this risk for the exact analyzed firmware.
-                                                                                                                                                </strong>
+                                                                                                                                                <strong>{t("I reviewed this risk for the exact analyzed firmware.")}</strong>
                                                                                                                                         </span>
                                                                                                                                 </label>
                                                                                                                         </div>
@@ -869,12 +789,8 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         }
                                                 />
                                                 <span>
-                                                        <strong>
-                                                                I checked the vendor install and recovery instructions for this board.
-                                                        </strong>
-                                                        <small>
-                                                                This confirmation records a documented route; it does not prove a recovery attempt.
-                                                        </small>
+                                                        <strong>{t("I checked the vendor install and recovery instructions for this board.")}</strong>
+                                                        <small>{t("This confirmation records a documented route; it does not prove a recovery attempt.")}</small>
                                                 </span>
                                         </label>
                                         <div className="panel-actions">
@@ -895,8 +811,8 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         onClick={createProfile}
                                                 >
                                                         {busyAction === "profile"
-                                                                ? "Pinning profile…"
-                                                                : "Create machine-bound profile"}
+                                                                ? t("Pinning profile…")
+                                                                : t("Create machine-bound profile")}
                                                 </button>
                                         </div>
                                 </section>
@@ -904,12 +820,12 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                 <section className="journey-panel" aria-labelledby="artifact-title">
                                         <JourneyHeading
                                                 number="02"
-                                                title="Preflight & export"
+                                                title={t("Preflight & export")}
                                                 id="artifact-title"
-                                                copy="Refuse drift, prepare the Rust firmware artifact, and export a read-back verified package."
+                                                copy={t("Refuse drift, prepare the Rust firmware artifact, and export a read-back verified package.")}
                                         />
                                         <label className="field profile-select">
-                                                <span>Machine profile</span>
+                                                <span>{t("Machine profile")}</span>
                                                 <select
                                                         value={selectedProfileId}
                                                         disabled={Boolean(busyAction)}
@@ -918,7 +834,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         }
                                                 >
                                                         {!profiles.length && (
-                                                                <option value="">No stored profiles</option>
+                                                                <option value="">{t("No stored profiles")}</option>
                                                         )}
                                                         {profiles.map((profile) => (
                                                                 <option
@@ -934,14 +850,14 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 <div className="active-workflow" aria-live="polite">
                                                         <div className="active-workflow-head">
                                                                 <div>
-                                                                        <span className="step">ACTIVE STEP · REVISION {plan.revision}</span>
+                                                                        <span className="step">{t("ACTIVE STEP")} · {t("REVISION")} {plan.revision}</span>
                                                                         <h4>
-                                                                                {activeStep?.title ?? "Deployment complete"}
+                                                                                {activeStep ? t(activeStep.title) : t("Deployment complete")}
                                                                         </h4>
                                                                         <p>
                                                                                 {activeStep
-                                                                                        ? "Only this step can advance the durable plan. Completed receipts survive reload."
-                                                                                        : "No remaining step is ready; every gate has durable evidence."}
+                                                                                        ? t("Only this step can advance the durable plan. Completed receipts survive reload.")
+                                                                                        : t("No remaining step is ready; every gate has durable evidence.")}
                                                                         </p>
                                                                 </div>
                                                                 <strong>
@@ -953,8 +869,8 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         </div>
                                                         {workflowReceipt && (
                                                                 <div className="workflow-receipt" role="status">
-                                                                        <strong>{workflowReceipt.title}</strong>
-                                                                        <span>{workflowReceipt.detail}</span>
+                                                                        <strong>{t(workflowReceipt.title)}</strong>
+                                                                        <span>{t(workflowReceipt.detail)}</span>
                                                                 </div>
                                                         )}
                                                         {barEvidence && (
@@ -968,7 +884,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         {installation && activeStep?.id === "configureNvidiaApplications" && (
                                                                 <div className="workflow-receipt">
                                                                         <strong>Profile Inspector {installation.manifest.version} verified</strong>
-                                                                        <span>Tool launch is a handoff only; policy remains incomplete until manual confirmation.</span>
+                                                                        <span>{t("Tool launch is a handoff only; policy remains incomplete until manual confirmation.")}</span>
                                                                 </div>
                                                         )}
                                                         {backup && activeStep?.id === "configureNvidiaApplications" && (
@@ -984,7 +900,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 </div>
                                         )}
                                         {plan && (
-                                                <ol className="plan-list" aria-label="Deployment plan">
+                                                <ol className="plan-list" aria-label={t("Deployment plan")}>
                                                         {plan.steps.map((step) => (
                                                                 <li
                                                                         key={step.id}
@@ -992,17 +908,17 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                 >
                                                                         <i aria-hidden="true" />
                                                                         <div>
-                                                                                <strong>{step.title}</strong>
+                                                                                <strong>{t(step.title)}</strong>
                                                                                 <span>
                                                                                         {step.kind === "automated"
-                                                                                                ? "Automated"
+                                                                                                ? t("Automated")
                                                                                                 : step.kind === "physicalConfirmation"
-                                                                                                  ? "Physical confirmation"
+                                                                                                  ? t("Physical confirmation")
                                                                                                   : step.kind === "firmwareManual"
-                                                                                                    ? "Manual firmware gate"
+                                                                                                    ? t("Manual firmware gate")
                                                                                                     : step.kind === "externalTool"
-                                                                                                      ? "Verified external tool"
-                                                                                                      : "Restart gate"}
+                                                                                                      ? t("Verified external tool")
+                                                                                                      : t("Restart gate")}
                                                                                 </span>
                                                                         </div>
                                                                         <b>{step.state}</b>
@@ -1014,24 +930,22 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 <button
                                                         onClick={compare}
                                                         disabled={Boolean(busyAction) || !selectedProfileId}
-                                                >
-                                                        Run exact-machine preflight
-                                                </button>
+                                                >{t("Run exact-machine preflight")}</button>
                                         </div>
                                         {preparation?.patchedFirmware && (
                                                 <div className="artifact-receipt" role="status">
-                                                        <strong>Patched artifact verified</strong>
+                                                        <strong>{t("Patched artifact verified")}</strong>
                                                         <span>
-                                                                {preparation.patchedFirmware.byteLength.toLocaleString()} bytes · SHA-256 {shortHash(preparation.patchedFirmware.sha256)}
+                                                                {n(preparation.patchedFirmware.byteLength)} {t("bytes")} · SHA-256 {shortHash(preparation.patchedFirmware.sha256)}
                                                         </span>
-                                                        <small>No BIOS flash has occurred.</small>
+                                                        <small>{t("No BIOS flash has occurred.")}</small>
                                                 </div>
                                         )}
                                         <div className="path-control export-control">
                                                 <input
-                                                        aria-label="Deployment package destination"
+                                                        aria-label={t("Deployment package destination")}
                                                         value={destination}
-                                                        placeholder="Choose an empty destination folder"
+                                                        placeholder={t("Choose an empty destination folder")}
                                                         onChange={(event) =>
                                                                 setDestination(event.target.value)
                                                         }
@@ -1040,9 +954,7 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                         className="quiet"
                                                         onClick={chooseDestination}
                                                         disabled={Boolean(busyAction)}
-                                                >
-                                                        Choose folder
-                                                </button>
+                                                >{t("Choose folder")}</button>
                                                 <button
                                                         className="primary"
                                                         onClick={exportPackage}
@@ -1051,13 +963,11 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                 plan?.steps.find((step) => step.id === "verifyPatchedArtifact")?.state !== "completed" ||
                                                                 !destination
                                                         }
-                                                >
-                                                        Export package
-                                                </button>
+                                                >{t("Export package")}</button>
                                         </div>
                                         {packageReceipt && (
                                                 <div className="artifact-receipt" role="status">
-                                                        <strong>Package exported — manual handoff next</strong>
+                                                        <strong>{t("Package exported — manual handoff next")}</strong>
                                                         <span className="mono-wrap">{packageReceipt.packagePath}</span>
                                                         <small>
                                                                 {packageReceipt.manifest.files.length} files verified · manifest {shortHash(packageReceipt.manifestSha256)}
@@ -1069,25 +979,25 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                 <section className="journey-panel" aria-labelledby="firmware-title">
                                         <JourneyHeading
                                                 number="03"
-                                                title="Manual boundaries remain explicit"
+                                                title={t("Manual boundaries remain explicit")}
                                                 id="firmware-title"
-                                                copy="Vendor flash, setup values, returned boot, and NVIDIA policy are never inferred from a local click."
+                                                copy={t("Vendor flash, setup values, returned boot, and NVIDIA policy are never inferred from a local click.")}
                                         />
                                         <div className="manual-gates">
                                                 <div>
-                                                        <span>MANUAL</span>
-                                                        <strong>Vendor flash</strong>
-                                                        <p>Select the exported artifact in the documented vendor utility. Keep power stable.</p>
+                                                        <span>{t("MANUAL")}</span>
+                                                        <strong>{t("Vendor flash")}</strong>
+                                                        <p>{t("Select the exported artifact in the documented vendor utility. Keep power stable.")}</p>
                                                 </div>
                                                 <div>
-                                                        <span>PHYSICAL</span>
-                                                        <strong>Recovery readiness</strong>
-                                                        <p>Keep the pinned recovery route and original image available before flashing.</p>
+                                                        <span>{t("PHYSICAL")}</span>
+                                                        <strong>{t("Recovery readiness")}</strong>
+                                                        <p>{t("Keep the pinned recovery route and original image available before flashing.")}</p>
                                                 </div>
                                                 <div>
-                                                        <span>MANUAL</span>
-                                                        <strong>UEFI values</strong>
-                                                        <p>Confirm Above 4G Decoding and Resizable BAR in firmware. The app does not change them.</p>
+                                                        <span>{t("MANUAL")}</span>
+                                                        <strong>{t("UEFI values")}</strong>
+                                                        <p>{t("Confirm Above 4G Decoding and Resizable BAR in firmware. The app does not change them.")}</p>
                                                 </div>
                                         </div>
                                 </section>
@@ -1102,14 +1012,14 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 aria-modal="true"
                                                 aria-labelledby="reboot-title"
                                         >
-                                                <span className="kicker">IMMEDIATE RESTART</span>
-                                                <h2 id="reboot-title">Restart Windows into firmware setup?</h2>
+                                                <span className="kicker">{t("IMMEDIATE RESTART")}</span>
+                                                <h2 id="reboot-title">{t("Restart Windows into firmware setup?")}</h2>
                                                 <p>
-                                                        This sends <code>{rebootPreview.command} {rebootPreview.arguments.join(" ")}</code>. It does not flash firmware or change setup values.
+                                                        {t("This sends")} <code>{rebootPreview.command} {rebootPreview.arguments.join(" ")}</code>. {t("It does not flash firmware or change setup values.")}
                                                 </p>
                                                 <div className="warning-box">
                                                         {rebootPreview.warnings.map((warning) => (
-                                                                <span key={warning}>{warning}</span>
+                                                                <span key={warning}>{t(warning)}</span>
                                                         ))}
                                                 </div>
                                                 <label className="consequence-check">
@@ -1120,21 +1030,17 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                 onChange={(event) => setSavedWork(event.target.checked)}
                                                         />
                                                         <span>
-                                                                <strong>I saved and closed my work.</strong>
-                                                                <small>The restart is immediate. Applications are not explicitly force-closed.</small>
+                                                                <strong>{t("I saved and closed my work.")}</strong>
+                                                                <small>{t("The restart is immediate. Applications are not explicitly force-closed.")}</small>
                                                         </span>
                                                 </label>
                                                 <div className="modal-actions">
-                                                        <button className="quiet" onClick={() => setShowReboot(false)}>
-                                                                Cancel
-                                                        </button>
+                                                        <button className="quiet" onClick={() => setShowReboot(false)}>{t("Cancel")}</button>
                                                         <button
                                                                 className="primary danger-button"
                                                                 disabled={!savedWork}
                                                                 onClick={reboot}
-                                                        >
-                                                                Restart to firmware UI
-                                                        </button>
+                                                        >{t("Restart to firmware UI")}</button>
                                                 </div>
                                         </div>
                                 </div>
@@ -1148,14 +1054,14 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 aria-modal="true"
                                                 aria-labelledby="manual-confirm-title"
                                         >
-                                                <span className="kicker">OPERATOR ATTESTATION · REVISION {manualPreview.planRevision}</span>
-                                                <h2 id="manual-confirm-title">{manualPreview.title}</h2>
+                                                <span className="kicker">{t("OPERATOR ATTESTATION")} · {t("REVISION")} {manualPreview.planRevision}</span>
+                                                <h2 id="manual-confirm-title">{t(manualPreview.title)}</h2>
                                                 <p>
-                                                        This records a durable attestation for only <code>{manualPreview.stepId}</code>. It cannot prove the external operation automatically.
+                                                        {t("This records a durable attestation for only")} <code>{manualPreview.stepId}</code>. {t("It cannot prove the external operation automatically.")}
                                                 </p>
                                                 <div className="warning-box">
                                                         {manualPreview.warnings.map((warning) => (
-                                                                <span key={warning}>{warning}</span>
+                                                                <span key={warning}>{t(warning)}</span>
                                                         ))}
                                                 </div>
                                                 <label className="consequence-check">
@@ -1170,21 +1076,17 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                 }
                                                         />
                                                         <span>
-                                                                <strong>I completed and independently reviewed this exact step.</strong>
-                                                                <small>The token is bound to this profile, active step, and plan revision.</small>
+                                                                <strong>{t("I completed and independently reviewed this exact step.")}</strong>
+                                                                <small>{t("The token is bound to this profile, active step, and plan revision.")}</small>
                                                         </span>
                                                 </label>
                                                 <div className="modal-actions">
-                                                        <button className="quiet" onClick={() => setShowManual(false)}>
-                                                                Cancel
-                                                        </button>
+                                                        <button className="quiet" onClick={() => setShowManual(false)}>{t("Cancel")}</button>
                                                         <button
                                                                 className="primary danger-button"
                                                                 disabled={!manualConfirmed || Boolean(busyAction)}
                                                                 onClick={confirmManual}
-                                                        >
-                                                                Record completed step
-                                                        </button>
+                                                        >{t("Record completed step")}</button>
                                                 </div>
                                         </div>
                                 </div>
@@ -1198,14 +1100,14 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                 aria-modal="true"
                                                 aria-labelledby="configuration-reboot-title"
                                         >
-                                                <span className="kicker">RESTART REQUEST · PLAN DOES NOT ADVANCE</span>
-                                                <h2 id="configuration-reboot-title">Restart Windows after configuration?</h2>
+                                                <span className="kicker">{t("RESTART REQUEST · PLAN DOES NOT ADVANCE")}</span>
+                                                <h2 id="configuration-reboot-title">{t("Restart Windows after configuration?")}</h2>
                                                 <p>
-                                                        This sends <code>{configurationRebootPreview.command} {configurationRebootPreview.arguments.join(" ")}</code>. A later Windows boot must be verified separately.
+                                                        {t("This sends")} <code>{configurationRebootPreview.command} {configurationRebootPreview.arguments.join(" ")}</code>. {t("A later Windows boot must be verified separately.")}
                                                 </p>
                                                 <div className="warning-box">
                                                         {configurationRebootPreview.warnings.map((warning) => (
-                                                                <span key={warning}>{warning}</span>
+                                                                <span key={warning}>{t(warning)}</span>
                                                         ))}
                                                 </div>
                                                 <label className="consequence-check">
@@ -1216,21 +1118,17 @@ export function DeploymentWorkspace({ snapshot }: Props) {
                                                                 onChange={(event) => setSavedWork(event.target.checked)}
                                                         />
                                                         <span>
-                                                                <strong>I saved and closed my work.</strong>
-                                                                <small>The command omits /f and the restart request itself does not complete this step.</small>
+                                                                <strong>{t("I saved and closed my work.")}</strong>
+                                                                <small>{t("The command omits /f and the restart request itself does not complete this step.")}</small>
                                                         </span>
                                                 </label>
                                                 <div className="modal-actions">
-                                                        <button className="quiet" onClick={() => setShowConfigurationReboot(false)}>
-                                                                Cancel
-                                                        </button>
+                                                        <button className="quiet" onClick={() => setShowConfigurationReboot(false)}>{t("Cancel")}</button>
                                                         <button
                                                                 className="primary danger-button"
                                                                 disabled={!savedWork || Boolean(busyAction)}
                                                                 onClick={requestConfigurationReboot}
-                                                        >
-                                                                Request restart
-                                                        </button>
+                                                        >{t("Request restart")}</button>
                                                 </div>
                                         </div>
                                 </div>

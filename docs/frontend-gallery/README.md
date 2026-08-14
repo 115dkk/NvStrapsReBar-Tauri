@@ -73,7 +73,28 @@ until the selected profile's recommendation is reviewed.
 
 ![Backend-recommended deployment configuration at 1180 by 760 pixels](06-backend-recommendation-1180x760.png)
 
+## 7. 한국어로 구성 확인
+
+언어를 바꾸면 페이지를 새로 불러오지 않아도 구성 화면, 접근성 이름,
+상태 문구가 바로 한국어로 바뀝니다. 편집 중인 초안과 선택값은 그대로
+유지됩니다.
+
+[원본 크기로 보기](07-korean-configure-1180x760.png)
+
+![1180×760 한국어 펌웨어 구성 화면](07-korean-configure-1180x760.png)
+
+## 8. 한국어로 배포 권장 구성 검토
+
+최소 지원 폭 900 px에서도 현재 단계, 백엔드 권장 구성, 검토 확인란이
+한 화면에 들어옵니다. 해시, 장치 이름, 선택자 값 같은 기술 정보는
+번역하지 않습니다.
+
+[원본 크기로 보기](08-korean-recommendation-900x760.png)
+
+![900×760 한국어 백엔드 권장 배포 구성 화면](08-korean-recommendation-900x760.png)
+
 ---
 
 Captured on Windows with Chromium 151.0.7922.34, `en-US`, 1x device scale, and
-reduced motion. Source build: repository `master` at `7794b6d`.
+reduced motion. Original English capture source: `7794b6d`. Korean capture
+source: `e53b28b`.

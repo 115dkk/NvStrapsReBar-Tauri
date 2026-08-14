@@ -54,6 +54,9 @@ authoritative. Keep RIIR, deployment automation, and physical-machine proof as s
 - Explicitly activate and follow `superloopy:superloopy-frontend` for that delegated work. The main
   agent reads the skill, constrains the Rust contract, reviews the result, runs final gates, and
   owns commits; the Sol agent does not commit.
+- Any Korean UI copy must also follow `superloopy:humanize-korean`. Preserve technical facts and
+  protected tokens, run its file-backed audit, and keep the resulting evidence with the frontend
+  run receipt. Pass this requirement explicitly to the Sol frontend owner.
 - Use a fresh `.superloopy/evidence/frontend/<run-id>/` for each logical frontend run. Visible or
   spatial changes require proportional `UX_CONTRACT.md`, `VISUAL_QA.md`, rendered Chromium
   captures, and helper verification. Record native and physical limitations explicitly.
