@@ -15,6 +15,27 @@ use crate::{
 
 pub use nvstraps_core::config::{Config as NvConfig, TARGET_PCI_BAR_DISABLED};
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DxeBar0ValidationError {
+    Unusable32BitRange,
+    InvalidRange,
+    NotNaturallyAligned,
+}
+
+impl DxeBar0ValidationError {
+    fn message(self, device_name: &str) -> String {
+        match self {
+            Self::Unusable32BitRange => {
+                format!("{device_name} has no usable 32-bit BAR0 range for the DXE driver")
+            }
+            Self::InvalidRange => format!("{device_name} has an invalid BAR0 range"),
+            Self::NotNaturallyAligned => {
+                format!("{device_name} has a BAR0 range that is not naturally aligned")
+            }
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ConfigDraft {
@@ -198,27 +219,7 @@ fn populate_hardware(config: &mut NvConfig, devices: &[GpuDevice]) -> BackendRes
         if selector.is_none_or(|value| value >= BAR_SIZE_EXCLUDED) {
             continue;
         }
-        if device.bar0_base == 0
-            || device.bar0_top < device.bar0_base
-            || device.bar0_base > u64::from(u32::MAX)
-            || device.bar0_top > u64::from(u32::MAX)
-        {
-            return Err(invalid(format!(
-                "{} has no usable 32-bit BAR0 range for the DXE driver",
-                device.name
-            )));
-        }
-        let bar_size = device
-            .bar0_top
-            .checked_sub(device.bar0_base)
-            .and_then(|size| size.checked_add(1))
-            .ok_or_else(|| invalid(format!("{} has an invalid BAR0 range", device.name)))?;
-        if device.bar0_base & 0xF != 0 || bar_size == 0 || device.bar0_base % bar_size != 0 {
-            return Err(invalid(format!(
-                "{} has a BAR0 range that is not naturally aligned",
-                device.name
-            )));
-        }
+        validate_dxe_bar0(device).map_err(|error| invalid(error.message(&device.name)))?;
 
         config.gpu_configs.push(GpuConfig {
             device_id: device.device_id,
@@ -260,6 +261,25 @@ fn populate_hardware(config: &mut NvConfig, devices: &[GpuDevice]) -> BackendRes
     }
     if config.bridge_configs.len() > MAX_BRIDGE_COUNT {
         return Err(invalid("too many PCI bridge records"));
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_dxe_bar0(device: &GpuDevice) -> Result<(), DxeBar0ValidationError> {
+    if device.bar0_base == 0
+        || device.bar0_top < device.bar0_base
+        || device.bar0_base > u64::from(u32::MAX)
+        || device.bar0_top > u64::from(u32::MAX)
+    {
+        return Err(DxeBar0ValidationError::Unusable32BitRange);
+    }
+    let bar_size = device
+        .bar0_top
+        .checked_sub(device.bar0_base)
+        .and_then(|size| size.checked_add(1))
+        .ok_or(DxeBar0ValidationError::InvalidRange)?;
+    if device.bar0_base & 0xF != 0 || bar_size == 0 || device.bar0_base % bar_size != 0 {
+        return Err(DxeBar0ValidationError::NotNaturallyAligned);
     }
     Ok(())
 }
@@ -501,6 +521,31 @@ mod tests {
         assert_eq!(effective_bar_size(&config, &sample_device(0x1E84)), Some(7));
         assert_eq!(config.gpu_configs.len(), 1);
         assert_eq!(config.bridge_configs.len(), 1);
+    }
+
+    #[test]
+    fn hardware_population_preserves_bar0_validation_errors() {
+        let draft = ConfigDraft {
+            global_mode: 1,
+            ..ConfigDraft::default()
+        };
+        let mut unusable = sample_device(0x1E84);
+        unusable.bar0_base = 0;
+        assert_eq!(
+            config_from_draft(&draft, &[unusable])
+                .unwrap_err()
+                .to_string(),
+            "invalid NvStrapsReBar configuration: Test GPU has no usable 32-bit BAR0 range for the DXE driver"
+        );
+
+        let mut misaligned = sample_device(0x1E84);
+        misaligned.bar0_base += 0x10;
+        assert_eq!(
+            config_from_draft(&draft, &[misaligned])
+                .unwrap_err()
+                .to_string(),
+            "invalid NvStrapsReBar configuration: Test GPU has a BAR0 range that is not naturally aligned"
+        );
     }
 
     #[test]

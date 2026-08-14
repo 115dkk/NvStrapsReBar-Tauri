@@ -104,12 +104,23 @@ ID lets adapters select board-specific defaults without repeating identity rules
 catalog entry means unknown, not unsupported. Support determination is independent from observing
 the current BAR aperture.
 
+### Resizable BAR observation
+
+The deep Rust Module that owns installed NVIDIA telemetry capture, reconciliation with the Windows
+PCI inventory, per-GPU aperture classification, mixed-state aggregation, application-owned patch
+configuration eligibility, and exact-profile expanded-aperture proof. Its small typed Interface
+separates plan-free current observation from plan-bound deployment evidence. Hardware capability
+remains the independent responsibility of Hardware support determination.
+
 ## Load-bearing invariants
 
 - Repository-owned runtime and build code is Rust or TypeScript; the RIIR gate rejects C/C++ and
   the removed EDK2 build path.
 - Hardware support knowledge is compiled into the Rust release; it does not depend on an external
   database or service. Known capability and current activation are reported as separate facts.
+- A mixed aperture observation preserves every target GPU row. Indeterminate evidence dominates
+  aggregate state, and a patch configuration fact never claims that firmware application will
+  succeed; success is established only by a later current-aperture observation.
 - Source firmware is never overwritten, flashed, or treated as interchangeable by file name.
 - A Machine Profile and Deployment Plan are bound to the same profile ID, source SHA-256, and
   recovery route.

@@ -41,7 +41,36 @@ pub struct NvidiaBar1Observation {
 pub enum ResizableBarApertureState {
     Expanded,
     Legacy256MiB,
+    Mixed,
     Indeterminate,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PatchConfigurationState {
+    NotNeeded,
+    Available,
+    Unavailable,
+    Indeterminate,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PatchConfigurationReasonCode {
+    AlreadyExpanded,
+    AutomaticTargetAvailable,
+    RegistryExcluded,
+    UnusableBar0,
+    ApertureIndeterminate,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PatchConfigurationAssessment {
+    pub state: PatchConfigurationState,
+    pub reason_code: PatchConfigurationReasonCode,
+    pub target_selector: Option<u8>,
+    pub target_size_bytes: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -53,6 +82,7 @@ pub struct ResizableBarGpuInspection {
     pub windows_bar_size_bytes: String,
     pub state: ResizableBarApertureState,
     pub reason: String,
+    pub patch_configuration: PatchConfigurationAssessment,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -67,7 +97,7 @@ pub struct ResizableBarInspection {
 
 pub fn observe_current_apertures(devices: &[GpuDevice]) -> BackendResult<ResizableBarInspection> {
     let capture = nvidia_smi::capture()?;
-    let evidence = assessment::build_evidence(String::new(), capture, devices)?;
+    let evidence = assessment::build_current_inventory_evidence(capture, devices)?;
     Ok(assessment::build_inspection(&evidence, devices))
 }
 
@@ -76,7 +106,7 @@ pub fn collect_exact_profile_evidence(
     devices: &[GpuDevice],
 ) -> BackendResult<NvidiaSmiEvidence> {
     let capture = nvidia_smi::capture()?;
-    let evidence = assessment::build_evidence(profile_id, capture, devices)?;
+    let evidence = assessment::build_exact_profile_evidence(profile_id, capture, devices)?;
     assessment::require_resizable_bar_proof(&evidence, devices)?;
     Ok(evidence)
 }
