@@ -477,8 +477,8 @@ describe("DeploymentWorkspaceSession", () => {
                 await session.dispatch({ type: "setSavedWork", value: true });
                 await session.dispatch({ type: "requestConfigurationReboot" });
                 expect(session.view().plan?.revision).toBe(3);
-                expect(session.view().workflowReceipt?.detail).toContain(
-                        "Plan advanced: false",
+                expect(session.view().workflowReceipt?.detail).toBe(
+                        "Return after Windows boots, then check the boot time.",
                 );
         });
 

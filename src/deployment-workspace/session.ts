@@ -452,7 +452,7 @@ class Session implements DeploymentWorkspaceSession {
                                 ? "MSI Flash BIOS Button recovery: MSI.ROM at USB root, rear Flash BIOS port, physical button."
                                 : "",
                         installNote: msi
-                                ? "Use M-FLASH to select the exported vendor-format image. The app does not perform the flash."
+                                ? "Use M-FLASH to select the exported vendor-format image."
                                 : "",
                         routeConfirmed: false,
                         legacyAnalysis: null,
@@ -563,26 +563,26 @@ class Session implements DeploymentWorkspaceSession {
                 if (this.state.boardPath === "legacyAbove4g") {
                         if (!this.state.firmware)
                                 legacyNextAction =
-                                        "Choose and inspect the exact firmware image first.";
+                                        "Choose and inspect the firmware image first.";
                         else if (this.state.legacyAnalysisStatus === "pending")
                                 legacyNextAction =
-                                        "Wait for the exact-image analysis to finish.";
+                                        "Wait for the image analysis to finish.";
                         else if (this.state.legacyAnalysisStatus === "error")
-                                legacyNextAction = `Analysis failed: ${this.state.legacyAnalysisError} Retry the exact image.`;
+                                legacyNextAction = `Analysis failed: ${this.state.legacyAnalysisError} Retry this image.`;
                         else if (
                                 !this.state.legacyAnalysis ||
                                 !legacyAnalysisValid
                         )
                                 legacyNextAction =
-                                        "Analyze this exact firmware image before selecting legacy rules.";
+                                        "Analyze this firmware image before selecting legacy rules.";
                         else if (!selectedLegacyEntries.length)
                                 legacyNextAction =
-                                        "Select at least one applicable rule. Only proven matches can be selected.";
+                                        "Select at least one rule reported as applicable by the analyzer.";
                         else if (missingLegacyRisk)
                                 legacyNextAction = `Add an image-specific note and confirmation for ${riskLabels[missingLegacyRisk]}.`;
                         else
                                 legacyNextAction =
-                                        "Legacy selections are pinned to this firmware fingerprint and ready for profile creation.";
+                                        "Selected legacy rules are linked to this firmware fingerprint. The profile is ready to create.";
                 }
                 this.cachedView = {
                         ...this.state,
@@ -962,7 +962,7 @@ class Session implements DeploymentWorkspaceSession {
                                                 legacyAcknowledgements: {},
                                         });
                                         tx.success(
-                                                "Source firmware read and hashed. No firmware was modified.",
+                                                "Source firmware inspected · size and SHA-256 recorded.",
                                         );
                                 });
                         case "inspectFirmware":
@@ -980,7 +980,7 @@ class Session implements DeploymentWorkspaceSession {
                                                 legacyAcknowledgements: {},
                                         });
                                         tx.success(
-                                                "Source firmware read and hashed. No firmware was modified.",
+                                                "Source firmware inspected · size and SHA-256 recorded.",
                                         );
                                 });
                         case "analyzeLegacy":
@@ -1052,7 +1052,7 @@ class Session implements DeploymentWorkspaceSession {
                                                                 "ready",
                                                 });
                                                 tx.success(
-                                                        "Exact-image legacy analysis completed read-only. No firmware was modified.",
+                                                        "Legacy analysis complete · source fingerprint and rule results recorded.",
                                                 );
                                         },
                                 );
@@ -1075,7 +1075,7 @@ class Session implements DeploymentWorkspaceSession {
                                                                 .differences
                                                                 .length;
                                                 throw new Error(
-                                                        `Pinned machine preflight found ${count} difference${count === 1 ? "" : "s"}; deployment remains blocked until the selected profile matches.`,
+                                                        `Hardware check found ${count} difference${count === 1 ? "" : "s"}; deployment remains blocked until the selected profile matches.`,
                                                 );
                                         }
                                         tx.success(
@@ -1107,7 +1107,7 @@ class Session implements DeploymentWorkspaceSession {
                                                 );
                                         tx.patch({ packageReceipt });
                                         tx.success(
-                                                "Verified deployment package exported. Vendor flashing remains manual.",
+                                                "Deployment package exported · open it in the vendor tool for flashing.",
                                         );
                                 });
                         case "previewFirmwareReboot":
@@ -1150,7 +1150,7 @@ class Session implements DeploymentWorkspaceSession {
                                                         showReboot: true,
                                                 });
                                                 tx.success(
-                                                        "Restart scope previewed; no restart has occurred.",
+                                                        "Firmware setup restart details loaded for review.",
                                                 );
                                         },
                                 );
@@ -1223,7 +1223,7 @@ class Session implements DeploymentWorkspaceSession {
                                                         await this.adapter.installNvidiaProfileInspector();
                                                 tx.patch({ installation });
                                                 tx.success(
-                                                        "Pinned NVIDIA Profile Inspector verified and installed.",
+                                                        "NVIDIA Profile Inspector installed.",
                                                 );
                                         },
                                 );
@@ -1390,15 +1390,15 @@ class Session implements DeploymentWorkspaceSession {
                         const success =
                                 view.boardPath === "legacyAbove4g"
                                         ? [
-                                                  "Machine-bound legacy profile created with",
+                                                  "Legacy profile created with",
                                                   selectionCount,
-                                                  "authoritative rule",
                                                   selectionCount === 1
-                                                          ? "selection;"
-                                                          : "selections;",
-                                                  "no firmware was modified or flashed.",
+                                                          ? "rule"
+                                                          : "rules",
+                                                  "·",
+                                                  "source fingerprint recorded.",
                                           ].join(" ")
-                                        : "Machine-bound profile created; the exact source image was preserved.";
+                                        : "Machine profile created · source image fingerprint recorded.";
                         tx.success(success);
                 });
         }
@@ -1424,7 +1424,7 @@ class Session implements DeploymentWorkspaceSession {
                         assertPlanAdvance(before, preparation.plan, expected);
                         tx.patch({ preparation, plan: preparation.plan });
                         tx.success(
-                                "Rust driver injected and the patched artifact verified. Nothing was flashed.",
+                                "Firmware artifact prepared · Rust driver inserted and SHA-256 recorded.",
                         );
                 });
         }
@@ -1453,7 +1453,7 @@ class Session implements DeploymentWorkspaceSession {
                                 showManual: true,
                         });
                         tx.success(
-                                "Current manual consequence preview loaded; nothing was completed.",
+                                "Current manual step loaded for review.",
                         );
                 });
         }
@@ -1493,11 +1493,11 @@ class Session implements DeploymentWorkspaceSession {
                                 plan: receipt.plan,
                                 workflowReceipt: {
                                         title: `${preview.title} recorded`,
-                                        detail: `Operator attestation persisted at ${receipt.recordedAtUnixMs}.`,
+                                        detail: `Completion recorded at ${receipt.recordedAtUnixMs}.`,
                                 },
                         });
                         tx.success(
-                                "Manual gate recorded in the durable deployment plan.",
+                                "Manual step recorded in the deployment plan.",
                         );
                 });
         }
@@ -1519,12 +1519,12 @@ class Session implements DeploymentWorkspaceSession {
                         tx.patch({
                                 plan: receipt.plan,
                                 workflowReceipt: {
-                                        title: "Current boot and Rust DXE verified",
-                                        detail: `${receipt.status.label} · ${receipt.status.raw}. The volatile status proved this boot and advanced both boot and driver gates.`,
+                                        title: "Current boot and Rust DXE status recorded",
+                                        detail: `${receipt.status.label} · ${receipt.status.raw}. Boot and driver steps advanced.`,
                                 },
                         });
                         tx.success(
-                                "Current Windows boot and Rust DXE status were durably verified.",
+                                "Current Windows boot and Rust DXE status recorded.",
                         );
                         if (tx.current()) await this.loadRecommendation();
                 });
@@ -1557,13 +1557,13 @@ class Session implements DeploymentWorkspaceSession {
                         tx.patch({
                                 plan: receipt.plan,
                                 workflowReceipt: {
-                                        title: "Configuration write verified by read-back",
+                                        title: "Configuration written and read back",
                                         detail: `${receipt.save.bytesWritten} bytes · saved ${receipt.save.savedAtUnixMs}. A Windows restart is still required.`,
                                 },
                                 guardedConfigConfirmed: false,
                         });
                         tx.success(
-                                "Guarded deployment configuration was written and verified by read-back.",
+                                "Deployment configuration written and read back.",
                         );
                 });
         }
@@ -1587,7 +1587,7 @@ class Session implements DeploymentWorkspaceSession {
                                 showConfigurationReboot: true,
                         });
                         tx.success(
-                                "Configuration restart previewed; the plan did not advance.",
+                                "Configuration restart details loaded for review.",
                         );
                 });
         }
@@ -1622,11 +1622,11 @@ class Session implements DeploymentWorkspaceSession {
                         tx.patch({
                                 workflowReceipt: {
                                         title: "Configuration restart request accepted",
-                                        detail: "Plan advanced: false. Return after Windows boots, then verify the later boot separately.",
+                                        detail: "Return after Windows boots, then check the boot time.",
                                 },
                         });
                         tx.success(
-                                "Windows accepted the restart request; this did not complete the reboot gate.",
+                                "Windows accepted the restart request. Return after the next boot.",
                         );
                 });
         }
@@ -1659,12 +1659,12 @@ class Session implements DeploymentWorkspaceSession {
                         tx.patch({
                                 plan: receipt.plan,
                                 workflowReceipt: {
-                                        title: "Returned Windows boot verified",
+                                        title: "Windows boot time recorded",
                                         detail: `Boot ${receipt.bootedAtUnixMs} is later than configuration read-back ${receipt.configurationSavedAtUnixMs}.`,
                                 },
                         });
                         tx.success(
-                                "A Windows boot after the configuration read-back was durably verified.",
+                                "Windows boot after the configuration read-back recorded.",
                         );
                 });
         }
@@ -1681,7 +1681,7 @@ class Session implements DeploymentWorkspaceSession {
                                 !receipt.evidence.allProfileGpusObserved
                         )
                                 throw new Error(
-                                        "NVIDIA telemetry did not prove every GPU in the selected profile.",
+                                        "NVIDIA telemetry is missing one or more GPUs from the selected profile.",
                                 );
                         assertPlanAdvance(before, receipt.plan, [
                                 "verifyResizableBar",
@@ -1690,12 +1690,12 @@ class Session implements DeploymentWorkspaceSession {
                                 plan: receipt.plan,
                                 barEvidence: receipt.evidence,
                                 workflowReceipt: {
-                                        title: "Resizable BAR independently verified",
+                                        title: "Resizable BAR observed",
                                         detail: `All profile GPUs observed · XML ${receipt.evidence.rawXmlSha256.slice(0, 10)}…${receipt.evidence.rawXmlSha256.slice(-8)}.`,
                                 },
                         });
                         tx.success(
-                                "NVIDIA BAR1 evidence captured and matched to this profile.",
+                                "NVIDIA BAR1 data recorded for this profile.",
                         );
                 });
         }

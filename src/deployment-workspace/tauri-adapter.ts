@@ -16,7 +16,7 @@ export const createTauriDeploymentAdapter = (
                 const selection = await openDialog({
                         multiple: false,
                         directory: false,
-                        title: "Select the exact vendor firmware image",
+                        title: "Select the vendor firmware image",
                         filters: [
                                 {
                                         name: "Firmware images",

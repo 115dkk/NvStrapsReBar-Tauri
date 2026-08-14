@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 const evidence = ".superloopy/evidence/frontend/20260814T010925Z-i18n-korean-ui";
+const factualCopyEvidence = ".superloopy/evidence/frontend/20260814T055636Z-factual-ui-copy";
 
 test("language switch is accessible, immediate, persisted, and preserves the draft", async ({ page }) => {
         await page.setViewportSize({ width: 1180, height: 760 });
@@ -45,12 +46,12 @@ test("Korean deployment and legacy states preserve firmware facts", async ({ pag
         await page.getByTestId("language-select").selectOption("ko");
         await page.getByRole("button", { name: "배포" }).click();
         await expect(page.getByRole("heading", { name: "배포 작업 공간" })).toBeVisible();
-        await expect(page.getByText("자동 플래시 안 함")).toBeVisible();
+        await expect(page.getByText("제조사 도구에서 플래시")).toBeVisible();
         await page.getByLabel("보드 경로").selectOption("legacyAbove4g");
         await page.getByRole("button", { name: "파일 선택" }).click();
         await expect(page.getByText(/E7D25IMS\.1N0 · 32 MiB/)).toBeVisible();
-        await page.getByRole("button", { name: "정확한 이미지 분석" }).click();
-        await expect(page.getByRole("heading", { name: "정확한 레거시 패치 분석" })).toBeVisible();
+        await page.getByRole("button", { name: "이미지 분석" }).click();
+        await expect(page.getByRole("heading", { name: "레거시 패치 분석" })).toBeVisible();
         await expect(page.getByText(/SHA-256/).first()).toBeVisible();
         await page.screenshot({ path: `${evidence}/korean-legacy-analysis-1180x760.png`, fullPage: true });
         await page.setViewportSize({ width: 900, height: 760 });
@@ -67,25 +68,30 @@ test("English is the fallback and remains selectable", async ({ page }) => {
         await expect(page.getByRole("heading", { name: "Firmware configuration" })).toBeVisible();
 });
 
-test("Korean deployment reaches the backend recommendation without missing catalog entries", async ({ page }) => {
+test("Korean deployment reaches the recommended configuration without missing catalog entries", async ({ page }) => {
         await page.setViewportSize({ width: 900, height: 760 });
         await page.goto("/");
         await page.getByTestId("language-select").selectOption("ko");
         await page.getByRole("button", { name: "배포" }).click();
         await page.getByRole("button", { name: "파일 선택" }).click();
         await page.getByText("이 보드의 제조사 설치 및 복구 지침을 확인했습니다.").click();
-        await page.getByRole("button", { name: "이 컴퓨터에 고정된 프로필 만들기" }).click();
-        await expect(page.getByText("Rust DXE 드라이버 빌드 및 검증", { exact: true }).first()).toBeVisible();
-        await page.getByRole("button", { name: "펌웨어 아티팩트 준비 및 검증" }).click();
+        await page.getByRole("button", { name: "이 컴퓨터의 프로필 만들기" }).click();
+        await expect(page.getByText("Rust DXE 드라이버 빌드 및 검사", { exact: true }).first()).toBeVisible();
+        await page.getByRole("button", { name: "펌웨어 아티팩트 준비 및 검사" }).click();
         for (let gate = 0; gate < 2; gate += 1) {
                 await page.getByRole("button", { name: "완료한 단계 검토 및 확인" }).click();
                 const dialog = page.getByRole("dialog");
-                await dialog.getByLabel("이 단계를 완료하고 결과를 직접 검토했습니다.").check();
+                await dialog.getByLabel("이 단계를 완료하고 결과를 검토했습니다.").check();
                 await dialog.getByRole("button", { name: "완료한 단계 기록" }).click();
         }
-        await page.getByRole("button", { name: "현재 부팅과 Rust DXE 검증" }).click();
-        await expect(page.getByText("백엔드 권장 배포 구성")).toBeVisible();
+        await page.getByRole("button", { name: "현재 부팅 및 Rust DXE 상태 확인" }).click();
+        await expect(page.getByText("권장 배포 구성")).toBeVisible();
+        await expect(page.getByText(/백엔드/)).toHaveCount(0);
+        await expect(page.getByText("프로필 ID", { exact: true })).toHaveCount(0);
+        await expect(page.getByText("계획 리비전", { exact: true })).toHaveCount(0);
+        await expect(page.getByText(/리비전 \d+/)).toHaveCount(0);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
         await page.screenshot({ path: `${evidence}/gallery-korean-recommendation-900x760.png` });
+        await page.screenshot({ path: `${factualCopyEvidence}/korean-recommendation-900x760.png` });
         expect(await page.evaluate(() => window.__NVSTRAPS_I18N_MISSING__ ?? [])).toEqual([]);
 });

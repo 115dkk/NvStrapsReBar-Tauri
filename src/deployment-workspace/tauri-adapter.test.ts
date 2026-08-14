@@ -78,7 +78,7 @@ describe("Tauri deployment adapter", () => {
                 expect(open.mock.calls[0]?.[0]).toMatchObject({
                         directory: false,
                         multiple: false,
-                        title: "Select the exact vendor firmware image",
+                        title: "Select the vendor firmware image",
                 });
                 expect(open.mock.calls[1]?.[0]).toEqual({
                         directory: true,

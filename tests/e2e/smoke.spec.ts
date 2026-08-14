@@ -2,6 +2,8 @@ import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 const evidence =
         ".superloopy/evidence/frontend/20260813T185901Z-recommended-deployment-config";
+const factualCopyEvidence =
+        ".superloopy/evidence/frontend/20260814T055636Z-factual-ui-copy";
 
 async function reachRecommendedConfiguration(
         page: Page,
@@ -25,11 +27,11 @@ async function reachRecommendedConfiguration(
                 )
                 .click();
         await page
-                .getByRole("button", { name: "Create machine-bound profile" })
+                .getByRole("button", { name: "Create profile for this computer" })
                 .click();
         await page
                 .getByRole("button", {
-                        name: "Prepare and verify firmware artifact",
+                        name: "Prepare and inspect firmware artifact",
                 })
                 .click();
         for (let gate = 0; gate < 2; gate += 1) {
@@ -41,7 +43,7 @@ async function reachRecommendedConfiguration(
                 const dialog = page.getByRole("dialog");
                 await dialog
                         .getByLabel(
-                                "I completed and independently reviewed this exact step.",
+                                "I completed this step and reviewed the result.",
                         )
                         .check();
                 await dialog
@@ -50,13 +52,13 @@ async function reachRecommendedConfiguration(
         }
         await page
                 .getByRole("button", {
-                        name: "Verify current boot + Rust DXE",
+                        name: "Check current boot + Rust DXE status",
                 })
                 .click();
         if (expectRecommendation)
                 await expect(
                         page.getByText(
-                                "Backend-recommended deployment configuration",
+                                "Recommended deployment configuration",
                         ),
                 ).toBeVisible();
 }
@@ -99,7 +101,7 @@ test("preview discloses simulation and completes guarded save journey", async ({
         });
         await page.getByRole("button", { name: "Write configuration" }).click();
         await expect(
-                page.getByText("Save verified by read-back"),
+                page.getByText("Configuration written and read back", { exact: true }),
         ).toBeVisible();
         await expect(page.getByText("IN SYNC")).toBeVisible();
 });
@@ -152,10 +154,12 @@ test("durable deployment completes in order and distinguishes requests from rece
         await expect(
                 page.getByRole("heading", { name: "Deployment workspace" }),
         ).toBeVisible();
-        await expect(page.getByText("NO AUTO-FLASH")).toBeVisible();
+        await expect(page.getByText("FLASH WITH VENDOR TOOL")).toBeVisible();
         await expect(
-                page.getByText("Exact MSI board recognized"),
+                page.getByText("PRO Z690-A DDR4(MS-7D25)"),
         ).toBeVisible();
+        await expect(page.getByText("Profile ID", { exact: true })).toHaveCount(0);
+        await expect(page.getByText("Plan revision", { exact: true })).toHaveCount(0);
         await page.screenshot({
                 path: `${evidence}/deployment-1180-source.png`,
                 fullPage: true,
@@ -169,22 +173,22 @@ test("durable deployment completes in order and distinguishes requests from rece
                 )
                 .click();
         await page
-                .getByRole("button", { name: "Create machine-bound profile" })
+                .getByRole("button", { name: "Create profile for this computer" })
                 .click();
         await expect(
                 page.getByText(
-                        "Machine-bound profile created; the exact source image was preserved.",
+                        "Machine profile created · source image fingerprint recorded.",
                         { exact: true },
                 ),
         ).toBeVisible();
 
         await page
-                .getByRole("button", { name: "Prepare and verify firmware artifact" })
+                .getByRole("button", { name: "Prepare and inspect firmware artifact" })
                 .click();
         await expect(
-                page.getByText("Patched artifact verified", { exact: true }),
+                page.getByText("Prepared firmware artifact", { exact: true }),
         ).toBeVisible();
-        await expect(page.getByText("No BIOS flash has occurred.")).toBeVisible();
+        await expect(page.getByText("Next: export this artifact for the vendor tool.")).toBeVisible();
         await page.getByRole("button", { name: "Choose folder" }).click();
         await page.getByRole("button", { name: "Export package" }).click();
         await expect(
@@ -193,13 +197,13 @@ test("durable deployment completes in order and distinguishes requests from rece
 
         await expect(page.getByRole("heading", { name: "Flash with the documented vendor route" })).toBeVisible();
         await expect(
-                page.getByRole("button", { name: "Collect and verify BAR1 evidence" }),
+                page.getByRole("button", { name: "Collect BAR1 data" }),
         ).toHaveCount(0);
 
         await page.getByRole("button", { name: "Review restart to firmware UI" }).click();
         const dialog = page.getByRole("dialog");
         await expect(dialog).toContainText(
-                "It does not flash firmware or change setup values.",
+                "Windows opens the firmware setup screen; continue there with the vendor instructions.",
         );
         await expect(
                 dialog.getByRole("button", {
@@ -217,29 +221,33 @@ test("durable deployment completes in order and distinguishes requests from rece
 
         await page.getByRole("button", { name: "Review & confirm completed step" }).click();
         const manual = page.getByRole("dialog");
-        await expect(manual).toContainText("operator attestation, not automatic flash verification");
-        await manual.getByLabel("I completed and independently reviewed this exact step.").check();
+        await expect(manual).toContainText("Record completion after the vendor tool reports success.");
+        await expect(manual).not.toContainText("token is bound");
+        await expect(manual).not.toContainText("flashFirmware");
+        await expect(manual).not.toContainText("REVISION");
+        await manual.getByLabel("I completed this step and reviewed the result.").check();
         await manual.getByRole("button", { name: "Record completed step" }).click();
         await expect(page.getByRole("heading", { name: "Confirm firmware setup values" })).toBeVisible();
 
         await page.getByRole("button", { name: "Review & confirm completed step" }).click();
-        await page.getByRole("dialog").getByLabel("I completed and independently reviewed this exact step.").check();
+        await page.getByRole("dialog").getByLabel("I completed this step and reviewed the result.").check();
         await page.getByRole("dialog").getByRole("button", { name: "Record completed step" }).click();
         await expect(page.getByRole("heading", { name: "Boot Windows after the firmware handoff" })).toBeVisible();
 
-        await page.getByRole("button", { name: "Verify current boot + Rust DXE" }).click();
-        await expect(page.getByText("Current boot and Rust DXE verified")).toBeVisible();
+        await page.getByRole("button", { name: "Check current boot + Rust DXE status" }).click();
+        await expect(page.getByText("Current boot and Rust DXE status recorded")).toBeVisible();
         await expect(page.getByRole("heading", { name: "Write and read back the NvStrapsReBar configuration" })).toBeVisible();
 
-        const write = page.getByRole("button", { name: "Write and verify guarded configuration" });
+        const write = page.getByRole("button", { name: "Write configuration and read it back" });
         await expect(write).toBeDisabled();
         await expect(page.getByText("Registry managed")).toBeVisible();
-        await expect(page.getByText("Exact fallback rules")).toBeVisible();
+        await expect(page.getByText(/backend/i)).toHaveCount(0);
+        await expect(page.getByText("Location-specific fallback rules")).toBeVisible();
         await expect(
                 page.getByText("Registry managed").locator("..").getByText("1", { exact: true }),
         ).toBeVisible();
         await expect(
-                page.getByText("Exact fallback rules").locator("..").getByText("0", { exact: true }),
+                page.getByText("Location-specific fallback rules").locator("..").getByText("0", { exact: true }),
         ).toBeVisible();
         await expect(page.getByText(/global mode 1 · target selector 0/)).toBeVisible();
         await expect(page.getByText(/no fallback rule is added/i)).toBeVisible();
@@ -247,48 +255,51 @@ test("durable deployment completes in order and distinguishes requests from rece
                 path: `${evidence}/recommendation-1180-known-registry.png`,
                 fullPage: true,
         });
-        await page.getByLabel("I reviewed this exact backend recommendation for the selected profile.").check();
+        await page.screenshot({
+                path: `${factualCopyEvidence}/english-recommendation-1180x760.png`,
+        });
+        await page.getByLabel("I reviewed this configuration for the selected profile.").check();
         await write.click();
-        await expect(page.getByText("Configuration write verified by read-back")).toBeVisible();
+        await expect(page.getByText("Configuration written and read back", { exact: true })).toBeVisible();
 
         await page.getByRole("button", { name: "Review restart after configuration" }).click();
         const configurationRestart = page.getByRole("dialog");
-        await expect(configurationRestart).toContainText("omits /f");
-        await expect(configurationRestart).toContainText("does not complete the plan");
+        await expect(configurationRestart).toContainText("Applications receive the standard shutdown request.");
+        await expect(configurationRestart).toContainText("Return after Windows boots so the app can compare the new boot time.");
         await configurationRestart.getByLabel("I saved and closed my work.").check();
         await page.screenshot({
                 path: `${evidence}/workflow-1180-configuration-restart.png`,
                 fullPage: true,
         });
         await configurationRestart.getByRole("button", { name: "Request restart" }).click();
-        await expect(page.getByText(/Plan advanced: false/)).toBeVisible();
+        await expect(page.getByText("Return after Windows boots, then check the boot time.")).toBeVisible();
         await expect(page.getByRole("heading", { name: "Restart after configuration" })).toBeVisible();
 
         await page.reload();
         await page.getByRole("button", { name: "Deploy" }).click();
         await expect(page.getByRole("heading", { name: "Restart after configuration" })).toBeVisible();
-        await page.getByRole("button", { name: "Verify returned Windows boot" }).click();
-        await expect(page.getByText("Returned Windows boot verified")).toBeVisible();
+        await page.getByRole("button", { name: "Check Windows boot time" }).click();
+        await expect(page.getByText("Windows boot time recorded")).toBeVisible();
 
-        await page.getByRole("button", { name: "Collect and verify BAR1 evidence" }).click();
+        await page.getByRole("button", { name: "Collect BAR1 data" }).click();
         await expect(page.getByText(/BAR1 8 GiB/)).toBeVisible();
         await expect(page.getByRole("heading", { name: "Configure NVIDIA application profiles" })).toBeVisible();
 
-        await page.getByRole("button", { name: "Install verified Profile Inspector" }).click();
+        await page.getByRole("button", { name: "Install Profile Inspector" }).click();
         await page.getByRole("button", { name: "Back up & launch editor" }).click();
-        await expect(page.getByText(/plan did not advance/i)).toBeVisible();
+        await expect(page.getByText(/next: edit the policy and record the result/i)).toBeVisible();
         await expect(page.getByRole("heading", { name: "Configure NVIDIA application profiles" })).toBeVisible();
         await page.screenshot({
                 path: `${evidence}/workflow-1180-final-policy.png`,
                 fullPage: true,
         });
         await page.getByRole("button", { name: "Review & confirm applied NVIDIA policy" }).click();
-        await expect(page.getByRole("dialog")).toContainText("Installing or launching NVIDIA Profile Inspector does not satisfy this step.");
+        await expect(page.getByRole("dialog")).toContainText("Return after editing the policy and record the result.");
         await page.screenshot({
                 path: `${evidence}/workflow-1180-policy-confirmation.png`,
                 fullPage: true,
         });
-        await page.getByRole("dialog").getByLabel("I completed and independently reviewed this exact step.").check();
+        await page.getByRole("dialog").getByLabel("I completed this step and reviewed the result.").check();
         await page.getByRole("dialog").getByRole("button", { name: "Record completed step" }).click();
         await expect(page.getByText("Deployment plan complete", { exact: true })).toBeVisible();
 });
@@ -302,8 +313,8 @@ test("deployment remains reachable without horizontal overflow at 900px", async 
         await page.getByRole("button", { name: "Choose file" }).click();
         await expect(page.getByText(/E7D25IMS\.1N0 · 32 MiB/)).toBeVisible();
         await page.getByText("I checked the vendor install and recovery instructions for this board.").click();
-        await page.getByRole("button", { name: "Create machine-bound profile" }).click();
-        await page.getByRole("button", { name: "Prepare and verify firmware artifact" }).click();
+        await page.getByRole("button", { name: "Create profile for this computer" }).click();
+        await page.getByRole("button", { name: "Prepare and inspect firmware artifact" }).click();
         await expect(page.getByRole("heading", { name: "Flash with the documented vendor route" })).toBeVisible();
         await page.getByRole("button", { name: "Review & confirm completed step" }).focus();
         await expect(page.getByRole("button", { name: "Review & confirm completed step" })).toBeFocused();
@@ -327,14 +338,14 @@ test("manual preview suppresses duplicate submit and locks profile selection whi
         await page.getByRole("button", { name: "Deploy" }).click();
         await page.getByRole("button", { name: "Choose file" }).click();
         await page.getByText("I checked the vendor install and recovery instructions for this board.").click();
-        await page.getByRole("button", { name: "Create machine-bound profile" }).click();
-        await page.getByRole("button", { name: "Prepare and verify firmware artifact" }).click();
+        await page.getByRole("button", { name: "Create profile for this computer" }).click();
+        await page.getByRole("button", { name: "Prepare and inspect firmware artifact" }).click();
 
         const path = page.getByPlaceholder("Choose a vendor BIOS image or enter an absolute path");
         await path.fill("C:\\Firmware\\changed-fingerprint.bin");
         await page.getByRole("button", { name: "Inspect" }).click();
         await page.getByLabel("Profile name").fill("Second machine profile");
-        await page.getByRole("button", { name: "Create machine-bound profile" }).click();
+        await page.getByRole("button", { name: "Create profile for this computer" }).click();
 
         const selector = page.getByLabel("Machine profile");
         await selector.selectOption({ label: "PRO Z690-A DDR4 · RTX 2080 SUPER" });
@@ -347,7 +358,7 @@ test("manual preview suppresses duplicate submit and locks profile selection whi
         await expect(selector).toBeEnabled();
         await selector.selectOption({ label: "Second machine profile" });
         await expect(page.getByRole("dialog")).toHaveCount(0);
-        await expect(page.getByRole("heading", { name: "Build and verify the Rust DXE driver" })).toBeVisible();
+        await expect(page.getByRole("heading", { name: "Build and inspect the Rust DXE driver" })).toBeVisible();
 });
 
 test("machine preflight mismatch is an error and never claims an exact match", async ({
@@ -362,7 +373,7 @@ test("machine preflight mismatch is an error and never claims an exact match", a
                 )
                 .click();
         await page
-                .getByRole("button", { name: "Create machine-bound profile" })
+                .getByRole("button", { name: "Create profile for this computer" })
                 .click();
         await page.evaluate(() =>
                 sessionStorage.setItem(
@@ -371,11 +382,11 @@ test("machine preflight mismatch is an error and never claims an exact match", a
                 ),
         );
         await page
-                .getByRole("button", { name: "Run exact-machine preflight" })
+                .getByRole("button", { name: "Check current hardware and source image" })
                 .click();
         await expect(
                 page.getByText(
-                        "Pinned machine preflight found 1 difference; deployment remains blocked until the selected profile matches.",
+                        "Hardware check found 1 difference; deployment remains blocked until the selected profile matches.",
                         { exact: true },
                 ),
         ).toBeVisible();
@@ -399,18 +410,18 @@ test("unknown Turing recommendation pins an exact-location fallback rule", async
                 page.getByText("Registry managed").locator("..").getByText("0", { exact: true }),
         ).toBeVisible();
         await expect(
-                page.getByText("Exact fallback rules").locator("..").getByText("1", { exact: true }),
+                page.getByText("Location-specific fallback rules").locator("..").getByText("1", { exact: true }),
         ).toBeVisible();
-        await expect(page.getByRole("list", { name: "Exact fallback rules" })).toContainText(
+        await expect(page.getByRole("list", { name: "Location-specific fallback rules" })).toContainText(
                 "01:00.0",
         );
-        await expect(page.getByRole("list", { name: "Exact fallback rules" })).toContainText(
-                "exact location only",
+        await expect(page.getByRole("list", { name: "Location-specific fallback rules" })).toContainText(
+                "PCI location only",
         );
-        await expect(page.getByRole("list", { name: "Exact fallback rules" })).toContainText(
+        await expect(page.getByRole("list", { name: "Location-specific fallback rules" })).toContainText(
                 "device 1f81",
         );
-        await expect(page.getByRole("list", { name: "Exact fallback rules" })).toContainText(
+        await expect(page.getByRole("list", { name: "Location-specific fallback rules" })).toContainText(
                 "BAR selector 5",
         );
         await page.screenshot({
@@ -431,12 +442,12 @@ test("malformed plan-changing receipt becomes an error without false success", a
         );
         await page
                 .getByLabel(
-                        "I reviewed this exact backend recommendation for the selected profile.",
+                        "I reviewed this configuration for the selected profile.",
                 )
                 .check();
         await page
                 .getByRole("button", {
-                        name: "Write and verify guarded configuration",
+                        name: "Write configuration and read it back",
                 })
                 .click();
         await expect(
@@ -446,7 +457,7 @@ test("malformed plan-changing receipt becomes an error without false success", a
                 ),
         ).toBeVisible();
         await expect(
-                page.getByText("Configuration write verified by read-back"),
+                page.getByText("Configuration written and read back", { exact: true }),
         ).toHaveCount(0);
         await expect(
                 page.getByRole("heading", {
@@ -467,12 +478,12 @@ test("unexpected receipt revision delta is rejected without advancing the active
         );
         await page
                 .getByLabel(
-                        "I reviewed this exact backend recommendation for the selected profile.",
+                        "I reviewed this configuration for the selected profile.",
                 )
                 .check();
         await page
                 .getByRole("button", {
-                        name: "Write and verify guarded configuration",
+                        name: "Write configuration and read it back",
                 })
                 .click();
         await expect(
@@ -482,7 +493,7 @@ test("unexpected receipt revision delta is rejected without advancing the active
                 ),
         ).toBeVisible();
         await expect(
-                page.getByText("Configuration write verified by read-back"),
+                page.getByText("Configuration written and read back", { exact: true }),
         ).toHaveCount(0);
         await expect(
                 page.getByRole("heading", {
@@ -491,7 +502,7 @@ test("unexpected receipt revision delta is rejected without advancing the active
         ).toBeVisible();
 });
 
-test("non-guarded backend recommendation is rejected before confirmation", async ({
+test("non-guarded recommendation is rejected before confirmation", async ({
         page,
 }) => {
         await page.addInitScript(() =>
@@ -509,12 +520,12 @@ test("non-guarded backend recommendation is rejected before confirmation", async
         ).toBeVisible();
         await expect(
                 page.getByLabel(
-                        "I reviewed this exact backend recommendation for the selected profile.",
+                        "I reviewed this configuration for the selected profile.",
                 ),
         ).toBeDisabled();
         await expect(
                 page.getByRole("button", {
-                        name: "Write and verify guarded configuration",
+                        name: "Write configuration and read it back",
                 }),
         ).toBeDisabled();
 });
@@ -534,31 +545,31 @@ test("legacy analysis selects only the recommended safe rule before profile crea
                 .click();
 
         const create = page.getByRole("button", {
-                name: "Create machine-bound profile",
+                name: "Create profile for this computer",
         });
         await expect(create).toBeDisabled();
         await expect(
                 page.getByText(
-                        "Analyze this exact firmware image before selecting legacy rules.",
+                        "Analyze this firmware image before selecting legacy rules.",
                 ),
         ).toBeVisible();
 
-        await page.getByRole("button", { name: "Analyze exact image" }).click();
+        await page.getByRole("button", { name: "Analyze image" }).click();
         await expect(
-                page.getByRole("button", { name: "Analyzing exact image…" }),
+                page.getByRole("button", { name: "Analyzing image…" }),
         ).toBeDisabled();
         await expect(
-                page.getByText(/legacy analysis completed read-only/i),
+                page.getByText(/legacy analysis complete/i),
         ).toBeVisible();
         const safeRule = page.getByText(
-                "Pinned Above 4G decoding compatibility rule",
+                "Above 4G decoding compatibility rule",
         );
         await expect(safeRule).toBeVisible();
         await expect(safeRule.locator("xpath=ancestor::label").getByRole("checkbox")).toBeChecked();
         await expect(
                 page.getByText("Compressed vendor-specific compatibility patch"),
         ).toBeVisible();
-        await expect(page.getByText(/cannot be proven safe/i)).toBeVisible();
+        await expect(page.getByText(/does not support the compressed section/i)).toBeVisible();
         await expect(create).toBeEnabled();
         await page.screenshot({
                 path: `${evidence}/legacy-1180-safe-analysis.png`,
@@ -566,11 +577,11 @@ test("legacy analysis selects only the recommended safe rule before profile crea
         });
         await create.click();
         await expect(
-                page.getByText(/legacy profile created with 1 authoritative rule selection/i),
+                page.getByText(/legacy profile created with 1 rule · source fingerprint recorded/i),
         ).toBeVisible();
         await page
                 .getByRole("button", {
-                        name: "Prepare and verify firmware artifact",
+                        name: "Prepare and inspect firmware artifact",
                 })
                 .click();
         await page
@@ -581,7 +592,7 @@ test("legacy analysis selects only the recommended safe rule before profile crea
         await page
                 .getByRole("dialog")
                 .getByLabel(
-                        "I completed and independently reviewed this exact step.",
+                        "I completed this step and reviewed the result.",
                 )
                 .check();
         await page
@@ -595,7 +606,7 @@ test("legacy analysis selects only the recommended safe rule before profile crea
                 .click();
         const setupDialog = page.getByRole("dialog");
         await expect(setupDialog).toContainText(
-                "Enable Above 4G decoding and disable CSM; do not claim native motherboard ReBAR.",
+                "Enable Above 4G decoding and disable CSM. This legacy route uses NvStrapsReBar instead of native motherboard ReBAR.",
         );
         await expect(setupDialog).not.toContainText(
                 "Enable native ReBAR and Above 4G decoding",
@@ -616,14 +627,14 @@ test("risky legacy rule requires a fingerprint-specific acknowledgement", async 
                         "I checked the vendor install and recovery instructions for this board.",
                 )
                 .click();
-        await page.getByRole("button", { name: "Analyze exact image" }).click();
+        await page.getByRole("button", { name: "Analyze image" }).click();
 
         const riskyRule = page.getByText(
                 "DSDT resource-window compatibility patch",
         );
         await riskyRule.locator("xpath=ancestor::label").getByRole("checkbox").check();
         const create = page.getByRole("button", {
-                name: "Create machine-bound profile",
+                name: "Create profile for this computer",
         });
         await expect(create).toBeDisabled();
         await expect(
@@ -637,7 +648,7 @@ test("risky legacy rule requires a fingerprint-specific acknowledgement", async 
                 );
         await page
                 .getByLabel(
-                        "I reviewed this risk for the exact analyzed firmware.",
+                        "I reviewed this risk for the analyzed firmware.",
                 )
                 .check();
         await expect(create).toBeEnabled();
@@ -647,9 +658,9 @@ test("risky legacy rule requires a fingerprint-specific acknowledgement", async 
         });
         await create.click();
         await expect(
-                page.getByText(/legacy profile created with 2 authoritative rule selections/i),
+                page.getByText(/legacy profile created with 2 rules · source fingerprint recorded/i),
         ).toBeVisible();
-        await expect(page.getByText(/no firmware was modified or flashed/i)).toBeVisible();
+        await expect(page.getByText(/source fingerprint recorded/i)).toBeVisible();
 });
 
 test("legacy selections are invalidated by path and fingerprint drift", async ({
@@ -662,25 +673,25 @@ test("legacy selections are invalidated by path and fingerprint drift", async ({
         const firmwarePath = page.getByPlaceholder(
                 "Choose a vendor BIOS image or enter an absolute path",
         );
-        await page.getByRole("button", { name: "Analyze exact image" }).click();
+        await page.getByRole("button", { name: "Analyze image" }).click();
         await firmwarePath.fill("C:\\Firmware\\reply-race.bin");
         await page.waitForTimeout(80);
         await expect(page.getByText("Analyzed source")).toHaveCount(0);
 
         await firmwarePath.fill("C:\\Firmware\\E7D25IMS.1N0");
         await page.getByRole("button", { name: "Inspect" }).click();
-        await page.getByRole("button", { name: "Analyze exact image" }).click();
+        await page.getByRole("button", { name: "Analyze image" }).click();
         await expect(page.getByText("Analyzed source")).toBeVisible();
 
         await firmwarePath.fill("C:\\Firmware\\changed-fingerprint.bin");
         await expect(page.getByText("Analyzed source")).toHaveCount(0);
         await expect(
-                page.getByRole("button", { name: "Create machine-bound profile" }),
+                page.getByRole("button", { name: "Create profile for this computer" }),
         ).toBeDisabled();
 
         await page.getByRole("button", { name: "Inspect" }).click();
         await expect(page.getByText(/changed-fingerprint\.bin/)).toBeVisible();
-        await page.getByRole("button", { name: "Analyze exact image" }).click();
+        await page.getByRole("button", { name: "Analyze image" }).click();
         await expect(
                 page.getByText(
                         "The firmware fingerprint changed between inspection and analysis.",
@@ -688,7 +699,7 @@ test("legacy selections are invalidated by path and fingerprint drift", async ({
                 ),
         ).toBeVisible();
         await expect(
-                page.getByRole("button", { name: "Create machine-bound profile" }),
+                page.getByRole("button", { name: "Create profile for this computer" }),
         ).toBeDisabled();
 });
 
@@ -700,9 +711,9 @@ test("legacy analysis remains reachable at the supported minimum window", async 
         await page.getByRole("button", { name: "Deploy" }).click();
         await page.getByLabel("Board path").selectOption("legacyAbove4g");
         await page.getByRole("button", { name: "Choose file" }).click();
-        await page.getByRole("button", { name: "Analyze exact image" }).click();
+        await page.getByRole("button", { name: "Analyze image" }).click();
         await expect(
-                page.getByRole("button", { name: "Create machine-bound profile" }),
+                page.getByRole("button", { name: "Create profile for this computer" }),
         ).toBeVisible();
         await expect(page.getByText("Analyzed source")).toBeVisible();
         expect(
