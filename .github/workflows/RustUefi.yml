@@ -10,8 +10,31 @@ permissions:
   contents: read
 
 jobs:
+  scope:
+    name: Decide whether heavy CI is required
+    runs-on: ubuntu-latest
+    outputs:
+      run-heavy: ${{ steps.scope.outputs.run-heavy }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - id: scope
+        name: Classify the change
+        env:
+          CI_SCOPE_EVENT_NAME: ${{ github.event_name }}
+          CI_SCOPE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          CI_SCOPE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CI_SCOPE_TEXT: ${{ github.event.pull_request.title || github.event.head_commit.message || '' }}
+        run: node tools/ci-scope.mjs
+
   validate-rust-uefi:
     name: Validate Rust DXE port (${{ matrix.os }})
+    needs: scope
+    if: needs.scope.outputs.run-heavy == 'true'
     strategy:
       fail-fast: false
       matrix:
