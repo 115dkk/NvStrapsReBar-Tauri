@@ -6,6 +6,30 @@
         font-display: swap;
 }
 
+@font-face {
+        font-family: "Jetendard";
+        src: url("./assets/fonts/Jetendard/Jetendard-Regular.woff2") format("woff2");
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+}
+
+@font-face {
+        font-family: "Jetendard";
+        src: url("./assets/fonts/Jetendard/Jetendard-SemiBold.woff2") format("woff2");
+        font-style: normal;
+        font-weight: 600;
+        font-display: swap;
+}
+
+@font-face {
+        font-family: "Jetendard";
+        src: url("./assets/fonts/Jetendard/Jetendard-Bold.woff2") format("woff2");
+        font-style: normal;
+        font-weight: 700;
+        font-display: swap;
+}
+
 :root {
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
@@ -29,8 +53,7 @@
         --ko-weight-button: 650;
         --ko-weight-section: 680;
         --ko-weight-page: 720;
-        --font-mono-cjk: ui-monospace, Consolas, "Pretendard Variable", Pretendard,
-                "Malgun Gothic", monospace;
+        --font-technical: "Jetendard", monospace;
 }
 html:lang(ko) {
         font-family: "Pretendard Variable", Pretendard, "Segoe UI Variable Text",
@@ -70,7 +93,7 @@ textarea {
         font: inherit;
 }
 :where(code, pre, kbd, samp) {
-        font-family: var(--font-mono-cjk);
+        font-family: var(--font-technical);
         font-weight: 400;
 }
 button,
@@ -126,7 +149,7 @@ button:disabled {
         background: #d7aa5c;
         color: #211c14;
         font:
-                700 11px/26px var(--font-mono-cjk);
+                700 11px/26px var(--font-technical);
         text-align: center;
         letter-spacing: 0.07em;
 }
@@ -212,7 +235,7 @@ button:disabled {
 .rebar-aggregate-symbol {
         flex: 0 0 auto;
         color: var(--warn);
-        font: 700 11px var(--font-mono-cjk);
+        font: 700 11px var(--font-technical);
         letter-spacing: 0.08em;
 }
 .rebar-status-gpus {
@@ -242,7 +265,7 @@ button:disabled {
 .kicker,
 .step {
         font:
-                700 11px/1.2 var(--font-mono-cjk);
+                700 11px/1.2 var(--font-technical);
         letter-spacing: 0.13em;
         color: var(--accent);
 }
@@ -277,7 +300,7 @@ h1 {
 .dirty,
 .saved {
         font:
-                700 10px var(--font-mono-cjk);
+                700 10px var(--font-technical);
         letter-spacing: 0.1em;
 }
 .dirty {
@@ -353,7 +376,7 @@ aside hr {
 }
 .mono-wrap {
         overflow-wrap: anywhere;
-        font-family: var(--font-mono-cjk);
+        font-family: var(--font-technical);
         font-weight: 400;
 }
 .muted-copy {
@@ -401,7 +424,7 @@ aside hr {
 }
 .truth-badge strong {
         color: #f0a176;
-        font: 700 11px var(--font-mono-cjk);
+        font: 700 11px var(--font-technical);
         letter-spacing: 0.12em;
 }
 .truth-badge span {
@@ -595,7 +618,7 @@ aside hr {
 }
 .legacy-rule b {
         color: var(--ok);
-        font: 700 9px var(--font-mono-cjk);
+        font: 700 9px var(--font-technical);
         letter-spacing: 0.08em;
 }
 .legacy-empty,
@@ -728,7 +751,7 @@ aside hr {
 }
 .active-workflow-head > strong {
         color: var(--ok);
-        font: 700 15px var(--font-mono-cjk);
+        font: 700 15px var(--font-technical);
 }
 .active-workflow-action {
         display: flex;
@@ -776,7 +799,7 @@ aside hr {
 }
 .recommendation-facts dd {
         color: var(--ok);
-        font: 700 16px var(--font-mono-cjk);
+        font: 700 16px var(--font-technical);
 }
 .recommendation-rules {
         display: grid;
@@ -906,7 +929,7 @@ aside hr {
         display: block;
         margin-bottom: 8px;
         color: var(--warn);
-        font: 700 10px var(--font-mono-cjk);
+        font: 700 10px var(--font-technical);
         letter-spacing: 0.11em;
 }
 .manual-gates strong {
@@ -950,7 +973,7 @@ aside hr {
 }
 .reboot-modal code {
         color: #f2c1a5;
-        font-family: var(--font-mono-cjk);
+        font-family: var(--font-technical);
 }
 .reboot-modal .warning-box {
         display: grid;
@@ -1043,6 +1066,9 @@ aside hr {
         .recommendation-rules li {
                 grid-template-columns: 1fr;
         }
+        .recommended-config > code {
+                font-size: 10px;
+        }
         .active-workflow-head {
                 flex-direction: column;
         }
@@ -1058,7 +1084,7 @@ dl {
 }
 dt {
         font:
-                600 10px var(--font-mono-cjk);
+                600 10px var(--font-technical);
         color: var(--muted);
         text-transform: uppercase;
         letter-spacing: 0.08em;
@@ -1115,7 +1141,7 @@ dd {
 .count b {
         display: block;
         font:
-                400 40px/1 var(--font-mono-cjk);
+                400 40px/1 var(--font-technical);
         color: var(--ink);
 }
 .count span {
@@ -1223,7 +1249,7 @@ dd {
 .pci {
         align-self: flex-start;
         font:
-                700 11px var(--font-mono-cjk);
+                700 11px var(--font-technical);
         padding: 5px 7px;
         color: #e7b393;
         background: #3a2b25;
@@ -1237,7 +1263,7 @@ dd {
         margin: 0;
         color: var(--muted);
         font:
-                11px var(--font-mono-cjk);
+                400 11px var(--font-technical);
 }
 .gpu-facts {
         display: flex;
@@ -1303,7 +1329,7 @@ dd {
         padding-bottom: 10px;
         color: var(--muted);
         font:
-                11px var(--font-mono-cjk);
+                400 11px var(--font-technical);
 }
 .empty {
         padding: 30px;
@@ -1490,6 +1516,11 @@ dd {
         margin-bottom: 0;
         text-wrap: balance;
 }
+.license-attribution-list {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+}
 .license-attribution {
         display: grid;
         gap: 4px;
@@ -1508,6 +1539,16 @@ dd {
         margin: 18px 0 8px;
         font-size: 13px;
 }
+.license-picker {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        margin-bottom: 8px;
+}
+.license-picker button[aria-pressed="true"] {
+        border-color: var(--accent);
+        background: #35271f;
+}
 .license-text {
         min-height: 160px;
         margin: 0;
@@ -1516,7 +1557,7 @@ dd {
         border: 1px solid var(--line);
         background: #111417;
         color: #c6ccd1;
-        font: 400 11px/1.55 var(--font-mono-cjk);
+        font: 400 11px/1.55 var(--font-technical);
         white-space: pre-wrap;
 }
 .license-text:focus-visible {
@@ -1627,9 +1668,12 @@ dd {
         align-items: center;
         gap: 7px;
         color: var(--muted);
-        font: 650 10px var(--font-mono-cjk);
+        font: 600 10px var(--font-technical);
         letter-spacing: 0.05em;
         text-transform: uppercase;
+}
+html:lang(ko) .language-select {
+        font-weight: 600;
 }
 .language-select select {
         width: 92px;
