@@ -984,4 +984,15 @@ mod tests {
             );
         }
     }
+
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "read-only hardware inspection of the current Windows NVIDIA GPU"]
+    fn current_machine_resizable_bar_inspection_reports_observed_state() {
+        let inspection = inspect_command().expect("inspect the current Windows NVIDIA GPU");
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&inspection).expect("serialize inspection")
+        );
+    }
 }
