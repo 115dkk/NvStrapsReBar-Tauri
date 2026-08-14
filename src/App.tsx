@@ -2,6 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bridge, previewMode } from "./bridge";
 import { DeploymentWorkspace } from "./DeploymentWorkspace";
 import { useI18n } from "./i18n";
+import { presentMotherboardSupport } from "./hardware-support";
+import {
+        createRequestGenerationGuard,
+        createResizableBarInspectionCoordinator,
+        presentResizableBarStatus,
+        type ResizableBarInspectionLoadState,
+} from "./resizable-bar-status";
 import { ThirdPartyLicensesDialog } from "./ThirdPartyLicensesDialog";
 import {
         DEFAULT_DRAFT,
@@ -85,10 +92,28 @@ export function App() {
                 [surface, setSurface] = useState<"configure" | "deploy">(
                         "configure",
                 );
+        const [rebarInspection, setRebarInspection] =
+                useState<ResizableBarInspectionLoadState>({
+                        status: "loading",
+                });
         const validationSequence = useRef(0),
                 reviewButton = useRef<HTMLButtonElement>(null),
                 dialog = useRef<HTMLDivElement>(null),
-                licenseButton = useRef<HTMLButtonElement>(null);
+                licenseButton = useRef<HTMLButtonElement>(null),
+                rebarInspectionCoordinator = useRef<ReturnType<
+                        typeof createResizableBarInspectionCoordinator
+                > | null>(null),
+                snapshotGeneration = useRef<ReturnType<
+                        typeof createRequestGenerationGuard
+                > | null>(null);
+        if (!rebarInspectionCoordinator.current)
+                rebarInspectionCoordinator.current =
+                        createResizableBarInspectionCoordinator(
+                                setRebarInspection,
+                        );
+        if (!snapshotGeneration.current)
+                snapshotGeneration.current = createRequestGenerationGuard();
+        const systemSnapshotGeneration = snapshotGeneration.current;
         const closeLicenses = useCallback(() => setShowLicenses(false), []);
         const dirty = useMemo(
                 () => JSON.stringify(draft) !== JSON.stringify(baseline),
@@ -101,24 +126,31 @@ export function App() {
                         !confirm(t("Discard unsaved edits and refresh hardware?"))
                 )
                         return;
+                const sequence = systemSnapshotGeneration.begin();
+                void rebarInspectionCoordinator.current?.run(() =>
+                        bridge.inspectResizableBarStatus(),
+                );
                 setBusy(true);
                 setError("");
                 try {
                         const s = await (refresh
                                 ? bridge.refresh()
                                 : bridge.snapshot());
+                        if (!systemSnapshotGeneration.isCurrent(sequence))
+                                return;
                         setSnap(s);
                         const d = s.config?.draft ?? DEFAULT_DRAFT;
                         setDraft(structuredClone(d));
                         setBaseline(structuredClone(d));
                         setReport(null);
                 } catch (e) {
-                        setError(
+                        if (systemSnapshotGeneration.isCurrent(sequence)) setError(
                                 (e as { message?: string }).message ||
                                         String(e),
                         );
                 } finally {
-                        setBusy(false);
+                        if (systemSnapshotGeneration.isCurrent(sequence))
+                                setBusy(false);
                 }
         };
         useEffect(() => {
@@ -226,7 +258,15 @@ export function App() {
                         setBaseline(structuredClone(r.draft));
                         setReport(null);
                         try {
+                                const sequence =
+                                        systemSnapshotGeneration.begin();
+                                void rebarInspectionCoordinator.current?.run(
+                                        () =>
+                                                bridge.inspectResizableBarStatus(),
+                                );
                                 const next = await bridge.refresh();
+                                if (!systemSnapshotGeneration.isCurrent(sequence))
+                                        return;
                                 setSnap(next);
                                 setDraft(
                                         structuredClone(
@@ -271,6 +311,8 @@ export function App() {
                                 <button onClick={() => load()}>{t("Try again")}</button>
                         </main>
                 );
+        const rebarStatus = presentResizableBarStatus(rebarInspection);
+        const motherboardSupport = presentMotherboardSupport(snap);
         return (
                 <div className="app">
                         {previewMode && (
@@ -364,6 +406,49 @@ export function App() {
                                         >{t("Refresh system")}</button>
                                 </div>
                         </header>
+                        <section
+                                className="rebar-status-strip"
+                                aria-label={t("Resizable BAR status")}
+                        >
+                                <div
+                                        className={`motherboard-support-status ${motherboardSupport.tone}`}
+                                        aria-label={`${t("Motherboard support")}: ${t(motherboardSupport.label)}`}
+                                >
+                                        <span>{t("Motherboard support")}</span>
+                                        <strong>{t(motherboardSupport.label)}</strong>
+                                        {motherboardSupport.boardProduct && (
+                                                <span>{motherboardSupport.boardProduct}</span>
+                                        )}
+                                </div>
+                                <div
+                                        className={`rebar-current-status ${rebarStatus.tone}`}
+                                        role="status"
+                                        aria-live="polite"
+                                        aria-label={t(rebarStatus.heading)}
+                                >
+                                        <strong>{t(rebarStatus.heading)}</strong>
+                                        {rebarStatus.gpus.length > 0 && (
+                                                <div className="rebar-status-gpus">
+                                                        {rebarStatus.gpus.map((gpu) => (
+                                                                <span key={gpu.pciBusId}>
+                                                                        <b>{gpu.productName}</b>
+                                                                        {gpu.bar1TotalBytes && (
+                                                                                <>
+                                                                                        {" · "}BAR1 {bytes(gpu.bar1TotalBytes)}
+                                                                                </>
+                                                                        )}
+                                                                        {rebarStatus.tone === "expanded" &&
+                                                                                rebarStatus.driverVersion && (
+                                                                                        <>
+                                                                                                {" · "}{t("Driver")} {rebarStatus.driverVersion}
+                                                                                        </>
+                                                                                )}
+                                                                </span>
+                                                        ))}
+                                                </div>
+                                        )}
+                                        </div>
+                        </section>
                         {surface === "deploy" ? (
                                 <DeploymentWorkspace snapshot={snap} />
                         ) : (
@@ -686,7 +771,7 @@ export function App() {
                                                                                         </div>
                                                                                         <div className="gpu-facts">
                                                                                                 <span>
-                                                                                                        BAR0{" "}
+                                                                                                        {t("Current BAR aperture")}{" "}
                                                                                                         <b>
                                                                                                                 {bytes(
                                                                                                                         g.currentBarSize,

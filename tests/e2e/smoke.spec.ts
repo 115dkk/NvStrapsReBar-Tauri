@@ -72,7 +72,11 @@ test("preview discloses simulation and completes guarded save journey", async ({
         await expect(
                 page.getByRole("heading", { name: "Firmware configuration" }),
         ).toBeVisible();
-        await expect(page.getByText("NVIDIA GeForce RTX 2080")).toBeVisible();
+        await expect(
+                page.getByRole("heading", {
+                        name: "NVIDIA GeForce RTX 2080 SUPER",
+                }),
+        ).toBeVisible();
         const targetSize = page.getByLabel("Target PCI BAR size");
         await expect(targetSize.locator('option[value="31"]')).toHaveText(
                 "2 PiB",
@@ -156,7 +160,9 @@ test("durable deployment completes in order and distinguishes requests from rece
         ).toBeVisible();
         await expect(page.getByText("FLASH WITH VENDOR TOOL")).toBeVisible();
         await expect(
-                page.getByText("PRO Z690-A DDR4(MS-7D25)"),
+                page
+                        .locator(".deployment-content")
+                        .getByText("PRO Z690-A DDR4(MS-7D25)"),
         ).toBeVisible();
         await expect(page.getByText("Profile ID", { exact: true })).toHaveCount(0);
         await expect(page.getByText("Plan revision", { exact: true })).toHaveCount(0);
@@ -282,7 +288,9 @@ test("durable deployment completes in order and distinguishes requests from rece
         await expect(page.getByText("Windows boot time recorded")).toBeVisible();
 
         await page.getByRole("button", { name: "Collect BAR1 data" }).click();
-        await expect(page.getByText(/BAR1 8 GiB/)).toBeVisible();
+        await expect(
+                page.locator(".deployment-content").getByText(/BAR1 8 GiB/),
+        ).toBeVisible();
         await expect(page.getByRole("heading", { name: "Configure NVIDIA application profiles" })).toBeVisible();
 
         await page.getByRole("button", { name: "Install Profile Inspector" }).click();
@@ -302,6 +310,7 @@ test("durable deployment completes in order and distinguishes requests from rece
         await page.getByRole("dialog").getByLabel("I completed this step and reviewed the result.").check();
         await page.getByRole("dialog").getByRole("button", { name: "Record completed step" }).click();
         await expect(page.getByText("Deployment plan complete", { exact: true })).toBeVisible();
+        await expect(page.locator(".deployment-rail .rail-note")).toHaveCount(0);
 });
 
 test("deployment remains reachable without horizontal overflow at 900px", async ({

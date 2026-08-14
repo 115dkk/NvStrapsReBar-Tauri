@@ -3,6 +3,7 @@ import {
         DEFAULT_DRAFT,
         type ConfigDraft,
         type MachineIdentity,
+        type ResizableBarInspection,
         type SaveReceipt,
         type SystemSnapshot,
         type ValidationReport,
@@ -11,6 +12,7 @@ import {
 export interface ConfigureBridge {
         snapshot(): Promise<SystemSnapshot>;
         refresh(): Promise<SystemSnapshot>;
+        inspectResizableBarStatus(): Promise<ResizableBarInspection>;
         validate(draft: ConfigDraft): Promise<ValidationReport>;
         save(draft: ConfigDraft): Promise<SaveReceipt>;
         elevate(): Promise<void>;
@@ -27,8 +29,8 @@ const gpu = {
         device: 0,
         function: 0,
         bar0Base: "2147483648",
-        bar0Top: "2164260863",
-        currentBarSize: "268435456",
+        bar0Top: "10737418239",
+        currentBarSize: "8589934592",
         dedicatedVideoMemory: "8589934592",
         isTuring: true,
         recommendedBarSizeSelector: 13,
@@ -50,7 +52,7 @@ const identity: MachineIdentity = {
                         location: { bus: 1, device: 0, function: 0 },
                         bridgeLocation: { bus: 0, device: 1, function: 0 },
                         bar0Base: 2147483648,
-                        bar0Top: 2164260863,
+                        bar0Top: 10737418239,
                 },
         ],
 };
@@ -85,6 +87,18 @@ let previewSnapshot: SystemSnapshot = {
         },
         devices: [gpu],
         machineIdentity: identity,
+        hardwareSupport: {
+                motherboardNativeResizableBar: {
+                        state: "supported",
+                        reasonCode: "exactMotherboardCatalogMatch",
+                        catalogId: "msi-pro-z690-a-ddr4-ms-7d25",
+                },
+                targetGpuFamily: {
+                        state: "supported",
+                        reasonCode: "allDetectedGpusTuring",
+                },
+                overallState: "supported",
+        },
         notices: [],
 };
 const bytesFor = (draft: ConfigDraft) => {
@@ -100,9 +114,27 @@ const bytesFor = (draft: ConfigDraft) => {
                 ? 0
                 : 14 + draft.rules.length * 10 + (selected ? 31 : 0);
 };
-const preview: ConfigureBridge = {
+const previewResizableBarInspection: ResizableBarInspection = {
+        driverVersion: "596.36",
+        capturedAt: "2026-08-14T10:50:58Z",
+        state: "expanded",
+        gpus: [
+                {
+                        pciBusId: "00000000:01:00.0",
+                        productName: "NVIDIA GeForce RTX 2080 SUPER",
+                        bar1TotalBytes: "8589934592",
+                        windowsBarSizeBytes: "8589934592",
+                        state: "expanded",
+                        reason: "BAR1 is larger than the legacy 256 MiB window and matches Windows",
+                },
+        ],
+        warnings: [],
+};
+export const previewConfigureBridge: ConfigureBridge = {
         snapshot: async () => structuredClone(previewSnapshot),
         refresh: async () => structuredClone(previewSnapshot),
+        inspectResizableBarStatus: async () =>
+                structuredClone(previewResizableBarInspection),
         validate: async (draft) => {
                 const encodedSize = bytesFor(draft);
                 return {
@@ -156,10 +188,15 @@ const preview: ConfigureBridge = {
 const nativeBridge: ConfigureBridge = {
         snapshot: () => invoke("get_system_snapshot"),
         refresh: () => invoke("refresh_system"),
+        inspectResizableBarStatus: () =>
+                invoke("inspect_resizable_bar_status"),
         validate: (draft) => invoke("validate_config", { draft }),
         save: (draft) => invoke("save_config", { draft }),
         elevate: () => invoke("request_elevation"),
 };
-const isTauri = () => "__TAURI_INTERNALS__" in window;
-export const bridge: ConfigureBridge = isTauri() ? nativeBridge : preview;
+const isTauri = () =>
+        typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+export const bridge: ConfigureBridge = isTauri()
+        ? nativeBridge
+        : previewConfigureBridge;
 export const previewMode = !isTauri();

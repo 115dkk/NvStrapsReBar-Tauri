@@ -30,6 +30,18 @@ const snapshot: SystemSnapshot = {
         config: null,
         devices: [],
         machineIdentity: null,
+        hardwareSupport: {
+                motherboardNativeResizableBar: {
+                        state: "unknown",
+                        reasonCode: "machineIdentityUnavailable",
+                        catalogId: null,
+                },
+                targetGpuFamily: {
+                        state: "unknown",
+                        reasonCode: "noGpusDetected",
+                },
+                overallState: "unknown",
+        },
         notices: [],
 };
 const profile = (id: string): MachineProfile => ({
@@ -118,6 +130,100 @@ const adapter = (overrides: Partial<DeploymentAdapter>): DeploymentAdapter =>
 describe("DeploymentWorkspaceSession", () => {
         beforeEach(() => vi.restoreAllMocks());
 
+        it("uses the Rust catalog ID for MSI route defaults", () => {
+                const catalogSnapshot = structuredClone(snapshot);
+                catalogSnapshot.hardwareSupport.motherboardNativeResizableBar = {
+                        state: "supported",
+                        reasonCode: "exactMotherboardCatalogMatch",
+                        catalogId: "msi-pro-z690-a-ddr4-ms-7d25",
+                };
+                const session = createDeploymentWorkspaceSession(
+                        catalogSnapshot,
+                        adapter({
+                                listMachineProfiles: async () => [],
+                                getNvidiaProfileInspectorInstallation:
+                                        async () => null,
+                        }),
+                );
+
+                expect(session.view()).toMatchObject({
+                        displayName: "PRO Z690-A DDR4 · RTX 2080 SUPER",
+                        recoveryMethod: "usbFlashback",
+                        instructionsUrl: expect.stringContaining(
+                                "PROZ690-AWIFIDDR4",
+                        ),
+                        installNote:
+                                "Use M-FLASH to select the exported vendor-format image.",
+                });
+        });
+
+        it("projects the literal step immediately after the active plan step", async () => {
+                const owner = profile("p1");
+                const session = createDeploymentWorkspaceSession(
+                        snapshot,
+                        adapter({
+                                listMachineProfiles: async () => [owner],
+                                getNvidiaProfileInspectorInstallation:
+                                        async () => null,
+                                getDeploymentPlan: async () => plan(owner, 1),
+                        }),
+                );
+                await tick();
+                expect(session.view().activeStep?.id).toBe(
+                        "writeNvstrapsConfiguration",
+                );
+                expect(session.view().nextStep?.id).toBe(
+                        "rebootAfterConfiguration",
+                );
+        });
+
+        it("has no next step when the active step is last", async () => {
+                const owner = profile("p1");
+                const session = createDeploymentWorkspaceSession(
+                        snapshot,
+                        adapter({
+                                listMachineProfiles: async () => [owner],
+                                getNvidiaProfileInspectorInstallation:
+                                        async () => null,
+                                getDeploymentPlan: async () => plan(owner, 3),
+                        }),
+                );
+                await tick();
+                expect(session.view().activeStep?.id).toBe(
+                        "configureNvidiaApplications",
+                );
+                expect(session.view().nextStep).toBeNull();
+        });
+
+        it("has no next step without a plan or after plan completion", async () => {
+                const empty = createDeploymentWorkspaceSession(
+                        snapshot,
+                        adapter({
+                                listMachineProfiles: async () => [],
+                                getNvidiaProfileInspectorInstallation:
+                                        async () => null,
+                        }),
+                );
+                await tick();
+                expect(empty.view().plan).toBeNull();
+                expect(empty.view().nextStep).toBeNull();
+
+                const owner = profile("p1");
+                const complete = createDeploymentWorkspaceSession(
+                        snapshot,
+                        adapter({
+                                listMachineProfiles: async () => [owner],
+                                getNvidiaProfileInspectorInstallation:
+                                        async () => null,
+                                getDeploymentPlan: async () =>
+                                        plan(owner, order.length),
+                        }),
+                );
+                await tick();
+                expect(complete.view().activeStep).toBeNull();
+                expect(complete.view().nextStep).toBeNull();
+        });
+
         it("rejects a stale profile plan response after profile selection changes", async () => {
                 const first = profile("p1"),
                         second = profile("p2");
@@ -145,10 +251,16 @@ describe("DeploymentWorkspaceSession", () => {
                 });
                 p2.resolve(plan(second, 1));
                 await selecting;
-                p1.resolve(plan(first, 1));
+                expect(session.view().nextStep?.id).toBe(
+                        "rebootAfterConfiguration",
+                );
+                p1.resolve(plan(first, 2));
                 await tick();
                 expect(session.view().selectedProfileId).toBe(second.profileId);
                 expect(session.view().plan?.profileId).toBe(second.profileId);
+                expect(session.view().nextStep?.id).toBe(
+                        "rebootAfterConfiguration",
+                );
         });
 
         it("does not leak a deferred workflow response after profile selection changes", async () => {

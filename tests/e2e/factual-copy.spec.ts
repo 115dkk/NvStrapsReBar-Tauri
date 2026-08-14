@@ -47,7 +47,11 @@ test("English copy names hardware, selected files, and the next vendor action", 
                         name: "Firmware preparation and installation",
                 }),
         ).toBeVisible();
-        await expect(page.getByText("PRO Z690-A DDR4(MS-7D25)")).toBeVisible();
+        await expect(
+                page
+                        .locator(".deployment-content")
+                        .getByText("PRO Z690-A DDR4(MS-7D25)"),
+        ).toBeVisible();
         await expect(page.getByText("FLASH WITH VENDOR TOOL")).toBeVisible();
         await expect(page.getByText("Selected firmware image")).toBeVisible();
         await expect(page.getByText(/E7D25IMS\.1N0 · 32 MiB · SHA-256/)).toBeVisible();
@@ -77,7 +81,11 @@ test("Korean copy states the same facts and actions without accuracy claims", as
         await expect(
                 page.getByRole("heading", { name: "펌웨어 준비 및 적용" }),
         ).toBeVisible();
-        await expect(page.getByText("PRO Z690-A DDR4(MS-7D25)")).toBeVisible();
+        await expect(
+                page
+                        .locator(".deployment-content")
+                        .getByText("PRO Z690-A DDR4(MS-7D25)"),
+        ).toBeVisible();
         await expect(page.getByText("제조사 도구에서 플래시")).toBeVisible();
         await expect(page.getByText("선택한 펌웨어 이미지")).toBeVisible();
         await expect(page.getByText(/E7D25IMS\.1N0 · 32 MiB · SHA-256/)).toBeVisible();

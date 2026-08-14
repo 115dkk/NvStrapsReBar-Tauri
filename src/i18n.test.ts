@@ -61,6 +61,9 @@ describe("i18n locale policy", () => {
                         "Create machine-bound profile",
                         "OPERATOR ATTESTATION",
                         "Tool launch is a handoff only; policy remains incomplete until manual confirmation.",
+                        "Next steps",
+                        "Prepare the package here. Use the vendor tool for flashing and the firmware screen for setup values.",
+                        "Dismiss operation status",
                 ];
                 const forbiddenKorean = [
                         "정확한 컴퓨터 / 복구 가능한 아티팩트",
@@ -78,6 +81,7 @@ describe("i18n locale policy", () => {
                         "이 컴퓨터에 고정된 프로필 만들기",
                         "작업자 확인",
                         "도구 실행은 인계일 뿐이며 수동 확인 전까지 정책은 완료되지 않습니다.",
+                        "작업 상태 닫기",
                 ];
                 for (const source of forbiddenEnglish)
                         expect(translatedSources).not.toContain(source);
@@ -95,5 +99,48 @@ describe("i18n locale policy", () => {
                 expect(translate("ko", "Editor process 4171 launched · next: edit the policy and record the result.")).toBe("편집기 프로세스 4171 실행됨 · 다음: 정책을 편집하고 결과를 기록하세요.");
                 expect(translate("ko", "Legacy profile created with 2 rules · source fingerprint recorded.")).toBe("레거시 프로필 생성 · 규칙 2개 · 원본 지문 기록");
                 expect(translate("ko", "Hardware check found 1 difference; deployment remains blocked until the selected profile matches.")).toBe("하드웨어 확인 결과 1개 항목이 다릅니다. 선택한 프로필과 일치해야 배포를 계속할 수 있습니다.");
+                expect(translate("en", "Next step")).toBe("Next step");
+                expect(translate("ko", "Next step")).toBe("다음 단계");
+                expect(translate("ko", "Checking Resizable BAR…")).toBe(
+                        "Resizable BAR 상태 확인 중…",
+                );
+                expect(translate("ko", "Resizable BAR active")).toBe(
+                        "Resizable BAR 활성",
+                );
+                expect(
+                        translate("ko", "BAR1 is using the 256 MiB aperture"),
+                ).toBe("BAR1 256 MiB 메모리 창 사용 중");
+                expect(
+                        translate("ko", "Resizable BAR status unavailable"),
+                ).toBe("Resizable BAR 상태 확인 불가");
+                expect(translate("ko", "Current BAR aperture")).toBe(
+                        "현재 BAR 메모리 창",
+                );
+                expect(translate("ko", "Motherboard support")).toBe(
+                        "메인보드 지원",
+                );
+                expect(translate("ko", "Supported")).toBe("지원됨");
+                expect(translate("ko", "Not in current support list")).toBe(
+                        "현재 지원 목록에 없음",
+                );
+
+                const stepTitles = [
+                        "Compare current hardware, BIOS, topology, and source image",
+                        "Record the firmware recovery route",
+                        "Preserve and hash the source firmware image",
+                        "Build and inspect the Rust DXE driver",
+                        "Apply the profile's legacy-board patch bundle",
+                        "Inject the driver and inspect the firmware artifact",
+                        "Flash with the documented vendor route",
+                        "Confirm firmware setup values",
+                        "Boot Windows after the firmware handoff",
+                        "Read the firmware driver status",
+                        "Write and read back the NvStrapsReBar configuration",
+                        "Restart after configuration",
+                        "Observe Resizable BAR through NVIDIA telemetry",
+                        "Configure NVIDIA application profiles",
+                ];
+                for (const title of stepTitles)
+                        expect(translate("ko", title)).not.toBe(title);
         });
 });

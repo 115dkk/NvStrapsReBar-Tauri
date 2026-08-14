@@ -23,6 +23,7 @@ import type {
         RecoveryMethod,
         StepId,
 } from "./contract";
+import { usesMsiProZ690Route } from "../hardware-support";
 
 const MSI_MANUAL =
         "https://download.msi.com/archive/mnu_exe/mb/PROZ690-AWIFIDDR4_PROZ690-ADDR4100x150.pdf";
@@ -102,6 +103,7 @@ export interface DeploymentWorkspaceView {
         selectedProfile: MachineProfile | null;
         plan: DeploymentPlan | null;
         activeStep: DeploymentPlan["steps"][number] | null;
+        nextStep: DeploymentPlan["steps"][number] | null;
         nextAction: DeploymentNextAction;
         preflightExact: boolean | null;
         preparation: FirmwarePreparation | null;
@@ -189,8 +191,7 @@ export type DeploymentWorkspaceIntent =
                           | "installInspector"
                           | "backupProfiles"
                           | "launchInspector"
-                          | "closeModals"
-                          | "dismissActivity";
+                          | "closeModals";
           };
 
 export interface DeploymentWorkspaceSession {
@@ -204,6 +205,7 @@ type DeploymentWorkspaceState = Omit<
         DeploymentWorkspaceView,
         | "selectedProfile"
         | "activeStep"
+        | "nextStep"
         | "nextAction"
         | "legacyAnalysisValid"
         | "selectedLegacyEntries"
@@ -431,12 +433,7 @@ class Session implements DeploymentWorkspaceSession {
                 snapshot: SystemSnapshot,
                 private adapter: DeploymentAdapter,
         ) {
-                const msi =
-                        snapshot.machineIdentity?.boardManufacturer ===
-                                "Micro-Star International Co., Ltd." &&
-                        snapshot.machineIdentity.boardProduct ===
-                                "PRO Z690-A DDR4(MS-7D25)" &&
-                        snapshot.machineIdentity.boardVersion === "1.0";
+                const msi = usesMsiProZ690Route(snapshot);
                 this.state = {
                         snapshot,
                         displayName: msi
@@ -497,10 +494,18 @@ class Session implements DeploymentWorkspaceSession {
                                         profile.profileId ===
                                         this.state.selectedProfileId,
                         ) ?? null;
+                const planSteps = this.state.plan?.steps ?? [];
+                const activeStepIndex = planSteps.findIndex(
+                        (step) => step.state === "ready",
+                );
                 const activeStep =
-                        this.state.plan?.steps.find(
-                                (step) => step.state === "ready",
-                        ) ?? null;
+                        activeStepIndex >= 0
+                                ? (planSteps[activeStepIndex] ?? null)
+                                : null;
+                const nextStep =
+                        activeStepIndex >= 0
+                                ? (planSteps[activeStepIndex + 1] ?? null)
+                                : null;
                 const legacyAnalysisValid = Boolean(
                         this.state.legacyAnalysis &&
                                 this.state.legacyAnalysis.path ===
@@ -588,6 +593,7 @@ class Session implements DeploymentWorkspaceSession {
                         ...this.state,
                         selectedProfile,
                         activeStep,
+                        nextStep,
                         nextAction: nextActionFor(activeStep?.id),
                         legacyAnalysisValid,
                         selectedLegacyEntries,
@@ -936,9 +942,6 @@ class Session implements DeploymentWorkspaceSession {
                                         showManual: false,
                                         showConfigurationReboot: false,
                                 });
-                                return;
-                        case "dismissActivity":
-                                this.patch({ activity: null });
                                 return;
                         case "chooseFirmware":
                                 return this.run("firmware", async (tx) => {

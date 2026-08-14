@@ -67,6 +67,10 @@ authoritative. Keep RIIR, deployment automation, and physical-machine proof as s
 ## Commits and recovery
 
 - Preserve unrelated user changes. Stage explicit paths only.
+- Unless the user explicitly asks to keep the work local, stop before publishing, leave a PR
+  unmerged, or otherwise names a narrower keeping boundary, repository changes are complete only
+  after intentional commits, push, PR creation, required CI, merge, post-merge CI, and local
+  default-branch synchronization all succeed.
 - Make small, logical, reversible commits: one domain behavior, adapter, frontend journey,
   architecture refactor, documentation update, or CI change per commit. Do not hide unrelated work
   in a catch-all commit.
