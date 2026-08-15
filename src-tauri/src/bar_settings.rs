@@ -2,7 +2,10 @@ use nvstraps_core::config::Config;
 use nvstraps_deploy::Sha256Digest;
 use serde::Serialize;
 
-use crate::{devices::GpuDevice, status::DriverStatus};
+use crate::{
+    devices::GpuDevice, resizable_bar::windows_reports_expanded_turing_aperture,
+    status::DriverStatus,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -31,11 +34,21 @@ pub enum SavedBarConfigurationState {
     Unreadable,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum BarSettingsControlEvidence {
+    CurrentBootDxe,
+    ExpandedTuringAperture,
+    NotObserved,
+    Indeterminate,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BarSettingsStatus {
     pub current_boot_dxe_state: CurrentBootDxeState,
     pub current_boot_dxe_reason_code: CurrentBootDxeReasonCode,
+    pub control_evidence: BarSettingsControlEvidence,
     pub settings_available: bool,
     pub saved_configuration_state: SavedBarConfigurationState,
     pub topology_token: String,
@@ -64,7 +77,6 @@ pub(crate) struct DriverRuntimeAssessment {
 }
 
 pub(crate) fn assess_driver_runtime(
-    firmware_accessible: bool,
     status_variable: &StatusVariableObservation,
     saved_configuration: SavedConfigurationObservation<'_>,
     devices: &[GpuDevice],
@@ -118,14 +130,26 @@ pub(crate) fn assess_driver_runtime(
         ),
         SavedConfigurationObservation::Unreadable => (SavedBarConfigurationState::Unreadable, None),
     };
+    let control_evidence = if current_boot_dxe_state == CurrentBootDxeState::ObservedThisBoot {
+        BarSettingsControlEvidence::CurrentBootDxe
+    } else if windows_reports_expanded_turing_aperture(devices) {
+        BarSettingsControlEvidence::ExpandedTuringAperture
+    } else if current_boot_dxe_state == CurrentBootDxeState::NotObservedThisBoot {
+        BarSettingsControlEvidence::NotObserved
+    } else {
+        BarSettingsControlEvidence::Indeterminate
+    };
     DriverRuntimeAssessment {
         driver_status,
         bar_settings: BarSettingsStatus {
             current_boot_dxe_state,
             current_boot_dxe_reason_code,
-            settings_available: firmware_accessible
-                && current_boot_dxe_state == CurrentBootDxeState::ObservedThisBoot
-                && config_token.is_some(),
+            control_evidence,
+            settings_available: matches!(
+                control_evidence,
+                BarSettingsControlEvidence::CurrentBootDxe
+                    | BarSettingsControlEvidence::ExpandedTuringAperture
+            ),
             saved_configuration_state,
             topology_token: topology_token(devices),
             config_token,
@@ -136,7 +160,6 @@ pub(crate) fn assess_driver_runtime(
 pub(crate) fn current_boot_driver_is_observed(status_variable: &StatusVariableObservation) -> bool {
     let default = Config::default();
     assess_driver_runtime(
-        true,
         status_variable,
         SavedConfigurationObservation::Valid {
             config: &default,
@@ -231,7 +254,7 @@ mod tests {
     #[test]
     fn current_boot_status_separates_observation_from_saved_configuration() {
         let disabled = Config::default();
-        let assessment = assess_driver_runtime(true, &status(40), valid(&disabled, &[]), &[]);
+        let assessment = assess_driver_runtime(&status(40), valid(&disabled, &[]), &[]);
         assert_eq!(
             assessment.bar_settings.current_boot_dxe_state,
             CurrentBootDxeState::ObservedThisBoot
@@ -240,13 +263,17 @@ mod tests {
             assessment.bar_settings.saved_configuration_state,
             SavedBarConfigurationState::Disabled
         );
+        assert_eq!(
+            assessment.bar_settings.control_evidence,
+            BarSettingsControlEvidence::CurrentBootDxe
+        );
         assert!(assessment.bar_settings.settings_available);
     }
 
     #[test]
     fn recognized_driver_errors_still_leave_settings_available_for_repair() {
         let default = Config::default();
-        let assessment = assess_driver_runtime(true, &status(200), valid(&default, &[]), &[]);
+        let assessment = assess_driver_runtime(&status(200), valid(&default, &[]), &[]);
         assert_eq!(
             assessment.bar_settings.current_boot_dxe_state,
             CurrentBootDxeState::ObservedThisBoot
@@ -258,7 +285,6 @@ mod tests {
     fn missing_status_locks_settings_as_not_observed() {
         let default = Config::default();
         let assessment = assess_driver_runtime(
-            true,
             &StatusVariableObservation::Missing,
             valid(&default, &[]),
             &[],
@@ -272,6 +298,42 @@ mod tests {
             CurrentBootDxeReasonCode::StatusVariableMissing
         );
         assert!(!assessment.bar_settings.settings_available);
+        assert_eq!(
+            assessment.bar_settings.control_evidence,
+            BarSettingsControlEvidence::NotObserved
+        );
+    }
+
+    #[test]
+    fn expanded_turing_aperture_unlocks_settings_without_current_boot_status() {
+        let assessment = assess_driver_runtime(
+            &StatusVariableObservation::Missing,
+            SavedConfigurationObservation::Unreadable,
+            &[gpu(1)],
+        );
+        assert_eq!(
+            assessment.bar_settings.control_evidence,
+            BarSettingsControlEvidence::ExpandedTuringAperture
+        );
+        assert!(assessment.bar_settings.settings_available);
+        assert_eq!(assessment.bar_settings.config_token, None);
+    }
+
+    #[test]
+    fn expanded_non_turing_aperture_does_not_stand_in_for_nvstraps_control() {
+        let mut non_turing = gpu(1);
+        non_turing.device_id = 0x2204;
+        non_turing.is_turing = true;
+        let assessment = assess_driver_runtime(
+            &StatusVariableObservation::Missing,
+            SavedConfigurationObservation::Unreadable,
+            &[non_turing],
+        );
+        assert_eq!(
+            assessment.bar_settings.control_evidence,
+            BarSettingsControlEvidence::NotObserved
+        );
+        assert!(!assessment.bar_settings.settings_available);
     }
 
     #[test]
@@ -283,7 +345,7 @@ mod tests {
             StatusVariableObservation::Unavailable,
         ] {
             let default = Config::default();
-            let assessment = assess_driver_runtime(true, &observation, valid(&default, &[]), &[]);
+            let assessment = assess_driver_runtime(&observation, valid(&default, &[]), &[]);
             assert_eq!(
                 assessment.bar_settings.current_boot_dxe_state,
                 CurrentBootDxeState::Indeterminate
@@ -293,14 +355,15 @@ mod tests {
     }
 
     #[test]
-    fn inaccessible_firmware_locks_an_otherwise_observed_driver() {
-        let default = Config::default();
-        let assessment = assess_driver_runtime(false, &status(40), valid(&default, &[]), &[]);
+    fn unreadable_configuration_does_not_hide_observed_control() {
+        let assessment =
+            assess_driver_runtime(&status(40), SavedConfigurationObservation::Unreadable, &[]);
         assert_eq!(
             assessment.bar_settings.current_boot_dxe_state,
             CurrentBootDxeState::ObservedThisBoot
         );
-        assert!(!assessment.bar_settings.settings_available);
+        assert!(assessment.bar_settings.settings_available);
+        assert_eq!(assessment.bar_settings.config_token, None);
     }
 
     #[test]
@@ -310,7 +373,7 @@ mod tests {
             ..Config::default()
         };
         let raw = config.encode().unwrap();
-        let assessment = assess_driver_runtime(true, &status(20), valid(&config, &raw), &[]);
+        let assessment = assess_driver_runtime(&status(20), valid(&config, &raw), &[]);
         assert_eq!(
             assessment.bar_settings.saved_configuration_state,
             SavedBarConfigurationState::Enabled
@@ -322,6 +385,7 @@ mod tests {
             "currentBootStatusObserved"
         );
         assert_eq!(value["savedConfigurationState"], "enabled");
+        assert_eq!(value["controlEvidence"], "currentBootDxe");
         assert_eq!(value["configToken"].as_str().unwrap().len(), 64);
         assert_eq!(value["topologyToken"].as_str().unwrap().len(), 64);
     }
@@ -329,7 +393,6 @@ mod tests {
     #[test]
     fn invalid_and_unreadable_saved_configuration_are_distinct() {
         let invalid = assess_driver_runtime(
-            true,
             &status(200),
             SavedConfigurationObservation::Invalid { raw: b"bad" },
             &[],
@@ -340,17 +403,13 @@ mod tests {
         );
         assert!(invalid.bar_settings.settings_available);
 
-        let unreadable = assess_driver_runtime(
-            true,
-            &status(20),
-            SavedConfigurationObservation::Unreadable,
-            &[],
-        );
+        let unreadable =
+            assess_driver_runtime(&status(20), SavedConfigurationObservation::Unreadable, &[]);
         assert_eq!(
             unreadable.bar_settings.saved_configuration_state,
             SavedBarConfigurationState::Unreadable
         );
-        assert!(!unreadable.bar_settings.settings_available);
+        assert!(unreadable.bar_settings.settings_available);
     }
 
     #[test]
@@ -366,6 +425,41 @@ mod tests {
         assert_ne!(
             topology_token(&[first, moved]),
             topology_token(&[gpu(1), gpu(2)])
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "read-only current-machine DXE/config observation"]
+    fn current_machine_bar_settings_control_reports_observed_state() {
+        use crate::firmware::{CONFIG_VARIABLE_NAME, STATUS_VARIABLE_NAME, read_variable};
+
+        let devices = crate::devices::enumerate_gpus().expect("read current NVIDIA inventory");
+        let config_raw = read_variable(CONFIG_VARIABLE_NAME)
+            .ok()
+            .map(|value| value.unwrap_or_default());
+        let decoded = config_raw.as_deref().map(Config::decode);
+        let saved = match &decoded {
+            Some(Ok(config)) => SavedConfigurationObservation::Valid {
+                config,
+                raw: config_raw
+                    .as_deref()
+                    .expect("decoded configuration has bytes"),
+            },
+            Some(Err(_)) => SavedConfigurationObservation::Invalid {
+                raw: config_raw.as_deref().expect("failed decode has bytes"),
+            },
+            None => SavedConfigurationObservation::Unreadable,
+        };
+        let status = match read_variable(STATUS_VARIABLE_NAME) {
+            Ok(Some(bytes)) => StatusVariableObservation::Present(bytes),
+            Ok(None) => StatusVariableObservation::Missing,
+            Err(_) => StatusVariableObservation::Unavailable,
+        };
+        let assessment = assess_driver_runtime(&status, saved, &devices);
+        eprintln!(
+            "{}",
+            serde_json::to_string_pretty(&assessment).expect("serialize assessment")
         );
     }
 }

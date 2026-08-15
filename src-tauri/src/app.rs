@@ -344,12 +344,7 @@ fn refresh_snapshot(state: &AppState) -> BackendResult<SystemSnapshot> {
         (_, Some(raw), true) => SavedConfigurationObservation::Invalid { raw },
         _ => SavedConfigurationObservation::Unreadable,
     };
-    let runtime = assess_driver_runtime(
-        firmware_accessible,
-        &status_variable,
-        saved_configuration,
-        &devices,
-    );
+    let runtime = assess_driver_runtime(&status_variable, saved_configuration, &devices);
     let hardware_support = determine_hardware_support(machine_identity.as_ref(), &devices);
     let snapshot = SystemSnapshot {
         schema_version: 2,

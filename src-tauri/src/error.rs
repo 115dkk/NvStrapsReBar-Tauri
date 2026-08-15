@@ -9,8 +9,10 @@ pub enum BackendError {
     Windows { operation: &'static str, code: u32 },
     #[error("firmware variable {name} is unavailable: {reason}")]
     FirmwareUnavailable { name: &'static str, reason: String },
-    #[error("BAR settings are locked because the DXE driver was not observed during this boot")]
-    DriverNotObservedThisBoot,
+    #[error(
+        "BAR settings are locked because neither current-boot DXE execution nor an expanded Turing aperture was observed"
+    )]
+    BarSettingsControlNotObserved,
     #[error("GPU or bridge topology changed after BAR settings were loaded")]
     StaleTopology,
     #[error("saved NvStrapsReBar configuration changed after BAR settings were loaded")]
@@ -72,8 +74,8 @@ impl From<BackendError> for ApiError {
             BackendError::UnsupportedPlatform => ("unsupported_platform", false, None),
             BackendError::Windows { code, .. } => ("windows_api_error", true, Some(*code)),
             BackendError::FirmwareUnavailable { .. } => ("firmware_unavailable", true, None),
-            BackendError::DriverNotObservedThisBoot => {
-                ("driver_not_observed_this_boot", true, None)
+            BackendError::BarSettingsControlNotObserved => {
+                ("bar_settings_control_not_observed", true, None)
             }
             BackendError::StaleTopology => ("stale_topology", true, None),
             BackendError::StaleConfiguration => ("stale_configuration", true, None),
@@ -129,8 +131,8 @@ mod tests {
     #[test]
     fn bar_settings_failures_keep_stable_typed_codes() {
         assert_eq!(
-            ApiError::from(BackendError::DriverNotObservedThisBoot).code,
-            "driver_not_observed_this_boot"
+            ApiError::from(BackendError::BarSettingsControlNotObserved).code,
+            "bar_settings_control_not_observed"
         );
         assert_eq!(
             ApiError::from(BackendError::StaleTopology).code,

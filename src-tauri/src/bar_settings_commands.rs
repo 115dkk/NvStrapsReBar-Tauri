@@ -11,6 +11,7 @@ use crate::{
     devices::{GpuDevice, enumerate_gpus},
     error::{ApiError, BackendError, BackendResult, CommandResult},
     firmware::{CONFIG_VARIABLE_NAME, STATUS_VARIABLE_NAME, read_variable},
+    resizable_bar::windows_reports_expanded_turing_aperture,
 };
 
 #[derive(Clone, Debug, Deserialize)]
@@ -59,11 +60,15 @@ fn save_bar_settings_inner(
     })
 }
 
-fn require_observed_driver(status: &StatusVariableObservation) -> BackendResult<()> {
-    if current_boot_driver_is_observed(status) {
+fn require_control_evidence(
+    status: &StatusVariableObservation,
+    devices: &[GpuDevice],
+) -> BackendResult<()> {
+    if current_boot_driver_is_observed(status) || windows_reports_expanded_turing_aperture(devices)
+    {
         Ok(())
     } else {
-        Err(BackendError::DriverNotObservedThisBoot)
+        Err(BackendError::BarSettingsControlNotObserved)
     }
 }
 
@@ -73,7 +78,7 @@ fn require_write_preconditions(
     devices: &[GpuDevice],
     current_config: &[u8],
 ) -> BackendResult<()> {
-    require_observed_driver(status)?;
+    require_control_evidence(status, devices)?;
     if request.expected_topology_token != topology_token(devices) {
         return Err(BackendError::StaleTopology);
     }
@@ -125,21 +130,35 @@ mod tests {
     }
 
     #[test]
-    fn settings_write_gate_requires_a_recognized_current_boot_status() {
+    fn settings_write_gate_accepts_current_boot_status_or_expanded_turing_aperture() {
         assert!(
-            require_observed_driver(&StatusVariableObservation::Present(
-                40_u64.to_le_bytes().to_vec()
-            ))
+            require_control_evidence(
+                &StatusVariableObservation::Present(40_u64.to_le_bytes().to_vec()),
+                &[]
+            )
             .is_ok()
         );
         assert!(
-            require_observed_driver(&StatusVariableObservation::Present(
-                200_u64.to_le_bytes().to_vec()
-            ))
+            require_control_evidence(
+                &StatusVariableObservation::Present(200_u64.to_le_bytes().to_vec()),
+                &[]
+            )
             .is_ok()
         );
-        assert!(require_observed_driver(&StatusVariableObservation::Missing).is_err());
-        assert!(require_observed_driver(&StatusVariableObservation::Present(vec![40])).is_err());
+        let expanded = device();
+        assert!(
+            require_control_evidence(
+                &StatusVariableObservation::Missing,
+                std::slice::from_ref(&expanded)
+            )
+            .is_ok()
+        );
+        let mut legacy = expanded;
+        legacy.current_bar_size = 256 * 1024 * 1024;
+        assert!(require_control_evidence(&StatusVariableObservation::Missing, &[legacy]).is_err());
+        assert!(
+            require_control_evidence(&StatusVariableObservation::Present(vec![40]), &[]).is_err()
+        );
     }
 
     #[test]
