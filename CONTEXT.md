@@ -112,6 +112,14 @@ configuration eligibility, and exact-profile expanded-aperture proof. Its small 
 separates plan-free current observation from plan-bound deployment evidence. Hardware capability
 remains the independent responsibility of Hardware support determination.
 
+### BAR settings control
+
+The deep Rust Module that owns whether the NvStrapsReBar DXE driver was observed during the
+current boot, the state of its saved non-volatile configuration, and token-bound configuration
+writes. Its Interface keeps volatile driver execution, persistent settings, and current aperture
+as separate facts. A settings write re-reads current-boot status, GPU/bridge/BAR0 topology, and
+the saved configuration before validating, writing, and reading back the requested value.
+
 ## Load-bearing invariants
 
 - Repository-owned runtime and build code is Rust or TypeScript; the RIIR gate rejects C/C++ and
@@ -121,6 +129,9 @@ remains the independent responsibility of Hardware support determination.
 - A mixed aperture observation preserves every target GPU row. Indeterminate evidence dominates
   aggregate state, and a patch configuration fact never claims that firmware application will
   succeed; success is established only by a later current-aperture observation.
+- BAR settings are available only after current-boot DXE execution is observed. A saved
+  configuration or expanded aperture cannot unlock them. Every settings write is bound to the
+  topology and configuration tokens returned by the snapshot.
 - Source firmware is never overwritten, flashed, or treated as interchangeable by file name.
 - A Machine Profile and Deployment Plan are bound to the same profile ID, source SHA-256, and
   recovery route.

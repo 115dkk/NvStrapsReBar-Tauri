@@ -1,4 +1,6 @@
 mod app;
+mod bar_settings;
+mod bar_settings_commands;
 mod config;
 mod deployment;
 mod deployment_workflow;
@@ -22,6 +24,7 @@ pub fn run() {
             app::refresh_system,
             app::validate_config,
             app::save_config,
+            bar_settings_commands::save_bar_settings,
             app::request_elevation,
             app::get_machine_identity,
             deployment::inspect_firmware_image,
