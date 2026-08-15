@@ -67,6 +67,7 @@ test("preview discloses simulation and completes guarded save journey", async ({
 }) => {
         await page.setViewportSize({ width: 1180, height: 760 });
         await page.goto("/");
+        await page.getByRole("button", { name: "Configure" }).click();
         await expect(page).toHaveTitle("NvStrapsReBar");
         await expect(page.getByText("PREVIEW DATA")).toBeVisible();
         await expect(

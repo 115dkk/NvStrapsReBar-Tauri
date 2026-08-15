@@ -1,4 +1,9 @@
-import type { GpuDevice, GpuRule } from "../types";
+import type { ConfigDraft, GpuDevice, GpuRule } from "../types";
+
+export const hasOperationalConfiguration = (draft: ConfigDraft) =>
+        draft.globalMode !== 0 ||
+        draft.targetPciBarSize !== 0 ||
+        draft.rules.length > 0;
 
 export const pciTargetSizes = [
         "64 MiB",

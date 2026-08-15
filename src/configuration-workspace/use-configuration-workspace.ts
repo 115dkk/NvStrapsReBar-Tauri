@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bridge } from "../bridge";
+import { barSettingsErrorMessageId } from "../bar-settings-errors";
+import { settingsLockMessageId } from "../bar-settings-routing";
 import { presentMotherboardSupport } from "../hardware-support";
 import { useI18n } from "../i18n";
 import { message, type MessageDescriptor } from "../i18n-catalog";
@@ -15,11 +17,25 @@ import {
         type ConfigDraft,
         type GpuDevice,
         type GpuRule,
+        type SaveBarSettingsRequest,
         type SaveReceipt,
         type SystemSnapshot,
         type ValidationReport,
 } from "../types";
 import { ruleForGpu } from "./model";
+
+export const runSingleFlight = async <Result,>(
+        inFlight: { current: boolean },
+        operation: () => Promise<Result>,
+) => {
+        if (inFlight.current) return undefined;
+        inFlight.current = true;
+        try {
+                return await operation();
+        } finally {
+                inFlight.current = false;
+        }
+};
 
 export const useConfigurationWorkspace = () => {
         const { t } = useI18n();
@@ -29,9 +45,14 @@ export const useConfigurationWorkspace = () => {
                 [report, setReport] = useState<ValidationReport | null>(null),
                 [error, setError] = useState<MessageDescriptor | null>(null),
                 [busy, setBusy] = useState(true),
-                [showConfirm, setShowConfirm] = useState(false),
+                [savePath, setSavePath] = useState<
+                        "configure" | "settings" | null
+                >(null),
                 [showLicenses, setShowLicenses] = useState(false),
-                [receipt, setReceipt] = useState<SaveReceipt | null>(null);
+                [receipt, setReceipt] = useState<{
+                        path: "configure" | "settings";
+                        save: SaveReceipt;
+                } | null>(null);
         const [rebarInspection, setRebarInspection] =
                 useState<ResizableBarInspectionLoadState>({
                         status: "loading",
@@ -45,7 +66,8 @@ export const useConfigurationWorkspace = () => {
                 > | null>(null),
                 snapshotGeneration = useRef<ReturnType<
                         typeof createRequestGenerationGuard
-                > | null>(null);
+                > | null>(null),
+                elevationInFlight = useRef(false);
         if (!rebarInspectionCoordinator.current)
                 rebarInspectionCoordinator.current =
                         createResizableBarInspectionCoordinator(
@@ -55,6 +77,7 @@ export const useConfigurationWorkspace = () => {
                 snapshotGeneration.current = createRequestGenerationGuard();
         const systemSnapshotGeneration = snapshotGeneration.current;
         const closeLicenses = useCallback(() => setShowLicenses(false), []);
+        const showConfirm = savePath !== null;
         const dirty = useMemo(
                 () => JSON.stringify(draft) !== JSON.stringify(baseline),
                 [draft, baseline],
@@ -152,11 +175,11 @@ export const useConfigurationWorkspace = () => {
         }, [draft, dirty, snap]);
 
         useEffect(() => {
-                if (!showConfirm) return;
+                if (!savePath) return;
                 const previous = document.activeElement as HTMLElement | null;
                 const onKey = (event: KeyboardEvent) => {
                         if (event.key === "Escape") {
-                                setShowConfirm(false);
+                                setSavePath(null);
                                 return;
                         }
                         if (event.key === "Tab" && dialog.current) {
@@ -188,7 +211,7 @@ export const useConfigurationWorkspace = () => {
                         removeEventListener("keydown", onKey);
                         (reviewButton.current ?? previous)?.focus();
                 };
-        }, [showConfirm]);
+        }, [savePath]);
 
         useEffect(() => {
                 const guard = (event: BeforeUnloadEvent) => {
@@ -212,12 +235,49 @@ export const useConfigurationWorkspace = () => {
                 });
 
         const save = async () => {
-                setShowConfirm(false);
+                if (!savePath) return;
+                const requestedPath = savePath;
+                setSavePath(null);
                 setError(null);
+                let settingsRequest: SaveBarSettingsRequest | null = null;
+                if (requestedPath === "settings") {
+                        const status = snap?.barSettings;
+                        if (
+                                !status?.settingsAvailable ||
+                                status.configToken === null
+                        ) {
+                                setError(
+                                        message(
+                                                snap
+                                                        ? (settingsLockMessageId(
+                                                                  snap,
+                                                          ) ??
+                                                                  "ui.settingsLockedCurrentConfigurationUnavailable")
+                                                        : "ui.settingsLockedCurrentConfigurationUnavailable",
+                                        ),
+                                );
+                                return;
+                        }
+                        settingsRequest = {
+                                draft,
+                                expectedTopologyToken: status.topologyToken,
+                                expectedConfigToken: status.configToken,
+                        };
+                }
                 setBusy(true);
                 try {
-                        const saved = await bridge.save(draft);
-                        setReceipt(saved);
+                        let saved: SaveReceipt;
+                        if (requestedPath === "settings") {
+                                if (!settingsRequest) return;
+                                saved = (
+                                        await bridge.saveBarSettings(
+                                                settingsRequest,
+                                        )
+                                ).save;
+                        } else {
+                                saved = await bridge.save(draft);
+                        }
+                        setReceipt({ path: requestedPath, save: saved });
                         setDraft(structuredClone(saved.draft));
                         setBaseline(structuredClone(saved.draft));
                         setReport(null);
@@ -262,17 +322,54 @@ export const useConfigurationWorkspace = () => {
                                 );
                         }
                 } catch (cause) {
+                        const typedId =
+                                requestedPath === "settings"
+                                        ? barSettingsErrorMessageId(cause)
+                                        : null;
                         setError(
-                                message("ui.configureOperationFailed", {
-                                        detail:
-                                                (cause as { message?: string })
-                                                        .message ||
-                                                String(cause),
-                                }),
+                                typedId
+                                        ? message(typedId)
+                                        : message(
+                                                  "ui.configureOperationFailed",
+                                                  {
+                                                          detail:
+                                                                  (
+                                                                          cause as {
+                                                                                  message?: string;
+                                                                          }
+                                                                  ).message ||
+                                                                  String(cause),
+                                                  },
+                                          ),
                         );
                 } finally {
                         setBusy(false);
                 }
+        };
+
+        const elevate = async () => {
+                if (busy) return;
+                await runSingleFlight(elevationInFlight, async () => {
+                        setBusy(true);
+                        setError(null);
+                        try {
+                                await bridge.elevate();
+                        } catch (cause) {
+                                setError(
+                                        message("ui.configureOperationFailed", {
+                                                detail:
+                                                        (
+                                                                cause as {
+                                                                        message?: string;
+                                                                }
+                                                        ).message ||
+                                                        String(cause),
+                                        }),
+                                );
+                        } finally {
+                                setBusy(false);
+                        }
+                });
         };
 
         return {
@@ -283,6 +380,7 @@ export const useConfigurationWorkspace = () => {
                 error,
                 busy,
                 showConfirm,
+                savePath,
                 showLicenses,
                 receipt,
                 reviewButton,
@@ -290,6 +388,10 @@ export const useConfigurationWorkspace = () => {
                 licenseButton,
                 dirty,
                 load,
+                elevate,
+                openSaveConfirmation: (
+                        path: "configure" | "settings",
+                ) => setSavePath(path),
                 patch,
                 add,
                 updateRule,
@@ -297,10 +399,13 @@ export const useConfigurationWorkspace = () => {
                 setDraft,
                 setError,
                 setReport,
-                setShowConfirm,
+                setShowConfirm: (show: boolean) => {
+                        if (!show) setSavePath(null);
+                },
                 setShowLicenses,
                 closeLicenses,
                 rebarStatus: presentResizableBarStatus(rebarInspection),
+                rebarInspection,
                 motherboardSupport: snap
                         ? presentMotherboardSupport(snap)
                         : null,

@@ -18,6 +18,15 @@ const snapshot = (state: "supported" | "unknown"): SystemSnapshot => ({
                 accessError: null,
         },
         driverStatus: null,
+        barSettings: {
+                currentBootDxeState: "notObservedThisBoot",
+                currentBootDxeReasonCode: "statusVariableMissing",
+                controlEvidence: "notObserved",
+                settingsAvailable: false,
+                savedConfigurationState: "disabled",
+                topologyToken: "topology",
+                configToken: "configuration",
+        },
         config: null,
         devices: [],
         machineIdentity: {

@@ -1,7 +1,11 @@
 import { useI18n } from "../i18n";
 import { useConfigurationWorkspaceController } from "./context";
 
-export const ConfigurationReview = () => {
+export const ConfigurationReview = ({
+        savePath,
+}: {
+        savePath: "configure" | "settings";
+}) => {
         const { t, validationSummary } = useI18n();
         const {
                 draft,
@@ -14,7 +18,7 @@ export const ConfigurationReview = () => {
                 reviewButton,
                 setDraft,
                 setReport,
-                setShowConfirm,
+                openSaveConfirmation,
         } = useConfigurationWorkspaceController();
         if (!snap) return null;
         return (
@@ -98,10 +102,17 @@ export const ConfigurationReview = () => {
                                                                 .accessible
                                                 }
                                                 onClick={() =>
-                                                        setShowConfirm(true)
+                                                        openSaveConfirmation(
+                                                                savePath,
+                                                        )
                                                 }
                                         >
-                                                {t("ui.reviewSave")}
+                                                {report &&
+                                                !report.variableWillExist
+                                                        ? t(
+                                                                  "ui.reviewConfigurationRemoval",
+                                                          )
+                                                        : t("ui.reviewSave")}
                                         </button>
                                 </div>
                         </section>
@@ -126,19 +137,26 @@ export const ConfigurationReview = () => {
                                                 {t(warningId)}
                                         </div>
                                 ))}
-                        {receipt && (
+                        {receipt?.path === savePath && (
                                 <div className="receipt" role="status">
                                         <strong>
-                                                {t(
-                                                        "ui.configurationWrittenAndReadBack",
-                                                )}
+                                                {savePath === "settings"
+                                                        ? t(
+                                                                  "ui.barSettingsSavedAndReadBack",
+                                                          )
+                                                        : t(
+                                                                  "ui.configurationWrittenAndReadBack",
+                                                          )}
                                         </strong>
                                         <span>
-                                                {receipt.bytesWritten} bytes
-                                                written · UEFI variable{" "}
-                                                {receipt.variablePresent
-                                                        ? "present"
-                                                        : "removed"}
+                                                {t("ui.saveReceiptSummary", {
+                                                        bytes: receipt.save
+                                                                .bytesWritten,
+                                                        state: receipt.save
+                                                                .variablePresent
+                                                                ? t("ui.present")
+                                                                : t("ui.removed"),
+                                                })}
                                         </span>
                                         <p>
                                                 {t(
