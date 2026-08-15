@@ -33,16 +33,16 @@ export const AutomaticPolicyPanel = () => {
                                         ],
                                         [
                                                 1,
-                                                t("ui.registryOnly"),
+                                                t("ui.builtInGpuListOnly"),
                                                 t(
-                                                        "ui.useSizesFromTheUpstreamTuringRegistry",
+                                                        "ui.builtInGpuListOnlyDescription",
                                                 ),
                                         ],
                                         [
                                                 2,
-                                                t("ui.registryFallback"),
+                                                t("ui.builtInGpuListFallback"),
                                                 t(
-                                                        "ui.useTheRegistryOr2GibForOtherwiseUnlistedTuringGpus",
+                                                        "ui.builtInGpuListFallbackDescription",
                                                 ),
                                         ],
                                 ].map(([v, l, d]) => (
@@ -75,6 +75,14 @@ export const AutomaticPolicyPanel = () => {
                                         </label>
                                 ))}
                         </div>
+                        {draft.globalMode === 0 &&
+                                draft.rules.length === 0 && (
+                                        <div className="notice warning">
+                                                {t(
+                                                        "ui.automaticPolicyOffAndNoRules",
+                                                )}
+                                        </div>
+                                )}
                         <label className="field">
                                 <span>{t("ui.targetPciBarSize")}</span>
                                 <select
@@ -90,7 +98,7 @@ export const AutomaticPolicyPanel = () => {
                                         }
                                 >
                                         <option value="0">
-                                                {t("ui.systemDefault")}
+                                                {t("ui.defaultNoPciResize")}
                                         </option>
                                         {Array.from(
                                                 {
@@ -119,7 +127,7 @@ export const AutomaticPolicyPanel = () => {
                                 </select>
                                 <small>
                                         {t(
-                                                "ui.specialModes64And65LimitPciSideChangesReviewValidationErrorsBeforeSaving",
+                                                "ui.targetPciBarSizeGuidance",
                                         )}
                                 </small>
                         </label>

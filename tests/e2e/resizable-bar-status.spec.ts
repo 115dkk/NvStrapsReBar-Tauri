@@ -23,7 +23,7 @@ test("expanded Resizable BAR status remains visible across English workspaces", 
         await expect(strip).toContainText("BAR1 8 GiB");
         await expect(strip).toContainText("Driver 596.36");
         await expect(strip).toContainText("Expanded aperture");
-        await expect(strip).toContainText("Patch configuration: Not needed");
+        await expect(strip).toContainText("Expandable by this app: Not needed");
         await expect(page.getByText("Current BAR aperture")).toBeVisible();
         await expect(page.getByText("BAR0", { exact: true })).toHaveCount(0);
         await page.screenshot({
@@ -63,7 +63,7 @@ test("expanded Resizable BAR status is localized at the minimum window", async (
         await expect(strip).toContainText("BAR1 8 GiB");
         await expect(strip).toContainText("드라이버 596.36");
         await expect(strip).toContainText("확장 메모리 창");
-        await expect(strip).toContainText("패치 구성: 불필요");
+        await expect(strip).toContainText("이 앱으로 확장: 불필요");
         await expect(page.getByText("현재 BAR 메모리 창")).toBeVisible();
         await page.screenshot({
                 path: `${evidence}/korean-configure-expanded-900x760.png`,
@@ -108,14 +108,14 @@ test("mixed aperture status keeps every GPU and patch configuration outcome in b
         await expect(rows).toHaveCount(2);
         await expect(rows.nth(0)).toContainText("RTX 2080 SUPER");
         await expect(rows.nth(0)).toContainText("Expanded aperture");
-        await expect(rows.nth(0)).toContainText("Patch configuration: Not needed");
+        await expect(rows.nth(0)).toContainText("Expandable by this app: Not needed");
         await expect(rows.nth(1)).toContainText("Quadro RTX 4000");
         await expect(rows.nth(1)).toContainText("BAR1 256 MiB");
         await expect(rows.nth(1)).toContainText("256 MiB aperture");
-        await expect(rows.nth(1)).toContainText("Patch configuration: O");
+        await expect(rows.nth(1)).toContainText("Expandable by this app: Available");
         await expect(rows.nth(1)).toContainText("Target 8 GiB");
         await expect(rows.nth(1).locator(".rebar-patch-state")).toHaveAccessibleName(
-                "Patch configuration: Available",
+                "Expandable by this app: Available",
         );
         await page.evaluate(() => window.scrollTo(0, 0));
         await expect
@@ -137,10 +137,10 @@ test("mixed aperture status keeps every GPU and patch configuration outcome in b
         const koreanRows = koreanStrip.locator(".rebar-gpu-row");
         await expect(koreanRows.nth(0)).toContainText("확장 메모리 창");
         await expect(koreanRows.nth(1)).toContainText("256 MiB 메모리 창");
-        await expect(koreanRows.nth(1)).toContainText("패치 구성: O");
+        await expect(koreanRows.nth(1)).toContainText("이 앱으로 확장: 가능");
         await expect(koreanRows.nth(1)).toContainText("목표 8 GiB");
         await expect(koreanRows.nth(1).locator(".rebar-patch-state")).toHaveAccessibleName(
-                "패치 구성: 가능",
+                "이 앱으로 확장: 가능",
         );
         expect(
                 await page.evaluate(

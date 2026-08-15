@@ -17,7 +17,7 @@ export const GpuRulesPanel = () => {
                                 </div>
                                 <p>
                                         {t(
-                                                "ui.matchRulesByPciLocationMaximumEight",
+                                                "ui.gpuRulesExplained",
                                         )}
                                 </p>
                         </div>

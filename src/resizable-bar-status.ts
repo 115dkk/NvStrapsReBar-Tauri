@@ -22,7 +22,6 @@ export type ResizableBarGpuPresentation = {
         gpu: ResizableBarInspection["gpus"][number];
         apertureId: StaticMessageId;
         patchStateId: StaticMessageId;
-        patchSymbol: "O" | "X" | "?" | "—";
         patchTone: "available" | "unavailable" | "indeterminate" | "not-needed";
 };
 
@@ -34,26 +33,22 @@ const apertureIds: Record<ResizableBarApertureState, StaticMessageId> = {
 
 const patchPresentation: Record<
         ResizableBarPatchConfiguration["state"],
-        Pick<ResizableBarGpuPresentation, "patchStateId" | "patchSymbol" | "patchTone">
+        Pick<ResizableBarGpuPresentation, "patchStateId" | "patchTone">
 > = {
         notNeeded: {
                 patchStateId: "ui.configurationNotNeeded",
-                patchSymbol: "—",
                 patchTone: "not-needed",
         },
         available: {
                 patchStateId: "ui.patchConfigurationAvailable",
-                patchSymbol: "O",
                 patchTone: "available",
         },
         unavailable: {
                 patchStateId: "ui.patchConfigurationUnavailable",
-                patchSymbol: "X",
                 patchTone: "unavailable",
         },
         indeterminate: {
                 patchStateId: "ui.patchConfigurationIndeterminate",
-                patchSymbol: "?",
                 patchTone: "indeterminate",
         },
 };

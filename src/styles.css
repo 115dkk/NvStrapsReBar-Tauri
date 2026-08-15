@@ -1124,7 +1124,13 @@ dd {
         display: flex;
         justify-content: space-between;
         align-items: end;
+        flex-wrap: wrap;
+        gap: 18px 28px;
         margin-bottom: 28px;
+}
+.intro > div:first-child {
+        flex: 1 1 260px;
+        min-width: 0;
 }
 .intro h2 {
         font-size: 28px;
@@ -1136,19 +1142,63 @@ dd {
         color: var(--muted);
         font-size: 14px;
 }
-.count {
-        text-align: right;
+.rebar-verdict {
+        flex: 0 1 360px;
+        min-width: 300px;
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+        padding: 14px 16px;
+        border: 1px solid var(--line);
+        border-left: 3px solid #77818a;
+        background: #171d20;
 }
-.count b {
-        display: block;
-        font:
-                400 40px/1 var(--font-technical);
+.rebar-verdict strong {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        font-size: 15px;
         color: var(--ink);
 }
-.count span {
+.rebar-verdict strong::before {
+        content: "";
+        flex: 0 0 auto;
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: #77818a;
+}
+.rebar-verdict.expanded {
+        border-left-color: var(--ok);
+}
+.rebar-verdict.expanded strong::before {
+        background: var(--ok);
+}
+.rebar-verdict.legacy,
+.rebar-verdict.mixed {
+        border-left-color: var(--warn);
+}
+.rebar-verdict.legacy strong::before,
+.rebar-verdict.mixed strong::before {
+        background: var(--warn);
+}
+.rebar-verdict p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.55;
+}
+.verdict-count {
+        display: flex;
+        align-items: baseline;
+        gap: 7px;
         font-size: 11px;
         color: var(--muted);
         text-transform: uppercase;
+}
+.verdict-count b {
+        font: 400 16px/1 var(--font-technical);
+        color: var(--ink);
 }
 .panel {
         border-top: 1px solid #4b535b;

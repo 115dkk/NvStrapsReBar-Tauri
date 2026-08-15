@@ -94,7 +94,7 @@ describe("Resizable BAR status presenter", () => {
                                 {
                                         apertureId: "ui.apertureExpanded",
                                         patchStateId: "ui.configurationNotNeeded",
-                                        patchSymbol: "—",
+                                        patchTone: "not-needed",
                                         gpu: { bar1TotalBytes: "8589934592" },
                                 },
                         ],
@@ -112,7 +112,7 @@ describe("Resizable BAR status presenter", () => {
                                 {
                                         apertureId: "ui.apertureLegacy256Mib",
                                         patchStateId: "ui.patchConfigurationAvailable",
-                                        patchSymbol: "O",
+                                        patchTone: "available",
                                         gpu: { state: "legacy256MiB" },
                                 },
                         ],
@@ -132,7 +132,7 @@ describe("Resizable BAR status presenter", () => {
                                         apertureId: "ui.apertureIndeterminate",
                                         patchStateId:
                                                 "ui.patchConfigurationIndeterminate",
-                                        patchSymbol: "?",
+                                        patchTone: "indeterminate",
                                 }),
                         ],
                 });
@@ -165,9 +165,9 @@ describe("Resizable BAR status presenter", () => {
                         aggregateSymbol: "MIX",
                 });
                 expect(result.gpus).toHaveLength(2);
-                expect(result.gpus.map((gpu) => gpu.patchSymbol)).toEqual([
-                        "—",
-                        "O",
+                expect(result.gpus.map((gpu) => gpu.patchTone)).toEqual([
+                        "not-needed",
+                        "available",
                 ]);
                 expect(result.gpus[1]?.gpu.patchConfiguration).toMatchObject({
                         state: "available",
@@ -199,7 +199,6 @@ describe("Resizable BAR status presenter", () => {
 
                 expect(result.gpus[0]).toMatchObject({
                         patchStateId: "ui.patchConfigurationUnavailable",
-                        patchSymbol: "X",
                         patchTone: "unavailable",
                 });
         });
