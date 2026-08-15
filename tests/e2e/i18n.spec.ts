@@ -46,7 +46,7 @@ test("Korean deployment and legacy states preserve firmware facts", async ({ pag
         await page.getByTestId("language-select").selectOption("ko");
         await page.getByRole("button", { name: "배포" }).click();
         await expect(page.getByRole("heading", { name: "배포 작업 공간" })).toBeVisible();
-        await expect(page.getByText("제조사 도구에서 플래시")).toBeVisible();
+        await expect(page.getByText("제조사 도구에서 플래시")).toHaveCount(0);
         await page.getByLabel("보드 경로").selectOption("legacyAbove4g");
         await page.getByRole("button", { name: "파일 선택" }).click();
         await expect(page.getByText(/E7D25IMS\.1N0 · 32 MiB/)).toBeVisible();

@@ -158,7 +158,7 @@ test("durable deployment completes in order and distinguishes requests from rece
         await expect(
                 page.getByRole("heading", { name: "Deployment workspace" }),
         ).toBeVisible();
-        await expect(page.getByText("FLASH WITH VENDOR TOOL")).toBeVisible();
+        await expect(page.getByText("FLASH WITH VENDOR TOOL")).toHaveCount(0);
         await expect(
                 page
                         .locator(".deployment-content")
