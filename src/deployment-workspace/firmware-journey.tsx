@@ -1,49 +1,75 @@
 import { useI18n } from "../i18n";
+import { useDeploymentWorkspaceController } from "./context";
 import { JourneyHeading } from "./presentation";
+
 export const FirmwareJourney = () => {
         const { t } = useI18n();
+        const { view } = useDeploymentWorkspaceController();
+        const activeStep = view.activeStep?.id;
+
+        if (
+                activeStep !== "flashWithVendorRoute" &&
+                activeStep !== "configureFirmwareSetup"
+        )
+                return null;
+
+        const isVendorFlash = activeStep === "flashWithVendorRoute";
+
         return (
                 <section
                         className="journey-panel"
-                        aria-labelledby="firmware-title"
+                        aria-labelledby="manual-handoff-title"
+                        data-manual-step={activeStep}
                 >
                         <JourneyHeading
                                 number="03"
-                                title={t("ui.stepsCompletedOutsideThisApp")}
-                                id="firmware-title"
+                                title={t(
+                                        isVendorFlash
+                                                ? "ui.vendorFlashTaskTitle"
+                                                : "ui.uefiSetupTaskTitle",
+                                )}
+                                id="manual-handoff-title"
                                 copy={t(
-                                        "ui.useTheVendorToolForFlashingSetFirmwareValuesInTheFirmwareScreenThenReturnToContinueThePlan",
+                                        isVendorFlash
+                                                ? "ui.vendorFlashTaskSummary"
+                                                : "ui.uefiSetupTaskSummary",
                                 )}
                         />
-                        <div className="manual-gates">
-                                <div>
-                                        <span>{t("ui.manual")}</span>
-                                        <strong>{t("ui.vendorFlash")}</strong>
+                        <article
+                                className={`manual-handoff-task${
+                                        isVendorFlash ? "" : " single"
+                                }`}
+                                aria-label={t("ui.currentManualTask")}
+                        >
+                                <div className="manual-handoff-main">
+                                        <span>{t("ui.doThisNow")}</span>
+                                        <strong>
+                                                {t(
+                                                        isVendorFlash
+                                                                ? "ui.useTheVendorTool"
+                                                                : "ui.updateTheUefiSettings",
+                                                )}
+                                        </strong>
                                         <p>
                                                 {t(
-                                                        "ui.selectTheExportedArtifactInTheDocumentedVendorUtilityKeepPowerStable",
+                                                        isVendorFlash
+                                                                ? "ui.vendorFlashTaskInstructions"
+                                                                : "ui.uefiSetupTaskInstructions",
                                                 )}
                                         </p>
                                 </div>
-                                <div>
-                                        <span>{t("ui.physical")}</span>
-                                        <strong>{t("ui.recoveryFiles")}</strong>
-                                        <p>
-                                                {t(
-                                                        "ui.keepTheSelectedRecoveryRouteAndOriginalImageAvailableBeforeFlashing",
-                                                )}
-                                        </p>
-                                </div>
-                                <div>
-                                        <span>{t("ui.manual")}</span>
-                                        <strong>{t("ui.uefiValues")}</strong>
-                                        <p>
-                                                {t(
-                                                        "ui.setAbove4gDecodingAndResizableBarInTheFirmwareScreen",
-                                                )}
-                                        </p>
-                                </div>
-                        </div>
+                                {isVendorFlash && (
+                                        <div
+                                                className="manual-handoff-prerequisite"
+                                                role="note"
+                                                aria-label={t("ui.beforeYouBegin")}
+                                        >
+                                                <span>{t("ui.beforeYouBegin")}</span>
+                                                <strong>{t("ui.prepareRecoveryFiles")}</strong>
+                                                <p>{t("ui.recoveryFilesPrerequisite")}</p>
+                                        </div>
+                                )}
+                        </article>
                 </section>
         );
 };
