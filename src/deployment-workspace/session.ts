@@ -1,668 +1,119 @@
-import type { ConfigDraft, SystemSnapshot } from "../types";
-import {
-        message,
-        messages,
-        type MessageDescriptor,
-        type StaticMessageId,
-} from "../i18n-catalog";
+import { message, type MessageDescriptor } from "../i18n-catalog";
+import type { SystemSnapshot } from "../types";
 import type { DeploymentAdapter } from "./adapter";
+import {
+        assertPlanProjection,
+        assertRecommendation,
+} from "./deployment-receipts";
 import { previewDeploymentAdapter } from "./preview-adapter";
-import { tauriDeploymentAdapter } from "./tauri-adapter";
+import { DeploymentSessionActions } from "./session-actions";
+import type { SessionActionTransaction } from "./session-action-runtime";
 import type {
-        BoardPath,
-        ConfigurationRebootPreview,
-        DeploymentConfigRecommendation,
-        DeploymentPackageReceipt,
-        DeploymentPlan,
-        FirmwareFingerprint,
-        FirmwareInstallMethod,
-        FirmwarePreparation,
-        FirmwareSetupRebootPreview,
-        LegacyFirmwareAnalysis,
-        LegacyPatchRisk,
-        MachineProfile,
-        ManualDeploymentStepPreview,
-        NvidiaProfileBackupReceipt,
-        NvidiaSmiEvidence,
-        ProfileInspectorInstallation,
-        ProfileInspectorLaunch,
-        RecoveryMethod,
-        StepId,
-} from "./contract";
-import { usesMsiProZ690Route } from "../hardware-support";
-import { stepTitleIds } from "./messages";
+        DeploymentWorkspaceIntent,
+        DeploymentWorkspaceSession,
+        DeploymentWorkspaceState,
+        DeploymentWorkspaceView,
+} from "./session-contract";
+import { projectDeploymentWorkspace } from "./session-projection";
+import {
+        createInitialDeploymentState,
+        reduceLocalDeploymentIntent,
+        resetProfileProjection,
+} from "./session-state";
+import { tauriDeploymentAdapter } from "./tauri-adapter";
 
-const MSI_MANUAL =
-        "https://download.msi.com/archive/mnu_exe/mb/PROZ690-AWIFIDDR4_PROZ690-ADDR4100x150.pdf";
+export type {
+        DeploymentNextAction,
+        DeploymentWorkspaceActivity,
+        DeploymentWorkspaceIntent,
+        DeploymentWorkspaceSession,
+        DeploymentWorkspaceView,
+} from "./session-contract";
+
 const isTauri = () =>
         typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-const clone = <T>(value: T): T => structuredClone(value);
+
 const errorText = (error: unknown) =>
         (error as { message?: string }).message || String(error);
+
 const deploymentError = (error: unknown): MessageDescriptor =>
         message("ui.deploymentOperationFailed", { detail: errorText(error) });
-const fileName = (path: string) => path.split(/[\\/]/).at(-1) || "firmware.bin";
-const sameFirmware = (
-        left: FirmwareFingerprint | null,
-        right: FirmwareFingerprint | null,
-) =>
-        Boolean(
-                left &&
-                        right &&
-                        left.fileName === right.fileName &&
-                        left.byteLength === right.byteLength &&
-                        left.sha256 === right.sha256,
-        );
-const legacyRuleKey = (catalog: string, ruleId: string) =>
-        `${catalog}:${ruleId}`;
-const validAcknowledgementNote = (note: string, fingerprintPrefix: string) => {
-        const normalized = note.trim();
-        return (
-                normalized.length >= 40 &&
-                normalized.split(/\s+/).length >= 8 &&
-                normalized
-                        .toLowerCase()
-                        .includes(fingerprintPrefix.toLowerCase())
-        );
-};
-const riskAcknowledgementMessageIds = {
-        dsdtModification: "ui.addDsdtRiskAcknowledgement",
-        nvramWhitelist: "ui.addNvramRiskAcknowledgement",
-        usbControllerBlacklist: "ui.addUsbRiskAcknowledgement",
-        experimentalX79: "ui.addX79RiskAcknowledgement",
-} as const satisfies Record<LegacyPatchRisk, StaticMessageId>;
-export type DeploymentWorkspaceActivity = {
-        tone: "success" | "warning" | "error";
-        message: MessageDescriptor;
-} | null;
-export type DeploymentNextAction =
-        | "prepare"
-        | "manual"
-        | "verifyDriver"
-        | "writeConfig"
-        | "configurationReboot"
-        | "verifyConfigurationBoot"
-        | "collectBar"
-        | "nvidiaPolicy"
-        | "complete"
-        | "none";
 
-export interface DeploymentWorkspaceView {
-        snapshot: SystemSnapshot;
-        displayName: string;
-        boardPath: BoardPath;
-        firmwarePath: string;
-        firmware: FirmwareFingerprint | null;
-        recoveryMethod: RecoveryMethod;
-        installMethod: FirmwareInstallMethod;
-        instructionsUrl: string;
-        recoveryNote: string;
-        installNote: string;
-        recoveryNotePresetId: StaticMessageId | null;
-        installNotePresetId: StaticMessageId | null;
-        routeConfirmed: boolean;
-        legacyAnalysis: { path: string; value: LegacyFirmwareAnalysis } | null;
-        legacyAnalysisStatus: "idle" | "pending" | "ready" | "error";
-        legacyAnalysisError: string;
-        selectedLegacyRules: string[];
-        legacyAcknowledgements: Partial<
-                Record<LegacyPatchRisk, { note: string; confirmed: boolean }>
-        >;
-        profiles: MachineProfile[];
-        selectedProfileId: string;
-        selectedProfile: MachineProfile | null;
-        plan: DeploymentPlan | null;
-        activeStep: DeploymentPlan["steps"][number] | null;
-        nextStep: DeploymentPlan["steps"][number] | null;
-        activeStepTitleId: StaticMessageId | null;
-        nextStepTitleId: StaticMessageId | null;
-        nextAction: DeploymentNextAction;
-        preflightExact: boolean | null;
-        preparation: FirmwarePreparation | null;
-        destination: string;
-        packageReceipt: DeploymentPackageReceipt | null;
-        rebootPreview: FirmwareSetupRebootPreview | null;
-        showReboot: boolean;
-        savedWork: boolean;
-        manualPreview: ManualDeploymentStepPreview | null;
-        showManual: boolean;
-        manualConfirmed: boolean;
-        configurationRebootPreview: ConfigurationRebootPreview | null;
-        showConfigurationReboot: boolean;
-        guardedConfigConfirmed: boolean;
-        configRecommendation: {
-                profileId: string;
-                planRevision: number;
-                value: DeploymentConfigRecommendation;
-        } | null;
-        recommendationStatus: "idle" | "pending" | "ready" | "error";
-        recommendationError: MessageDescriptor | null;
-        workflowReceipt: {
-                title: MessageDescriptor;
-                detail: MessageDescriptor;
-        } | null;
-        barEvidence: NvidiaSmiEvidence | null;
-        installation: ProfileInspectorInstallation | null;
-        backup: NvidiaProfileBackupReceipt | null;
-        launch: ProfileInspectorLaunch | null;
-        busyAction: string;
-        activity: DeploymentWorkspaceActivity;
-        legacyAnalysisValid: boolean;
-        selectedLegacyEntries: {
-                catalog: LegacyFirmwareAnalysis["catalogs"][number];
-                rule: LegacyFirmwareAnalysis["catalogs"][number]["rules"][number];
-        }[];
-        selectedLegacyRisks: LegacyPatchRisk[];
-        acknowledgementHash: string;
-        missingLegacyRisk: LegacyPatchRisk | undefined;
-        legacyReady: boolean;
-        legacyNextAction: MessageDescriptor | null;
-}
-
-type FieldIntent =
-        | { type: "setDisplayName"; value: string }
-        | { type: "setBoardPath"; value: BoardPath }
-        | { type: "setFirmwarePath"; value: string }
-        | { type: "setRecoveryMethod"; value: RecoveryMethod }
-        | { type: "setInstallMethod"; value: FirmwareInstallMethod }
-        | { type: "setInstructionsUrl"; value: string }
-        | { type: "setRecoveryNote"; value: string }
-        | { type: "setInstallNote"; value: string }
-        | { type: "setRouteConfirmed"; value: boolean }
-        | { type: "setDestination"; value: string }
-        | { type: "setSelectedProfile"; value: string }
-        | { type: "setSavedWork"; value: boolean }
-        | { type: "setManualConfirmed"; value: boolean }
-        | { type: "setGuardedConfigConfirmed"; value: boolean }
-        | { type: "toggleLegacyRule"; key: string; checked: boolean }
-        | { type: "setLegacyRiskNote"; risk: LegacyPatchRisk; note: string }
-        | {
-                  type: "setLegacyRiskConfirmed";
-                  risk: LegacyPatchRisk;
-                  confirmed: boolean;
-          };
-export type DeploymentWorkspaceIntent =
-        | FieldIntent
-        | {
-                  type:
-                          | "chooseFirmware"
-                          | "inspectFirmware"
-                          | "analyzeLegacy"
-                          | "createProfile"
-                          | "compare"
-                          | "prepare"
-                          | "chooseDestination"
-                          | "exportPackage"
-                          | "previewFirmwareReboot"
-                          | "requestFirmwareReboot"
-                          | "openManual"
-                          | "confirmManual"
-                          | "verifyDriver"
-                          | "saveGuardedConfig"
-                          | "openConfigurationReboot"
-                          | "requestConfigurationReboot"
-                          | "verifyConfigurationBoot"
-                          | "collectBar"
-                          | "installInspector"
-                          | "backupProfiles"
-                          | "launchInspector"
-                          | "closeModals";
-          };
-
-export interface DeploymentWorkspaceSession {
-        view(): DeploymentWorkspaceView;
-        dispatch(intent: DeploymentWorkspaceIntent): Promise<void>;
-        subscribe(listener: () => void): () => void;
-        dispose(): void;
-}
-
-type DeploymentWorkspaceState = Omit<
-        DeploymentWorkspaceView,
-        | "selectedProfile"
-        | "activeStep"
-        | "nextStep"
-        | "activeStepTitleId"
-        | "nextStepTitleId"
-        | "nextAction"
-        | "legacyAnalysisValid"
-        | "selectedLegacyEntries"
-        | "selectedLegacyRisks"
-        | "acknowledgementHash"
-        | "missingLegacyRisk"
-        | "legacyReady"
-        | "legacyNextAction"
->;
-
-const assertPlanAdvance = (
-        before: DeploymentPlan,
-        after: DeploymentPlan,
-        completedStepIds: StepId[],
-) => {
-        if (
-                after.profileId !== before.profileId ||
-                after.schemaVersion !== before.schemaVersion ||
-                after.originalFirmwareSha256 !==
-                        before.originalFirmwareSha256 ||
-                after.recoveryMethod !== before.recoveryMethod
-        )
-                throw new Error(
-                        "The backend returned a deployment receipt for a different profile contract.",
-                );
-        if (after.revision !== before.revision + completedStepIds.length)
-                throw new Error(
-                        "The backend returned an unexpected deployment plan revision.",
-                );
-        if (
-                after.steps.length !== before.steps.length ||
-                after.steps.some(
-                        (step, index) => step.id !== before.steps[index]?.id,
-                )
-        )
-                throw new Error(
-                        "The backend returned a malformed deployment step sequence.",
-                );
-        const readyBefore = before.steps
-                .map((step, index) => ({ step, index }))
-                .filter(({ step }) => step.state === "ready");
-        if (readyBefore.length !== 1)
-                throw new Error(
-                        "The current deployment plan does not have exactly one active step.",
-                );
-        const activeIndex = readyBefore[0]!.index;
-        const expectedCompleted = before.steps.slice(
-                activeIndex,
-                activeIndex + completedStepIds.length,
-        );
-        if (
-                expectedCompleted.length !== completedStepIds.length ||
-                expectedCompleted.some(
-                        (step, index) =>
-                                step.id !== completedStepIds[index] ||
-                                (index === 0
-                                        ? step.state !== "ready"
-                                        : step.state !== "pending"),
-                ) ||
-                completedStepIds.some((_, index) => {
-                        const step = after.steps[activeIndex + index];
-                        return (
-                                step?.state !== "completed" ||
-                                !step.evidence?.kind.trim() ||
-                                !step.evidence.value.trim()
-                        );
-                }) ||
-                after.steps.some(
-                        (step, index) =>
-                                (index < activeIndex ||
-                                        index >
-                                                activeIndex +
-                                                        completedStepIds.length) &&
-                                (step.state !== before.steps[index]?.state ||
-                                        JSON.stringify(step.evidence) !==
-                                                JSON.stringify(
-                                                        before.steps[index]
-                                                                ?.evidence,
-                                                )),
-                )
-        )
-                throw new Error(
-                        "The backend receipt advanced unexpected deployment steps.",
-                );
-        const nextIndex = activeIndex + completedStepIds.length;
-        const next = after.steps[nextIndex];
-        if (
-                (next &&
-                        (next.state !== "ready" ||
-                                before.steps[nextIndex]?.state !== "pending" ||
-                                JSON.stringify(next.evidence) !==
-                                        JSON.stringify(
-                                                before.steps[nextIndex]
-                                                        ?.evidence,
-                                        ))) ||
-                (!next && after.steps.some((step) => step.state === "ready"))
-        )
-                throw new Error(
-                        "The backend receipt did not activate exactly the next deployment step.",
-                );
-        if (
-                after.steps.filter((step) => step.state === "ready").length !==
-                (next ? 1 : 0)
-        )
-                throw new Error(
-                        "The backend returned an invalid active deployment step count.",
-                );
-};
-const assertPlanProjection = (
-        profile: MachineProfile,
-        plan: DeploymentPlan,
-) => {
-        const ready = plan.steps.filter((step) => step.state === "ready");
-        const firstOpen = plan.steps.findIndex(
-                (step) => step.state !== "completed",
-        );
-        const invalidEvidence = plan.steps.some((step) =>
-                step.state === "completed"
-                        ? !step.evidence?.kind.trim() ||
-                          !step.evidence.value.trim()
-                        : step.evidence !== null,
-        );
-        const invalidOrder = plan.steps.some((step, index) =>
-                firstOpen < 0
-                        ? step.state !== "completed"
-                        : index < firstOpen
-                          ? step.state !== "completed"
-                          : index === firstOpen
-                            ? step.state !== "ready"
-                            : step.state !== "pending",
-        );
-        if (
-                plan.profileId !== profile.profileId ||
-                plan.originalFirmwareSha256 !==
-                        profile.originalFirmware.sha256 ||
-                plan.recoveryMethod !== profile.recovery.method ||
-                plan.revision < 0 ||
-                ready.length !== (firstOpen < 0 ? 0 : 1) ||
-                invalidEvidence ||
-                invalidOrder
-        ) {
-                throw new Error(
-                        "The backend returned a malformed deployment plan for the selected profile.",
-                );
-        }
-        return plan;
-};
-const assertRecommendation = (value: DeploymentConfigRecommendation) => {
-        const ids = value.draft.rules.map((rule) =>
-                [
-                        rule.deviceId,
-                        rule.subsystemVendorId,
-                        rule.subsystemDeviceId,
-                        rule.bus,
-                        rule.device,
-                        rule.function,
-                ].join(":"),
-        );
-        if (
-                value.draft.globalMode !== 1 ||
-                value.draft.targetPciBarSize !== 0 ||
-                value.draft.skipS3Resume ||
-                value.draft.overrideBarSizeMask ||
-                !value.draft.guardSetupChanges ||
-                value.turingGpuCount <= 0 ||
-                value.registryManagedGpuCount < 0 ||
-                value.exactFallbackRuleCount < 0 ||
-                value.registryManagedGpuCount + value.exactFallbackRuleCount !==
-                        value.turingGpuCount ||
-                value.exactFallbackRuleCount !== value.draft.rules.length ||
-                new Set(ids).size !== ids.length ||
-                value.draft.rules.some(
-                        (rule) =>
-                                rule.matchScope !== "location" ||
-                                rule.barSizeSelector !== 5 ||
-                                rule.overrideBarSizeMask !== null,
-                )
-        )
-                throw new Error(
-                        "The backend returned an inconsistent deployment configuration recommendation.",
-                );
-        return value;
-};
-const nextActionFor = (stepId?: StepId): DeploymentNextAction => {
-        switch (stepId) {
-                case "prepareRustDriver":
-                case "applyLegacyBoardPatches":
-                case "verifyPatchedArtifact":
-                        return "prepare";
-                case "flashWithVendorRoute":
-                case "configureFirmwareSetup":
-                        return "manual";
-                case "rebootAfterFirmware":
-                case "verifyDriverLoaded":
-                        return "verifyDriver";
-                case "writeNvstrapsConfiguration":
-                        return "writeConfig";
-                case "rebootAfterConfiguration":
-                        return "configurationReboot";
-                case "verifyResizableBar":
-                        return "collectBar";
-                case "configureNvidiaApplications":
-                        return "nvidiaPolicy";
-                case undefined:
-                        return "complete";
-                default:
-                        return "none";
-        }
-};
-
+/**
+ * Owns the client projection lifecycle: one in-flight operation, generation-
+ * bound replies, publication, and disposal. Domain intent protocols live in
+ * DeploymentSessionActions and authoritative transitions remain in Rust.
+ */
 class Session implements DeploymentWorkspaceSession {
         private listeners = new Set<() => void>();
         private disposed = false;
         private generation = 0;
         private inflight: Promise<void> | null = null;
         private cachedView: DeploymentWorkspaceView | null = null;
-        private firmwareRebootBinding: {
-                profileId: string;
-                planRevision: number;
-                stepId: StepId;
-                confirmationToken: string;
-        } | null = null;
         private state: DeploymentWorkspaceState;
+        private actions: DeploymentSessionActions;
+
         constructor(
                 snapshot: SystemSnapshot,
                 private adapter: DeploymentAdapter,
         ) {
-                const msi = usesMsiProZ690Route(snapshot);
-                this.state = {
-                        snapshot,
-                        displayName: msi
-                                ? "PRO Z690-A DDR4 · RTX 2080 SUPER"
-                                : "",
-                        boardPath: "nativeResizableBar",
-                        firmwarePath: "",
-                        firmware: null,
-                        recoveryMethod: msi ? "usbFlashback" : "vendorRecovery",
-                        installMethod: "firmwareSetupUtility",
-                        instructionsUrl: msi ? MSI_MANUAL : "",
-                        recoveryNote: msi
-                                ? messages[
-                                          "ui.msiFlashBiosButtonRecoveryMsiRomAtUsbRootRearFlashBiosPortPhysicalButton"
-                                  ].en
-                                : "",
-                        installNote: msi
-                                ? messages[
-                                          "ui.useMFlashToSelectTheExportedVendorFormatImage"
-                                  ].en
-                                : "",
-                        recoveryNotePresetId: msi
-                                ? "ui.msiFlashBiosButtonRecoveryMsiRomAtUsbRootRearFlashBiosPortPhysicalButton"
-                                : null,
-                        installNotePresetId: msi
-                                ? "ui.useMFlashToSelectTheExportedVendorFormatImage"
-                                : null,
-                        routeConfirmed: false,
-                        legacyAnalysis: null,
-                        legacyAnalysisStatus: "idle",
-                        legacyAnalysisError: "",
-                        selectedLegacyRules: [],
-                        legacyAcknowledgements: {},
-                        profiles: [],
-                        selectedProfileId: "",
-                        plan: null,
-                        preflightExact: null,
-                        preparation: null,
-                        destination: "",
-                        packageReceipt: null,
-                        rebootPreview: null,
-                        showReboot: false,
-                        savedWork: false,
-                        manualPreview: null,
-                        showManual: false,
-                        manualConfirmed: false,
-                        configurationRebootPreview: null,
-                        showConfigurationReboot: false,
-                        guardedConfigConfirmed: false,
-                        configRecommendation: null,
-                        recommendationStatus: "idle",
-                        recommendationError: null,
-                        workflowReceipt: null,
-                        barEvidence: null,
-                        installation: null,
-                        backup: null,
-                        launch: null,
-                        busyAction: "",
-                        activity: null,
-                };
+                this.state = createInitialDeploymentState(snapshot);
+                this.actions = new DeploymentSessionActions({
+                        adapter,
+                        state: () => this.state,
+                        view: this.view,
+                        patch: (value) => this.patch(value),
+                        run: (action, work) => this.run(action, work),
+                        selectProfile: (profileId) =>
+                                this.selectProfile(profileId),
+                        loadRecommendation: () => this.loadRecommendation(),
+                });
                 void this.initialize();
         }
+
         view = (): DeploymentWorkspaceView => {
-                if (this.cachedView) return this.cachedView;
-                const selectedProfile =
-                        this.state.profiles.find(
-                                (profile) =>
-                                        profile.profileId ===
-                                        this.state.selectedProfileId,
-                        ) ?? null;
-                const planSteps = this.state.plan?.steps ?? [];
-                const activeStepIndex = planSteps.findIndex(
-                        (step) => step.state === "ready",
-                );
-                const activeStep =
-                        activeStepIndex >= 0
-                                ? (planSteps[activeStepIndex] ?? null)
-                                : null;
-                const nextStep =
-                        activeStepIndex >= 0
-                                ? (planSteps[activeStepIndex + 1] ?? null)
-                                : null;
-                const legacyAnalysisValid = Boolean(
-                        this.state.legacyAnalysis &&
-                                this.state.legacyAnalysis.path ===
-                                        this.state.firmwarePath &&
-                                sameFirmware(
-                                        this.state.legacyAnalysis.value
-                                                .firmware,
-                                        this.state.firmware,
-                                ),
-                );
-                const selectedLegacyEntries =
-                        !this.state.legacyAnalysis || !legacyAnalysisValid
-                                ? []
-                                : this.state.legacyAnalysis.value.catalogs.flatMap(
-                                          (catalog) =>
-                                                  catalog.rules
-                                                          .filter(
-                                                                  (rule) =>
-                                                                          rule.status ===
-                                                                                  "applicable" &&
-                                                                          this.state.selectedLegacyRules.includes(
-                                                                                  legacyRuleKey(
-                                                                                          catalog.catalog,
-                                                                                          rule.ruleId,
-                                                                                  ),
-                                                                          ),
-                                                          )
-                                                          .map((rule) => ({
-                                                                  catalog,
-                                                                  rule,
-                                                          })),
-                                  );
-                const selectedLegacyRisks = [
-                        ...new Set(
-                                selectedLegacyEntries.flatMap(
-                                        ({ rule }) => rule.requiredRisks,
-                                ),
-                        ),
-                ];
-                const acknowledgementHash =
-                        this.state.firmware?.sha256.slice(0, 8) ?? "";
-                const missingLegacyRisk = selectedLegacyRisks.find((risk) => {
-                        const acknowledgement =
-                                this.state.legacyAcknowledgements[risk];
-                        return !(
-                                acknowledgement?.confirmed &&
-                                validAcknowledgementNote(
-                                        acknowledgement.note,
-                                        acknowledgementHash,
-                                )
+                if (!this.cachedView)
+                        this.cachedView = projectDeploymentWorkspace(
+                                this.state,
                         );
-                });
-                const legacyReady =
-                        this.state.boardPath !== "legacyAbove4g" ||
-                        (this.state.legacyAnalysisStatus === "ready" &&
-                                legacyAnalysisValid &&
-                                selectedLegacyEntries.length > 0 &&
-                                !missingLegacyRisk);
-                let legacyNextAction: MessageDescriptor | null = null;
-                if (this.state.boardPath === "legacyAbove4g") {
-                        if (!this.state.firmware)
-                                legacyNextAction =
-                                        message("ui.chooseAndInspectTheFirmwareImageFirst");
-                        else if (this.state.legacyAnalysisStatus === "pending")
-                                legacyNextAction =
-                                        message("ui.waitForTheImageAnalysisToFinish");
-                        else if (this.state.legacyAnalysisStatus === "error")
-                                legacyNextAction = message(
-                                        "ui.analysisFailedRetryImage",
-                                        { detail: this.state.legacyAnalysisError },
-                                );
-                        else if (
-                                !this.state.legacyAnalysis ||
-                                !legacyAnalysisValid
-                        )
-                                legacyNextAction =
-                                        message("ui.analyzeThisFirmwareImageBeforeSelectingLegacyRules");
-                        else if (!selectedLegacyEntries.length)
-                                legacyNextAction =
-                                        message("ui.selectAtLeastOneRuleReportedAsApplicableByTheAnalyzer");
-                        else if (missingLegacyRisk)
-                                legacyNextAction = message(
-                                        riskAcknowledgementMessageIds[
-                                                missingLegacyRisk
-                                        ],
-                                );
-                        else
-                                legacyNextAction =
-                                        message("ui.selectedLegacyRulesAreLinkedToThisFirmwareFingerprintTheProfileIsReadyToCreate");
-                }
-                this.cachedView = {
-                        ...this.state,
-                        selectedProfile,
-                        activeStep,
-                        nextStep,
-                        activeStepTitleId: activeStep
-                                ? stepTitleIds[activeStep.id]
-                                : null,
-                        nextStepTitleId: nextStep
-                                ? stepTitleIds[nextStep.id]
-                                : null,
-                        nextAction: nextActionFor(activeStep?.id),
-                        legacyAnalysisValid,
-                        selectedLegacyEntries,
-                        selectedLegacyRisks,
-                        acknowledgementHash,
-                        missingLegacyRisk,
-                        legacyReady,
-                        legacyNextAction,
-                };
                 return this.cachedView;
         };
+
+        dispatch = async (intent: DeploymentWorkspaceIntent): Promise<void> => {
+                if (this.disposed) return;
+                const localPatch = reduceLocalDeploymentIntent(
+                        this.state,
+                        intent,
+                );
+                if (localPatch) {
+                        this.patch(localPatch);
+                        return;
+                }
+                await this.actions.dispatch(intent);
+        };
+
         subscribe = (listener: () => void) => {
                 this.listeners.add(listener);
                 return () => this.listeners.delete(listener);
         };
+
         dispose = () => {
                 this.disposed = true;
                 this.generation += 1;
                 this.listeners.clear();
         };
+
         private emit() {
                 if (!this.disposed)
                         this.listeners.forEach((listener) => listener());
         }
-        private patch(value: Partial<typeof this.state>) {
+
+        private patch(value: Partial<DeploymentWorkspaceState>) {
                 Object.assign(this.state, value);
                 this.cachedView = null;
                 this.emit();
         }
+
         private async initialize() {
                 const generation = ++this.generation;
                 try {
@@ -692,6 +143,14 @@ class Session implements DeploymentWorkspaceSession {
                                 });
                 }
         }
+
+        private async selectProfile(profileId: string) {
+                this.generation += 1;
+                this.inflight = null;
+                this.patch(resetProfileProjection(profileId));
+                await this.loadPlan(profileId, this.generation);
+        }
+
         private async loadPlan(
                 profileId: string,
                 generation = ++this.generation,
@@ -730,36 +189,21 @@ class Session implements DeploymentWorkspaceSession {
                                 });
                 }
         }
-        private invalidateLegacy() {
-                this.generation += 1;
-                this.patch({
-                        legacyAnalysis: null,
-                        legacyAnalysisStatus: "idle",
-                        legacyAnalysisError: "",
-                        selectedLegacyRules: [],
-                        legacyAcknowledgements: {},
-                });
-        }
+
         private run(
                 action: string,
-                work: (transaction: {
-                        patch: (
-                                value: Partial<DeploymentWorkspaceState>,
-                        ) => void;
-                        success: (message: MessageDescriptor) => void;
-                        current: () => boolean;
-                }) => Promise<void>,
+                work: (transaction: SessionActionTransaction) => Promise<void>,
         ): Promise<void> {
                 if (this.inflight) return this.inflight;
                 const generation = this.generation;
                 this.patch({ busyAction: action, activity: null });
                 const current = () =>
                         !this.disposed && generation === this.generation;
-                const transaction = {
-                        patch: (value: Partial<DeploymentWorkspaceState>) => {
+                const transaction: SessionActionTransaction = {
+                        patch: (value) => {
                                 if (current()) this.patch(value);
                         },
-                        success: (successMessage: MessageDescriptor) => {
+                        success: (successMessage) => {
                                 if (current()) this.success(successMessage);
                         },
                         current,
@@ -773,7 +217,9 @@ class Session implements DeploymentWorkspaceSession {
                                         this.patch({
                                                 activity: {
                                                         tone: "error",
-                                                        message: deploymentError(error),
+                                                        message: deploymentError(
+                                                                error,
+                                                        ),
                                                 },
                                         });
                         })
@@ -786,6 +232,7 @@ class Session implements DeploymentWorkspaceSession {
                 this.inflight = promise;
                 return promise;
         }
+
         private success(successMessage: MessageDescriptor) {
                 this.patch({
                         activity: {
@@ -794,6 +241,7 @@ class Session implements DeploymentWorkspaceSession {
                         },
                 });
         }
+
         private async loadRecommendation() {
                 const plan = this.state.plan;
                 if (
@@ -848,923 +296,6 @@ class Session implements DeploymentWorkspaceSession {
                                 });
                         }
                 }
-        }
-        dispatch = async (intent: DeploymentWorkspaceIntent): Promise<void> => {
-                if (this.disposed) return;
-                switch (intent.type) {
-                        case "setDisplayName":
-                                this.patch({ displayName: intent.value });
-                                return;
-                        case "setBoardPath":
-                                this.invalidateLegacy();
-                                this.patch({ boardPath: intent.value });
-                                return;
-                        case "setFirmwarePath":
-                                this.invalidateLegacy();
-                                this.patch({
-                                        firmwarePath: intent.value,
-                                        firmware: null,
-                                });
-                                return;
-                        case "setRecoveryMethod":
-                                this.patch({ recoveryMethod: intent.value });
-                                return;
-                        case "setInstallMethod":
-                                this.patch({ installMethod: intent.value });
-                                return;
-                        case "setInstructionsUrl":
-                                this.patch({ instructionsUrl: intent.value });
-                                return;
-                        case "setRecoveryNote":
-                                this.patch({
-                                        recoveryNote: intent.value,
-                                        recoveryNotePresetId: null,
-                                });
-                                return;
-                        case "setInstallNote":
-                                this.patch({
-                                        installNote: intent.value,
-                                        installNotePresetId: null,
-                                });
-                                return;
-                        case "setRouteConfirmed":
-                                this.patch({ routeConfirmed: intent.value });
-                                return;
-                        case "setDestination":
-                                this.patch({ destination: intent.value });
-                                return;
-                        case "setSavedWork":
-                                this.patch({ savedWork: intent.value });
-                                return;
-                        case "setManualConfirmed":
-                                this.patch({ manualConfirmed: intent.value });
-                                return;
-                        case "setGuardedConfigConfirmed":
-                                this.patch({
-                                        guardedConfigConfirmed: intent.value,
-                                });
-                                return;
-                        case "toggleLegacyRule":
-                                this.patch({
-                                        selectedLegacyRules: intent.checked
-                                                ? [
-                                                          ...new Set([
-                                                                  ...this.state
-                                                                          .selectedLegacyRules,
-                                                                  intent.key,
-                                                          ]),
-                                                  ]
-                                                : this.state.selectedLegacyRules.filter(
-                                                          (key) =>
-                                                                  key !==
-                                                                  intent.key,
-                                                  ),
-                                });
-                                return;
-                        case "setLegacyRiskNote":
-                                this.patch({
-                                        legacyAcknowledgements: {
-                                                ...this.state
-                                                        .legacyAcknowledgements,
-                                                [intent.risk]: {
-                                                        note: intent.note,
-                                                        confirmed:
-                                                                this.state
-                                                                        .legacyAcknowledgements[
-                                                                        intent
-                                                                                .risk
-                                                                ]?.confirmed ??
-                                                                false,
-                                                },
-                                        },
-                                });
-                                return;
-                        case "setLegacyRiskConfirmed":
-                                this.patch({
-                                        legacyAcknowledgements: {
-                                                ...this.state
-                                                        .legacyAcknowledgements,
-                                                [intent.risk]: {
-                                                        note:
-                                                                this.state
-                                                                        .legacyAcknowledgements[
-                                                                        intent
-                                                                                .risk
-                                                                ]?.note ?? "",
-                                                        confirmed: intent.confirmed,
-                                                },
-                                        },
-                                });
-                                return;
-                        case "setSelectedProfile": {
-                                this.generation += 1;
-                                this.inflight = null;
-                                this.firmwareRebootBinding = null;
-                                this.patch({
-                                        selectedProfileId: intent.value,
-                                        plan: null,
-                                        preflightExact: null,
-                                        preparation: null,
-                                        packageReceipt: null,
-                                        rebootPreview: null,
-                                        showReboot: false,
-                                        savedWork: false,
-                                        manualPreview: null,
-                                        showManual: false,
-                                        configurationRebootPreview: null,
-                                        showConfigurationReboot: false,
-                                        guardedConfigConfirmed: false,
-                                        configRecommendation: null,
-                                        recommendationStatus: "idle",
-                                        recommendationError: null,
-                                        workflowReceipt: null,
-                                        barEvidence: null,
-                                        backup: null,
-                                        launch: null,
-                                        activity: null,
-                                        busyAction: "",
-                                });
-                                await this.loadPlan(
-                                        intent.value,
-                                        this.generation,
-                                );
-                                return;
-                        }
-                        case "closeModals":
-                                this.patch({
-                                        showReboot: false,
-                                        showManual: false,
-                                        showConfigurationReboot: false,
-                                });
-                                return;
-                        case "chooseFirmware":
-                                return this.run("firmware", async (tx) => {
-                                        const path =
-                                                await this.adapter.selectFirmwareImage();
-                                        if (!path)
-                                                throw new Error(
-                                                        "Firmware selection was cancelled.",
-                                                );
-                                        const inspected =
-                                                await this.adapter.inspectFirmwareImage(
-                                                        path,
-                                                );
-                                        tx.patch({
-                                                firmwarePath: path,
-                                                firmware: inspected,
-                                                legacyAnalysis: null,
-                                                legacyAnalysisStatus: "idle",
-                                                legacyAnalysisError: "",
-                                                selectedLegacyRules: [],
-                                                legacyAcknowledgements: {},
-                                        });
-                                        tx.success(message("ui.sourceFirmwareInspectedSizeAndSha256Recorded"));
-                                });
-                        case "inspectFirmware":
-                                return this.run("firmware", async (tx) => {
-                                        const inspected =
-                                                await this.adapter.inspectFirmwareImage(
-                                                        this.state.firmwarePath,
-                                                );
-                                        tx.patch({
-                                                firmware: inspected,
-                                                legacyAnalysis: null,
-                                                legacyAnalysisStatus: "idle",
-                                                legacyAnalysisError: "",
-                                                selectedLegacyRules: [],
-                                                legacyAcknowledgements: {},
-                                        });
-                                        tx.success(message("ui.sourceFirmwareInspectedSizeAndSha256Recorded"));
-                                });
-                        case "analyzeLegacy":
-                                return this.run(
-                                        "legacy-analysis",
-                                        async (tx) => {
-                                                const requestedPath =
-                                                        this.state.firmwarePath;
-                                                const requestedFirmware = clone(
-                                                        this.state.firmware!,
-                                                );
-                                                tx.patch({
-                                                        legacyAnalysisStatus:
-                                                                "pending",
-                                                        legacyAnalysisError: "",
-                                                        legacyAnalysis: null,
-                                                        selectedLegacyRules: [],
-                                                        legacyAcknowledgements:
-                                                                {},
-                                                });
-                                                const value =
-                                                        await this.adapter.analyzeLegacyFirmware(
-                                                                requestedPath,
-                                                        );
-                                                if (
-                                                        requestedPath !==
-                                                        this.state.firmwarePath
-                                                )
-                                                        return;
-                                                if (
-                                                        !sameFirmware(
-                                                                value.firmware,
-                                                                requestedFirmware,
-                                                        )
-                                                )
-                                                        throw new Error(
-                                                                "The firmware fingerprint changed between inspection and analysis.",
-                                                        );
-                                                tx.patch({
-                                                        legacyAnalysis: {
-                                                                path: requestedPath,
-                                                                value,
-                                                        },
-                                                        selectedLegacyRules:
-                                                                value.catalogs.flatMap(
-                                                                        (
-                                                                                catalog,
-                                                                        ) =>
-                                                                                catalog.rules
-                                                                                        .filter(
-                                                                                                (
-                                                                                                        rule,
-                                                                                                ) =>
-                                                                                                        rule.status ===
-                                                                                                                "applicable" &&
-                                                                                                        rule.recommended,
-                                                                                        )
-                                                                                        .map(
-                                                                                                (
-                                                                                                        rule,
-                                                                                                ) =>
-                                                                                                        legacyRuleKey(
-                                                                                                                catalog.catalog,
-                                                                                                                rule.ruleId,
-                                                                                                        ),
-                                                                                        ),
-                                                                ),
-                                                        legacyAnalysisStatus:
-                                                                "ready",
-                                                });
-                                                tx.success(message("ui.legacyAnalysisCompleteSourceFingerprintAndRuleResultsRecorded"));
-                                        },
-                                );
-                        case "createProfile":
-                                return this.createProfile();
-                        case "compare":
-                                return this.run("preflight", async (tx) => {
-                                        const comparison =
-                                                await this.adapter.compareMachineProfile(
-                                                        this.state
-                                                                .selectedProfileId,
-                                                );
-                                        const exact =
-                                                comparison.result.differences
-                                                        .length === 0;
-                                        tx.patch({ preflightExact: exact });
-                                        if (!exact) {
-                                                const count =
-                                                        comparison.result
-                                                                .differences
-                                                                .length;
-                                                throw new Error(
-                                                        `Hardware check found ${count} difference${count === 1 ? "" : "s"}; deployment remains blocked until the selected profile matches.`,
-                                                );
-                                        }
-                                        tx.success(
-                                                message("ui.currentProfileMatchesHardware"),
-                                        );
-                                });
-                        case "prepare":
-                                return this.prepare();
-                        case "chooseDestination":
-                                return this.run("destination", async (tx) => {
-                                        const value =
-                                                await this.adapter.selectDestinationDirectory();
-                                        if (!value)
-                                                throw new Error(
-                                                        "Destination selection was cancelled.",
-                                                );
-                                        tx.patch({ destination: value });
-                                        tx.success(
-                                                message("ui.packageDestinationSelected"),
-                                        );
-                                });
-                        case "exportPackage":
-                                return this.run("export", async (tx) => {
-                                        const packageReceipt =
-                                                await this.adapter.exportDeploymentPackage(
-                                                        this.state
-                                                                .selectedProfileId,
-                                                        this.state.destination,
-                                                );
-                                        tx.patch({ packageReceipt });
-                                        tx.success(message("ui.deploymentPackageExportedOpenItInTheVendorToolForFlashing"));
-                                });
-                        case "previewFirmwareReboot":
-                                return this.run(
-                                        "reboot-preview",
-                                        async (tx) => {
-                                                const plan = this.state.plan!;
-                                                const active = plan.steps.find(
-                                                        (step) =>
-                                                                step.state ===
-                                                                "ready",
-                                                )!;
-                                                const preview =
-                                                        await this.adapter.previewFirmwareSetupReboot(
-                                                                this.state
-                                                                        .selectedProfileId,
-                                                        );
-                                                if (
-                                                        preview.profileId !==
-                                                                plan.profileId ||
-                                                        preview.activeStep !==
-                                                                active.id ||
-                                                        !preview.confirmationToken
-                                                )
-                                                        throw new Error(
-                                                                "The deployment plan changed while the restart preview was loading.",
-                                                        );
-                                                if (!tx.current()) return;
-                                                this.firmwareRebootBinding = {
-                                                        profileId: plan.profileId,
-                                                        planRevision:
-                                                                plan.revision,
-                                                        stepId: active.id,
-                                                        confirmationToken:
-                                                                preview.confirmationToken,
-                                                };
-                                                tx.patch({
-                                                        rebootPreview: preview,
-                                                        savedWork: false,
-                                                        showReboot: true,
-                                                });
-                                                tx.success(message("ui.firmwareSetupRestartDetailsLoadedForReview"));
-                                        },
-                                );
-                        case "requestFirmwareReboot":
-                                return this.run("reboot", async (tx) => {
-                                        const preview =
-                                                this.state.rebootPreview!;
-                                        const binding =
-                                                this.firmwareRebootBinding;
-                                        const active =
-                                                this.state.plan?.steps.find(
-                                                        (step) =>
-                                                                step.state ===
-                                                                "ready",
-                                                );
-                                        tx.patch({ showReboot: false });
-                                        if (
-                                                !binding ||
-                                                binding.profileId !==
-                                                        this.state.plan
-                                                                ?.profileId ||
-                                                binding.planRevision !==
-                                                        this.state.plan
-                                                                ?.revision ||
-                                                binding.stepId !== active?.id ||
-                                                binding.confirmationToken !==
-                                                        preview.confirmationToken
-                                        )
-                                                throw new Error(
-                                                        "The firmware restart preview is stale.",
-                                                );
-                                        const receipt =
-                                                await this.adapter.rebootToFirmwareSetup(
-                                                        preview,
-                                                        this.state.savedWork,
-                                                );
-                                        if (
-                                                receipt.profileId !==
-                                                        preview.profileId ||
-                                                receipt.accepted !== true
-                                        )
-                                                throw new Error(
-                                                        "The firmware restart request returned an invalid acceptance receipt.",
-                                                );
-                                        tx.success(
-                                                message("ui.restartingToFirmwareSetup"),
-                                        );
-                                });
-                        case "openManual":
-                                return this.openManual();
-                        case "confirmManual":
-                                return this.confirmManual();
-                        case "verifyDriver":
-                                return this.verifyDriver();
-                        case "saveGuardedConfig":
-                                return this.saveGuardedConfig();
-                        case "openConfigurationReboot":
-                                return this.openConfigurationReboot();
-                        case "requestConfigurationReboot":
-                                return this.requestConfigurationReboot();
-                        case "verifyConfigurationBoot":
-                                return this.verifyConfigurationBoot();
-                        case "collectBar":
-                                return this.collectBar();
-                        case "installInspector":
-                                return this.run(
-                                        "install-inspector",
-                                        async (tx) => {
-                                                const installation =
-                                                        await this.adapter.installNvidiaProfileInspector();
-                                                tx.patch({ installation });
-                                                tx.success(message("ui.nvidiaProfileInspectorInstalled"));
-                                        },
-                                );
-                        case "backupProfiles":
-                                return this.run(
-                                        "backup-profiles",
-                                        async (tx) => {
-                                                const backup =
-                                                        await this.adapter.backupNvidiaProfiles(
-                                                                this.state
-                                                                        .selectedProfileId,
-                                                        );
-                                                if (
-                                                        backup.manifest
-                                                                .profileId !==
-                                                                this.state
-                                                                        .selectedProfileId ||
-                                                        !backup.manifestSha256.trim()
-                                                )
-                                                        throw new Error(
-                                                                "The NVIDIA profile backup receipt does not match the selected profile.",
-                                                        );
-                                                tx.patch({ backup });
-                                                tx.success(
-                                                        message("ui.nvidiaProfilesBackupExported"),
-                                                );
-                                        },
-                                );
-                        case "launchInspector":
-                                return this.run(
-                                        "launch-inspector",
-                                        async (tx) => {
-                                                const launch =
-                                                        await this.adapter.launchNvidiaProfileInspector(
-                                                                this.state
-                                                                        .selectedProfileId,
-                                                        );
-                                                if (
-                                                        launch.profileId !==
-                                                                this.state
-                                                                        .selectedProfileId ||
-                                                        launch.backup.manifest
-                                                                .profileId !==
-                                                                this.state
-                                                                        .selectedProfileId ||
-                                                        !launch.executableSha256.trim()
-                                                )
-                                                        throw new Error(
-                                                                "The Profile Inspector launch receipt does not match the selected profile.",
-                                                        );
-                                                tx.patch({
-                                                        launch,
-                                                        backup: launch.backup,
-                                                });
-                                                tx.success(
-                                                        message("ui.profileInspectorLaunched"),
-                                                );
-                                        },
-                                );
-                }
-        };
-        private createProfile() {
-                const view = this.view();
-                if (!view.firmware) return Promise.resolve();
-                return this.run("profile", async (tx) => {
-                        const bundle = await this.adapter.createMachineProfile({
-                                displayName: view.displayName,
-                                boardPath: view.boardPath,
-                                firmwarePath: view.firmwarePath,
-                                expectedFirmware: clone(view.firmware!),
-                                recovery: {
-                                        method: view.recoveryMethod,
-                                        testedOrDocumented: view.routeConfirmed,
-                                        note: view.recoveryNote,
-                                },
-                                firmwareInstall: {
-                                        method: view.installMethod,
-                                        artifactFileName: fileName(
-                                                view.firmwarePath,
-                                        ),
-                                        testedOrDocumented: view.routeConfirmed,
-                                        officialInstructionsUrl:
-                                                view.instructionsUrl,
-                                        note: view.installNote,
-                                },
-                                legacyPatches:
-                                        view.boardPath === "legacyAbove4g" &&
-                                        view.legacyAnalysis &&
-                                        view.legacyAnalysisValid
-                                                ? {
-                                                          upstreamCommit:
-                                                                  view
-                                                                          .legacyAnalysis
-                                                                          .value
-                                                                          .upstreamCommit,
-                                                          catalogs: view.legacyAnalysis.value.catalogs
-                                                                  .filter(
-                                                                          (
-                                                                                  catalog,
-                                                                          ) =>
-                                                                                  view.selectedLegacyEntries.some(
-                                                                                          (
-                                                                                                  entry,
-                                                                                          ) =>
-                                                                                                  entry
-                                                                                                          .catalog
-                                                                                                          .catalog ===
-                                                                                                  catalog.catalog,
-                                                                                  ),
-                                                                  )
-                                                                  .map(
-                                                                          (
-                                                                                  catalog,
-                                                                          ) => ({
-                                                                                  catalog: catalog.catalog,
-                                                                                  sourceSha256:
-                                                                                          catalog.sourceSha256,
-                                                                          }),
-                                                                  ),
-                                                          selections: view.selectedLegacyEntries.map(
-                                                                  ({
-                                                                          catalog,
-                                                                          rule,
-                                                                  }) => ({
-                                                                          catalog: catalog.catalog,
-                                                                          ruleId: rule.ruleId,
-                                                                          expectedMatches:
-                                                                                  rule.expectedMatches!,
-                                                                          requiredRisks:
-                                                                                  rule.requiredRisks,
-                                                                  }),
-                                                          ),
-                                                          acknowledgements:
-                                                                  view.selectedLegacyRisks.map(
-                                                                          (
-                                                                                  risk,
-                                                                          ) => ({
-                                                                                  risk,
-                                                                                  note: view.legacyAcknowledgements[
-                                                                                          risk
-                                                                                  ]!.note.trim(),
-                                                                          }),
-                                                                  ),
-                                                  }
-                                                : undefined,
-                        });
-                        assertPlanProjection(bundle.profile, bundle.plan);
-                        tx.patch({
-                                profiles: [
-                                        bundle.profile,
-                                        ...this.state.profiles.filter(
-                                                (profile) =>
-                                                        profile.profileId !==
-                                                        bundle.profile
-                                                                .profileId,
-                                        ),
-                                ],
-                                selectedProfileId: bundle.profile.profileId,
-                                plan: bundle.plan,
-                                preflightExact: true,
-                        });
-                        const selectionCount =
-                                view.selectedLegacyEntries.length;
-                        const successMessage =
-                                view.boardPath === "legacyAbove4g"
-                                        ? selectionCount === 1
-                                                ? message(
-                                                          "ui.legacyProfileCreatedWithOneRule",
-                                                  )
-                                                : message(
-                                                          "ui.legacyProfileCreated",
-                                                          {
-                                                                  ruleCount:
-                                                                          selectionCount,
-                                                          },
-                                                  )
-                                        : message("ui.machineProfileCreatedSourceImageFingerprintRecorded");
-                        tx.success(successMessage);
-                });
-        }
-        private prepare() {
-                const before = this.state.plan!;
-                const active = before.steps.find(
-                        (step) => step.state === "ready",
-                )!;
-                const start = before.steps.findIndex(
-                        (step) => step.id === active.id,
-                );
-                const end = before.steps.findIndex(
-                        (step) => step.id === "verifyPatchedArtifact",
-                );
-                const expected = before.steps
-                        .slice(start, end + 1)
-                        .map((step) => step.id);
-                return this.run("prepare", async (tx) => {
-                        const preparation =
-                                await this.adapter.prepareFirmwareArtifact(
-                                        before.profileId,
-                                );
-                        assertPlanAdvance(before, preparation.plan, expected);
-                        tx.patch({ preparation, plan: preparation.plan });
-                        tx.success(message("ui.firmwareArtifactPreparedRustDriverInsertedAndSha256Recorded"));
-                });
-        }
-        private openManual() {
-                const before = this.state.plan!;
-                const active = before.steps.find(
-                        (step) => step.state === "ready",
-                )!;
-                return this.run("manual-preview", async (tx) => {
-                        const preview =
-                                await this.adapter.previewManualDeploymentStep(
-                                        before.profileId,
-                                );
-                        if (
-                                preview.profileId !== before.profileId ||
-                                preview.planRevision !== before.revision ||
-                                preview.stepId !== active.id ||
-                                !preview.confirmationToken
-                        )
-                                throw new Error(
-                                        "The deployment plan changed while the consequence preview was loading. Review the current step again.",
-                                );
-                        tx.patch({
-                                manualPreview: preview,
-                                manualConfirmed: false,
-                                showManual: true,
-                        });
-                        tx.success(message("ui.currentManualStepLoadedForReview"));
-                });
-        }
-        private confirmManual() {
-                const before = this.state.plan!;
-                const preview = this.state.manualPreview!;
-                const active = before.steps.find(
-                        (step) => step.state === "ready",
-                );
-                this.patch({ showManual: false });
-                return this.run("manual-confirm", async (tx) => {
-                        if (
-                                preview.profileId !== before.profileId ||
-                                preview.planRevision !== before.revision ||
-                                preview.stepId !== active?.id
-                        ) {
-                                throw new Error(
-                                        "The manual confirmation preview is stale.",
-                                );
-                        }
-                        const receipt =
-                                await this.adapter.confirmManualDeploymentStep(
-                                        preview,
-                                );
-                        if (
-                                receipt.plan.profileId !== before.profileId ||
-                                receipt.stepId !== preview.stepId
-                        ) {
-                                throw new Error(
-                                        "The backend returned a stale manual-step receipt.",
-                                );
-                        }
-                        assertPlanAdvance(before, receipt.plan, [
-                                preview.stepId,
-                        ]);
-                        tx.patch({
-                                plan: receipt.plan,
-                                workflowReceipt: {
-                                        title: message(
-                                                "ui.manualStepRecordedInTheDeploymentPlan",
-                                        ),
-                                        detail: message(
-                                                "ui.completionRecordedAt",
-                                                {
-                                                        time: receipt.recordedAtUnixMs,
-                                                },
-                                        ),
-                                },
-                        });
-                        tx.success(message("ui.manualStepRecordedInTheDeploymentPlan"));
-                });
-        }
-        private verifyDriver() {
-                const before = this.state.plan!;
-                const active = before.steps.find(
-                        (step) => step.state === "ready",
-                )!;
-                const expected: StepId[] =
-                        active.id === "rebootAfterFirmware"
-                                ? ["rebootAfterFirmware", "verifyDriverLoaded"]
-                                : ["verifyDriverLoaded"];
-                return this.run("driver-verify", async (tx) => {
-                        const receipt =
-                                await this.adapter.verifyDeploymentDriver(
-                                        before.profileId,
-                                );
-                        assertPlanAdvance(before, receipt.plan, expected);
-                        tx.patch({
-                                plan: receipt.plan,
-                                workflowReceipt: {
-                                        title: message(
-                                                "ui.currentBootAndRustDxeStatusRecorded",
-                                        ),
-                                        detail: message(
-                                                "ui.driverRawAndBootStepsRecorded",
-                                                {
-                                                        raw: receipt.status.raw,
-                                                },
-                                        ),
-                                },
-                        });
-                        tx.success(message("ui.currentWindowsBootAndRustDxeStatusRecorded"));
-                        if (tx.current()) await this.loadRecommendation();
-                });
-        }
-        private saveGuardedConfig() {
-                const before = this.state.plan!;
-                const recommendation = this.state.configRecommendation!;
-                if (
-                        !this.state.guardedConfigConfirmed ||
-                        recommendation.profileId !== before.profileId ||
-                        recommendation.planRevision !== before.revision
-                )
-                        return Promise.resolve();
-                const draft = clone(recommendation.value.draft);
-                return this.run("deployment-config", async (tx) => {
-                        const receipt = await this.adapter.saveDeploymentConfig(
-                                before.profileId,
-                                draft,
-                        );
-                        assertPlanAdvance(before, receipt.plan, [
-                                "writeNvstrapsConfiguration",
-                        ]);
-                        if (
-                                JSON.stringify(receipt.save.draft) !==
-                                JSON.stringify(draft)
-                        )
-                                throw new Error(
-                                        "The configuration read-back receipt does not match the recommended draft that was submitted.",
-                                );
-                        tx.patch({
-                                plan: receipt.plan,
-                                workflowReceipt: {
-                                        title: message(
-                                                "ui.configurationWrittenAndReadBack",
-                                        ),
-                                        detail: message(
-                                                "ui.configurationSaved",
-                                                {
-                                                        bytes: receipt.save.bytesWritten,
-                                                        time: receipt.save.savedAtUnixMs,
-                                                },
-                                        ),
-                                },
-                                guardedConfigConfirmed: false,
-                        });
-                        tx.success(message("ui.deploymentConfigurationWrittenAndReadBack"));
-                });
-        }
-        private openConfigurationReboot() {
-                const before = this.state.plan!;
-                return this.run("configuration-reboot-preview", async (tx) => {
-                        const preview =
-                                await this.adapter.previewConfigurationReboot(
-                                        before.profileId,
-                                );
-                        if (
-                                preview.profileId !== before.profileId ||
-                                preview.planRevision !== before.revision
-                        )
-                                throw new Error(
-                                        "The deployment plan changed while the restart preview was loading.",
-                                );
-                        tx.patch({
-                                configurationRebootPreview: preview,
-                                savedWork: false,
-                                showConfigurationReboot: true,
-                        });
-                        tx.success(message("ui.configurationRestartDetailsLoadedForReview"));
-                });
-        }
-        private requestConfigurationReboot() {
-                const preview = this.state.configurationRebootPreview!;
-                this.patch({ showConfigurationReboot: false });
-                return this.run("configuration-reboot", async (tx) => {
-                        if (
-                                preview.profileId !==
-                                        this.state.plan?.profileId ||
-                                preview.planRevision !==
-                                        this.state.plan?.revision ||
-                                !preview.confirmationToken
-                        )
-                                throw new Error(
-                                        "The configuration reboot preview is stale.",
-                                );
-                        const receipt =
-                                await this.adapter.rebootAfterConfiguration(
-                                        preview,
-                                        this.state.savedWork,
-                                );
-                        if (
-                                receipt.profileId !==
-                                        this.state.selectedProfileId ||
-                                receipt.accepted !== true ||
-                                receipt.planAdvanced !== false
-                        )
-                                throw new Error(
-                                        "The restart request returned an invalid plan-advancement receipt.",
-                                );
-                        tx.patch({
-                                workflowReceipt: {
-                                        title: message(
-                                                "ui.configurationRestartRequestAccepted",
-                                        ),
-                                        detail: message(
-                                                "ui.returnAfterWindowsBootsThenCheckTheBootTime",
-                                        ),
-                                },
-                        });
-                        tx.success(message("ui.windowsAcceptedTheRestartRequestReturnAfterTheNextBoot"));
-                });
-        }
-        private verifyConfigurationBoot() {
-                const before = this.state.plan!;
-                return this.run("configuration-boot-verify", async (tx) => {
-                        const receipt =
-                                await this.adapter.verifyConfigurationReboot(
-                                        before.profileId,
-                                );
-                        assertPlanAdvance(before, receipt.plan, [
-                                "rebootAfterConfiguration",
-                        ]);
-                        const savedEvidence = before.steps.find(
-                                (step) =>
-                                        step.id ===
-                                        "writeNvstrapsConfiguration",
-                        )?.evidence?.value;
-                        if (
-                                receipt.configurationSavedAtUnixMs !==
-                                        savedEvidence ||
-                                Number(receipt.bootedAtUnixMs) <=
-                                        Number(
-                                                receipt.configurationSavedAtUnixMs,
-                                        )
-                        )
-                                throw new Error(
-                                        "The returned boot receipt is not later than the configuration read-back.",
-                                );
-                        tx.patch({
-                                plan: receipt.plan,
-                                workflowReceipt: {
-                                        title: message("ui.windowsBootTimeRecorded"),
-                                        detail: message(
-                                                "ui.bootRecordedAfterConfiguration",
-                                                {
-                                                        bootTime: receipt.bootedAtUnixMs,
-                                                        savedTime:
-                                                                receipt.configurationSavedAtUnixMs,
-                                                },
-                                        ),
-                                },
-                        });
-                        tx.success(message("ui.windowsBootAfterTheConfigurationReadBackRecorded"));
-                });
-        }
-        private collectBar() {
-                const before = this.state.plan!;
-                return this.run("bar1", async (tx) => {
-                        const receipt =
-                                await this.adapter.collectNvidiaSmiEvidence(
-                                        before.profileId,
-                                );
-                        if (
-                                receipt.evidence.profileId !==
-                                        before.profileId ||
-                                !receipt.evidence.allProfileGpusObserved
-                        )
-                                throw new Error(
-                                        "NVIDIA telemetry is missing one or more GPUs from the selected profile.",
-                                );
-                        assertPlanAdvance(before, receipt.plan, [
-                                "verifyResizableBar",
-                        ]);
-                        tx.patch({
-                                plan: receipt.plan,
-                                barEvidence: receipt.evidence,
-                                workflowReceipt: {
-                                        title: message("ui.resizableBarObserved"),
-                                        detail: message(
-                                                "ui.profileGpusObserved",
-                                                {
-                                                        hash: `${receipt.evidence.rawXmlSha256.slice(0, 10)}…${receipt.evidence.rawXmlSha256.slice(-8)}`,
-                                                },
-                                        ),
-                                },
-                        });
-                        tx.success(message("ui.nvidiaBar1DataRecordedForThisProfile"));
-                });
         }
 }
 
