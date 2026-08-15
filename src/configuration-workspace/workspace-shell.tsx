@@ -245,19 +245,11 @@ export const ResizableBarStatusStrip = () => {
                                                                         {t(
                                                                                 "ui.patchConfiguration",
                                                                         )}{" "}
-                                                                        <b aria-hidden="true">
-                                                                                {row.patchTone ===
-                                                                                "not-needed"
-                                                                                        ? t(
-                                                                                                  row.patchStateId,
-                                                                                          )
-                                                                                        : row.patchSymbol}
-                                                                        </b>
-                                                                        <span className="visually-hidden">
+                                                                        <b>
                                                                                 {t(
                                                                                         row.patchStateId,
                                                                                 )}
-                                                                        </span>
+                                                                        </b>
                                                                 </span>
                                                                 {row.gpu
                                                                         .patchConfiguration

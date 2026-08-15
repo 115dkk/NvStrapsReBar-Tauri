@@ -88,7 +88,7 @@ test("preview discloses simulation and completes guarded save journey", async ({
                 path: `${evidence}/production-1180-overview.png`,
                 fullPage: true,
         });
-        await page.getByLabel("Registry + fallback").check();
+        await page.getByLabel("Built-in list + fallback").check();
         await expect(page.getByText("UNSAVED EDITS")).toBeVisible();
         await expect(
                 page.getByRole("heading", {
@@ -113,7 +113,7 @@ test("GPU rule exposes scope, size, override, and removal", async ({
         page,
 }) => {
         await page.goto("/");
-        await page.getByRole("button", { name: "Add explicit rule" }).click();
+        await page.getByRole("button", { name: "Add rule for this GPU" }).click();
         await expect(page.getByLabel("Match scope").first()).toHaveValue(
                 "location",
         );
@@ -121,7 +121,7 @@ test("GPU rule exposes scope, size, override, and removal", async ({
         await page.getByLabel("Size-mask override").selectOption("true");
         await page.getByRole("button", { name: "Remove", exact: true }).click();
         await expect(
-                page.getByRole("button", { name: "Add explicit rule" }),
+                page.getByRole("button", { name: "Add rule for this GPU" }),
         ).toBeVisible();
 });
 test("keyboard focus and minimum-width layout remain usable", async ({
@@ -131,8 +131,9 @@ test("keyboard focus and minimum-width layout remain usable", async ({
         await page.goto("/");
         await page.keyboard.press("Tab");
         await expect(page.locator(":focus")).toBeVisible();
-        await page.getByLabel("Off").focus();
-        await expect(page.getByLabel("Off").locator("..")).toHaveCSS(
+        const offMode = page.getByRole("radio", { name: /^Off/ });
+        await offMode.focus();
+        await expect(offMode.locator("..")).toHaveCSS(
                 "outline-style",
                 "solid",
         );
@@ -245,11 +246,11 @@ test("durable deployment completes in order and distinguishes requests from rece
 
         const write = page.getByRole("button", { name: "Write configuration and read it back" });
         await expect(write).toBeDisabled();
-        await expect(page.getByText("Registry managed")).toBeVisible();
+        await expect(page.getByText("Covered by built-in GPU list")).toBeVisible();
         await expect(page.getByText(/backend/i)).toHaveCount(0);
         await expect(page.getByText("Location-specific fallback rules")).toBeVisible();
         await expect(
-                page.getByText("Registry managed").locator("..").getByText("1", { exact: true }),
+                page.getByText("Covered by built-in GPU list").locator("..").getByText("1", { exact: true }),
         ).toBeVisible();
         await expect(
                 page.getByText("Location-specific fallback rules").locator("..").getByText("0", { exact: true }),
@@ -414,7 +415,7 @@ test("unknown Turing recommendation pins an exact-location fallback rule", async
                 "C:\\Firmware\\changed-fingerprint.bin",
         );
         await expect(
-                page.getByText("Registry managed").locator("..").getByText("0", { exact: true }),
+                page.getByText("Covered by built-in GPU list").locator("..").getByText("0", { exact: true }),
         ).toBeVisible();
         await expect(
                 page.getByText("Location-specific fallback rules").locator("..").getByText("1", { exact: true }),

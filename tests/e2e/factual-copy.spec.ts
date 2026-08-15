@@ -64,7 +64,7 @@ test("English copy names hardware, selected files, and the next vendor action", 
         await page.getByRole("button", { name: "Configure" }).click();
         await expect(page.getByRole("heading", { name: "Firmware behavior" })).toBeVisible();
         await expect(page.getByText("Hardware changes")).toBeVisible();
-        await expect(page.getByText("Match rules by PCI location. Maximum eight.")).toBeVisible();
+        await expect(page.getByText(/A rule is a per-GPU exception that overrides the automatic policy/)).toBeVisible();
         await expectCopyAbsent(page, forbiddenEnglish);
         await expectNoHorizontalOverflow(page);
         await page.screenshot({ path: `${evidence}/english-configure-900x760.png` });
@@ -99,7 +99,7 @@ test("Korean copy states the same facts and actions without accuracy claims", as
         await page.getByRole("button", { name: "구성" }).click();
         await expect(page.getByRole("heading", { name: "펌웨어 동작" })).toBeVisible();
         await expect(page.getByText("하드웨어 변경")).toBeVisible();
-        await expect(page.getByText("규칙은 PCI 위치로 연결합니다. 최대 8개까지 만들 수 있습니다.")).toBeVisible();
+        await expect(page.getByText(/규칙은 특정 GPU에만 적용되는 예외로, 자동 정책보다 우선합니다/)).toBeVisible();
         await expectCopyAbsent(page, forbiddenKorean);
         await expectNoHorizontalOverflow(page);
         expect(await page.evaluate(() => window.__NVSTRAPS_I18N_MISSING__ ?? [])).toEqual([]);

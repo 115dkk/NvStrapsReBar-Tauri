@@ -8,7 +8,7 @@ test("language switch is accessible, immediate, persisted, and preserves the dra
         await page.goto("/");
         const selector = page.getByTestId("language-select");
         await expect(selector).toHaveAccessibleName("Language");
-        await page.getByLabel("Registry + fallback").check();
+        await page.getByLabel("Built-in list + fallback").check();
         await selector.focus();
         await page.keyboard.press("ArrowDown");
         await page.keyboard.press("Enter");
@@ -16,7 +16,7 @@ test("language switch is accessible, immediate, persisted, and preserves the dra
         await expect(selector).toHaveAccessibleName("언어");
         await expect(page.getByRole("heading", { name: "펌웨어 구성" })).toBeVisible();
         await expect(page.getByText("저장하지 않은 변경 사항")).toBeVisible();
-        await expect(page.getByLabel("레지스트리 + 대체값")).toBeChecked();
+        await expect(page.getByLabel("내장 목록 + 대체값")).toBeChecked();
         await expect(page.getByText("감지된 NVIDIA GPU", { exact: true })).toBeVisible();
         await page.screenshot({ path: `${evidence}/korean-configure-1180x760.png`, fullPage: true });
         await page.screenshot({ path: `${evidence}/gallery-korean-configure-1180x760.png` });
@@ -30,7 +30,7 @@ test("Korean consequential configuration modal remains truthful at the minimum w
         await page.setViewportSize({ width: 900, height: 760 });
         await page.goto("/");
         await page.getByTestId("language-select").selectOption("ko");
-        await page.getByLabel("레지스트리 + 대체값").check();
+        await page.getByLabel("내장 목록 + 대체값").check();
         await page.getByRole("button", { name: "검토 후 저장" }).click();
         const dialog = page.getByRole("dialog");
         await expect(dialog).toContainText("이 초안을 UEFI 펌웨어에 기록할까요?");
