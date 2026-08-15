@@ -1,5 +1,8 @@
 use std::{
-    sync::Mutex,
+    sync::{
+        Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -30,6 +33,22 @@ use crate::{
 #[derive(Default)]
 pub struct AppState {
     inner: Mutex<BackendState>,
+    elevation_request: ElevationRequestGate,
+}
+
+#[derive(Default)]
+struct ElevationRequestGate(AtomicBool);
+
+impl ElevationRequestGate {
+    fn try_begin(&self) -> bool {
+        self.0
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+    }
+
+    fn reset(&self) {
+        self.0.store(false, Ordering::Release);
+    }
 }
 
 #[derive(Default)]
@@ -233,8 +252,14 @@ pub(crate) fn save_config_for_devices_inner(
 }
 
 #[tauri::command]
-pub fn request_elevation(app: AppHandle) -> CommandResult<()> {
-    relaunch_elevated().map_err(ApiError::from)?;
+pub fn request_elevation(app: AppHandle, state: State<'_, AppState>) -> CommandResult<()> {
+    if !state.elevation_request.try_begin() {
+        return Ok(());
+    }
+    if let Err(error) = relaunch_elevated() {
+        state.elevation_request.reset();
+        return Err(ApiError::from(error));
+    }
     app.exit(0);
     Ok(())
 }
@@ -387,7 +412,7 @@ fn firmware_is_accessible(is_uefi: bool, privilege_enabled: bool, has_access_err
 
 #[cfg(test)]
 mod tests {
-    use super::firmware_is_accessible;
+    use super::{ElevationRequestGate, firmware_is_accessible};
 
     #[test]
     fn firmware_access_requires_uefi_privilege_and_no_error() {
@@ -395,5 +420,14 @@ mod tests {
         assert!(!firmware_is_accessible(false, true, false));
         assert!(!firmware_is_accessible(true, false, false));
         assert!(!firmware_is_accessible(true, true, true));
+    }
+
+    #[test]
+    fn elevation_request_gate_is_single_flight_and_resets_after_launch_failure() {
+        let gate = ElevationRequestGate::default();
+        assert!(gate.try_begin());
+        assert!(!gate.try_begin());
+        gate.reset();
+        assert!(gate.try_begin());
     }
 }
