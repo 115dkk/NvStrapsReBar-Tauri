@@ -38,6 +38,30 @@ export type GpuDevice = {
 };
 export type ApiError = { code: string; message: string; recoverable: boolean };
 
+export type CurrentBootDxeState =
+        | "observedThisBoot"
+        | "notObservedThisBoot"
+        | "indeterminate";
+export type CurrentBootDxeReasonCode =
+        | "currentBootStatusObserved"
+        | "statusVariableMissing"
+        | "statusVariableMalformed"
+        | "statusVariableUnavailable"
+        | "statusValueUnrecognized";
+export type BarSettingsStatus = {
+        currentBootDxeState: CurrentBootDxeState;
+        currentBootDxeReasonCode: CurrentBootDxeReasonCode;
+        controlEvidence:
+                | "currentBootDxe"
+                | "expandedTuringAperture"
+                | "notObserved"
+                | "indeterminate";
+        settingsAvailable: boolean;
+        savedConfigurationState: "enabled" | "disabled" | "invalid" | "unreadable";
+        topologyToken: string;
+        configToken: string | null;
+};
+
 export type ResizableBarApertureState =
         | "expanded"
         | "legacy256MiB"
@@ -136,6 +160,7 @@ export type SystemSnapshot = {
                 severity: string;
                 pciLocation: string | null;
         } | null;
+        barSettings: BarSettingsStatus;
         config: {
                 draft: ConfigDraft;
                 rawSize: number;
@@ -163,6 +188,16 @@ export type SaveReceipt = {
         variablePresent: boolean;
         rebootRequired: boolean;
         draft: ConfigDraft;
+};
+export type SaveBarSettingsRequest = {
+        draft: ConfigDraft;
+        expectedTopologyToken: string;
+        expectedConfigToken: string;
+};
+export type SaveBarSettingsReceipt = {
+        save: SaveReceipt;
+        topologyToken: string;
+        configToken: string;
 };
 
 export const DEFAULT_DRAFT: ConfigDraft = {

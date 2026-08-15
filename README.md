@@ -133,6 +133,21 @@ confirmation. A successful write is read back byte-for-byte and still requires a
 the DXE driver can apply it. Administrator elevation is requested only for the privileged UEFI
 variable boundary.
 
+Both the renderer action and the Rust command are single-flight, so repeated clicks cannot launch
+multiple concurrent UAC prompts. A cancelled or failed elevation request may be tried again.
+
+The `BAR Settings` workspace edits an existing NvStraps configuration after the backend observes
+either the current boot's DXE status or an expanded aperture on a canonical Turing GPU. The latter
+is direct evidence that the NvStraps technique is active because Turing has no native path to an
+expanded ReBAR aperture. A process without EFI-variable privilege may enter BAR Settings but must
+restart as administrator before the saved draft can be loaded or changed.
+
+An entirely expanded Turing inventory opens BAR Settings initially. A mixed inventory keeps
+Configure as the initial workspace while leaving BAR Settings available; each GPU row identifies
+its current aperture and whether an application-owned patch configuration can be generated. If
+neither current-boot DXE nor expanded-Turing evidence exists, BAR Settings remains locked and
+Configure stays initial.
+
 Newer boards normally use GPU-side Turing auto-configuration and system-default PCI sizing. Older
 boards may also need an explicit PCI target size, but this must follow the exact analyzed board
 profile rather than trial-and-error defaults.
@@ -175,6 +190,7 @@ legacy patch catalogs retain their upstream provenance and hashes.
 ## Licenses
 
 Repository-owned source code is distributed under the [MIT license](LICENSE). The bundled
-Pretendard Variable font remains under the SIL Open Font License 1.1; it is not relicensed under
-MIT. See [third-party notices](THIRD_PARTY_NOTICES.md) for its pinned provenance and hashes, or use
-the application's **Licenses** button to read its copyright notice and full OFL text offline.
+Pretendard Variable and Jetendard fonts remain under the SIL Open Font License 1.1; they are not
+relicensed under MIT. See [third-party notices](THIRD_PARTY_NOTICES.md) for their pinned provenance
+and hashes, or use the application's **Licenses** button to read the copyright notices and full OFL
+texts offline.

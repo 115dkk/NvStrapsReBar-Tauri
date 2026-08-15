@@ -9,6 +9,16 @@ pub enum BackendError {
     Windows { operation: &'static str, code: u32 },
     #[error("firmware variable {name} is unavailable: {reason}")]
     FirmwareUnavailable { name: &'static str, reason: String },
+    #[error(
+        "BAR settings are locked because neither current-boot DXE execution nor an expanded Turing aperture was observed"
+    )]
+    BarSettingsControlNotObserved,
+    #[error("GPU or bridge topology changed after BAR settings were loaded")]
+    StaleTopology,
+    #[error("saved NvStrapsReBar configuration changed after BAR settings were loaded")]
+    StaleConfiguration,
+    #[error("firmware readback did not match the requested NvStrapsReBar configuration")]
+    ReadbackMismatch,
     #[error("invalid NvStrapsReBar configuration: {0}")]
     InvalidConfiguration(String),
     #[error("GPU inventory failed: {0}")]
@@ -64,6 +74,12 @@ impl From<BackendError> for ApiError {
             BackendError::UnsupportedPlatform => ("unsupported_platform", false, None),
             BackendError::Windows { code, .. } => ("windows_api_error", true, Some(*code)),
             BackendError::FirmwareUnavailable { .. } => ("firmware_unavailable", true, None),
+            BackendError::BarSettingsControlNotObserved => {
+                ("bar_settings_control_not_observed", true, None)
+            }
+            BackendError::StaleTopology => ("stale_topology", true, None),
+            BackendError::StaleConfiguration => ("stale_configuration", true, None),
+            BackendError::ReadbackMismatch => ("readback_mismatch", true, None),
             BackendError::InvalidConfiguration(_) => ("invalid_configuration", true, None),
             BackendError::DeviceInventory(_) => ("device_inventory_failed", true, None),
             BackendError::MachineIdentity(_) => ("machine_identity_failed", true, None),
@@ -107,3 +123,28 @@ impl From<nvstraps_deploy::PlanError> for BackendError {
 
 pub type BackendResult<T> = Result<T, BackendError>;
 pub type CommandResult<T> = Result<T, ApiError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bar_settings_failures_keep_stable_typed_codes() {
+        assert_eq!(
+            ApiError::from(BackendError::BarSettingsControlNotObserved).code,
+            "bar_settings_control_not_observed"
+        );
+        assert_eq!(
+            ApiError::from(BackendError::StaleTopology).code,
+            "stale_topology"
+        );
+        assert_eq!(
+            ApiError::from(BackendError::StaleConfiguration).code,
+            "stale_configuration"
+        );
+        assert_eq!(
+            ApiError::from(BackendError::ReadbackMismatch).code,
+            "readback_mismatch"
+        );
+    }
+}

@@ -1,5 +1,11 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { previewMode } from "./bridge";
+import { BarSettingsWorkspace } from "./BarSettingsWorkspace";
+import {
+        initialApplicationSurface,
+        settingsLockMessageId,
+        type ApplicationSurface,
+} from "./bar-settings-routing";
 import { DeploymentWorkspace } from "./DeploymentWorkspace";
 import { translateMessage, useI18n } from "./i18n";
 import { ThirdPartyLicensesDialog } from "./ThirdPartyLicensesDialog";
@@ -30,9 +36,32 @@ export function App() {
                 load,
                 closeLicenses,
         } = workspace;
-        const [surface, setSurface] = useState<"configure" | "deploy">(
-                "configure",
-        );
+        const [surface, setSurface] =
+                useState<ApplicationSurface>("configure");
+        const userSelectedSurface = useRef(false);
+        const initialSurfaceResolved = useRef(false);
+        useEffect(() => {
+                if (
+                        initialSurfaceResolved.current ||
+                        userSelectedSurface.current ||
+                        !snap ||
+                        workspace.rebarInspection.status === "loading"
+                )
+                        return;
+                setSurface(
+                        initialApplicationSurface(
+                                snap,
+                                workspace.rebarInspection,
+                        ),
+                );
+                initialSurfaceResolved.current = true;
+        }, [snap, workspace.rebarInspection]);
+        const selectSurface = (next: ApplicationSurface) => {
+                userSelectedSurface.current = true;
+                initialSurfaceResolved.current = true;
+                setSurface(next);
+        };
+        const settingsLockId = snap ? settingsLockMessageId(snap) : null;
         if (busy && !snap)
                 return (
                         <main className="center">
@@ -76,11 +105,23 @@ export function App() {
                                 )}
                                 <ApplicationHeader
                                         surface={surface}
-                                        setSurface={setSurface}
+                                        setSurface={selectSurface}
                                 />
+                                {settingsLockId && (
+                                        <div
+                                                id="settings-lock-reason"
+                                                className="settings-lock-banner"
+                                                role="status"
+                                        >
+                                                <strong>{t("ui.settings")}</strong>
+                                                <span>{t(settingsLockId)}</span>
+                                        </div>
+                                )}
                                 <ResizableBarStatusStrip />
                                 {surface === "deploy" ? (
                                         <DeploymentWorkspace snapshot={snap} />
+                                ) : surface === "settings" ? (
+                                        <BarSettingsWorkspace />
                                 ) : (
                                         <div className="workspace">
                                                 <SystemStatusSidebar />
@@ -89,7 +130,7 @@ export function App() {
                                                         <AutomaticPolicyPanel />
                                                         <GpuRulesPanel />
                                                         <FirmwareBehaviorPanel />
-                                                        <ConfigurationReview />
+                                                        <ConfigurationReview savePath="configure" />
                                                 </main>
                                         </div>
                                 )}

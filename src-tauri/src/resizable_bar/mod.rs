@@ -1,10 +1,19 @@
 mod assessment;
 mod nvidia_smi;
 
+use nvstraps_core::registry;
 use nvstraps_deploy::{FirmwareFingerprint, Sha256Digest};
 use serde::Serialize;
 
 use crate::{devices::GpuDevice, error::BackendResult};
+
+pub(super) const LEGACY_BAR_APERTURE_BYTES: u64 = 256 * 1024 * 1024;
+
+pub(crate) fn windows_reports_expanded_turing_aperture(devices: &[GpuDevice]) -> bool {
+    devices.iter().any(|device| {
+        registry::is_turing(device.device_id) && device.current_bar_size > LEGACY_BAR_APERTURE_BYTES
+    })
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]

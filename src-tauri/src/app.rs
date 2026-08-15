@@ -1,5 +1,8 @@
 use std::{
-    sync::Mutex,
+    sync::{
+        Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -8,6 +11,10 @@ use serde::Serialize;
 use tauri::{AppHandle, State};
 
 use crate::{
+    bar_settings::{
+        BarSettingsStatus, SavedConfigurationObservation, StatusVariableObservation,
+        assess_driver_runtime,
+    },
     config::{
         ConfigDraft, NvConfig, config_from_draft, draft_from_config, effective_bar_size,
         setup_crc_hex, validate_draft,
@@ -26,6 +33,22 @@ use crate::{
 #[derive(Default)]
 pub struct AppState {
     inner: Mutex<BackendState>,
+    elevation_request: ElevationRequestGate,
+}
+
+#[derive(Default)]
+struct ElevationRequestGate(AtomicBool);
+
+impl ElevationRequestGate {
+    fn try_begin(&self) -> bool {
+        self.0
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+    }
+
+    fn reset(&self) {
+        self.0.store(false, Ordering::Release);
+    }
 }
 
 #[derive(Default)]
@@ -43,6 +66,7 @@ pub struct SystemSnapshot {
     pub platform: PlatformInfo,
     pub firmware: FirmwareInfo,
     pub driver_status: Option<DriverStatus>,
+    pub bar_settings: BarSettingsStatus,
     pub config: Option<ConfigView>,
     pub devices: Vec<GpuDevice>,
     pub machine_identity: Option<MachineIdentity>,
@@ -208,10 +232,7 @@ pub(crate) fn save_config_for_devices_inner(
     write_variable(CONFIG_VARIABLE_NAME, &encoded)?;
     let verified = read_variable(CONFIG_VARIABLE_NAME)?.unwrap_or_default();
     if verified != encoded {
-        return Err(BackendError::FirmwareUnavailable {
-            name: CONFIG_VARIABLE_NAME,
-            reason: "the value read after saving did not match the requested configuration".into(),
-        });
+        return Err(BackendError::ReadbackMismatch);
     }
     guard.devices = current_devices;
     guard.config = Some(config);
@@ -231,8 +252,14 @@ pub(crate) fn save_config_for_devices_inner(
 }
 
 #[tauri::command]
-pub fn request_elevation(app: AppHandle) -> CommandResult<()> {
-    relaunch_elevated().map_err(ApiError::from)?;
+pub fn request_elevation(app: AppHandle, state: State<'_, AppState>) -> CommandResult<()> {
+    if !state.elevation_request.try_begin() {
+        return Ok(());
+    }
+    if let Err(error) = relaunch_elevated() {
+        state.elevation_request.reset();
+        return Err(ApiError::from(error));
+    }
     app.exit(0);
     Ok(())
 }
@@ -249,9 +276,11 @@ fn refresh_snapshot(state: &AppState) -> BackendResult<SystemSnapshot> {
     let mut notices = Vec::new();
     let mut access_error = None;
     let mut config = None;
+    let mut config_bytes = None;
+    let mut config_invalid = false;
     let mut raw_size = 0;
     let mut config_variable_present = None;
-    let mut driver_status = None;
+    let mut status_variable = StatusVariableObservation::Unavailable;
 
     if !access.is_uefi {
         notices.push(Notice {
@@ -265,18 +294,25 @@ fn refresh_snapshot(state: &AppState) -> BackendResult<SystemSnapshot> {
                 config_variable_present = Some(value.is_some());
                 let bytes = value.unwrap_or_default();
                 raw_size = bytes.len();
-                config = Some(NvConfig::decode(&bytes)?);
+                match NvConfig::decode(&bytes) {
+                    Ok(decoded) => config = Some(decoded),
+                    Err(error) => {
+                        config_invalid = true;
+                        notices.push(Notice {
+                            kind: "error",
+                            message: format!(
+                                "Saved NvStrapsReBar configuration is invalid: {error}"
+                            ),
+                        });
+                    }
+                }
+                config_bytes = Some(bytes);
             }
             Err(error) => access_error = Some(ApiError::from(error)),
         }
         match read_variable(STATUS_VARIABLE_NAME) {
-            Ok(Some(bytes)) if bytes.len() == 8 => {
-                driver_status = Some(DriverStatus::from_raw(u64::from_le_bytes(
-                    bytes.try_into().expect("length checked"),
-                )));
-            }
-            Ok(Some(_)) => driver_status = Some(DriverStatus::from_raw(200)),
-            Ok(None) => driver_status = Some(DriverStatus::from_raw(10)),
+            Ok(Some(bytes)) => status_variable = StatusVariableObservation::Present(bytes),
+            Ok(None) => status_variable = StatusVariableObservation::Missing,
             Err(error) => {
                 notices.push(Notice {
                     kind: "warning",
@@ -328,9 +364,15 @@ fn refresh_snapshot(state: &AppState) -> BackendResult<SystemSnapshot> {
         access.privilege_enabled,
         access_error.is_some(),
     );
+    let saved_configuration = match (config.as_ref(), config_bytes.as_deref(), config_invalid) {
+        (Some(config), Some(raw), false) => SavedConfigurationObservation::Valid { config, raw },
+        (_, Some(raw), true) => SavedConfigurationObservation::Invalid { raw },
+        _ => SavedConfigurationObservation::Unreadable,
+    };
+    let runtime = assess_driver_runtime(&status_variable, saved_configuration, &devices);
     let hardware_support = determine_hardware_support(machine_identity.as_ref(), &devices);
     let snapshot = SystemSnapshot {
-        schema_version: 1,
+        schema_version: 2,
         platform: PlatformInfo {
             operating_system: std::env::consts::OS,
             architecture: std::env::consts::ARCH,
@@ -344,7 +386,8 @@ fn refresh_snapshot(state: &AppState) -> BackendResult<SystemSnapshot> {
             config_variable_present,
             access_error,
         },
-        driver_status,
+        driver_status: runtime.driver_status,
+        bar_settings: runtime.bar_settings,
         config: config_view,
         devices: devices.clone(),
         machine_identity,
@@ -369,7 +412,7 @@ fn firmware_is_accessible(is_uefi: bool, privilege_enabled: bool, has_access_err
 
 #[cfg(test)]
 mod tests {
-    use super::firmware_is_accessible;
+    use super::{ElevationRequestGate, firmware_is_accessible};
 
     #[test]
     fn firmware_access_requires_uefi_privilege_and_no_error() {
@@ -377,5 +420,14 @@ mod tests {
         assert!(!firmware_is_accessible(false, true, false));
         assert!(!firmware_is_accessible(true, false, false));
         assert!(!firmware_is_accessible(true, true, true));
+    }
+
+    #[test]
+    fn elevation_request_gate_is_single_flight_and_resets_after_launch_failure() {
+        let gate = ElevationRequestGate::default();
+        assert!(gate.try_begin());
+        assert!(!gate.try_begin());
+        gate.reset();
+        assert!(gate.try_begin());
     }
 }

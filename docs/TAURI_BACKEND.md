@@ -12,11 +12,12 @@ native boundary.
 
 | Command | Arguments | Result and owner |
 | --- | --- | --- |
-| `get_system_snapshot` | none | Cached platform, firmware access, driver status, saved config, GPU inventory, machine identity, and notices |
+| `get_system_snapshot` | none | Cached platform, firmware access, current-boot DXE observation, BAR Settings tokens, saved config, GPU inventory, machine identity, and notices |
 | `refresh_system` | none | Fresh Windows/PCI/EFI enumeration and snapshot |
 | `validate_config` | `{ draft }` | Errors, warnings, affected GPUs, encoded size, change state, and reboot requirement without writing |
 | `save_config` | `{ draft }` | A save receipt only after the EFI variable is written and read back byte-for-byte |
-| `request_elevation` | none | Starts an elevated copy with Windows `runas`, then exits the current copy |
+| `save_bar_settings` | `{ request: { draft, expectedTopologyToken, expectedConfigToken } }` | Settings-only save after control-evidence, topology, and saved-configuration revalidation, followed by exact readback |
+| `request_elevation` | none | Starts one elevated copy with Windows `runas`, then exits the current copy; concurrent duplicate requests are idempotent |
 | `get_machine_identity` | none | Exact board, BIOS, GPU, bridge, and BAR0 identity from Windows and live PCI inventory |
 
 `ConfigDraft` follows this wire shape:
@@ -54,6 +55,62 @@ The backend rejects stale topology, duplicate selectors, unsupported sizes, more
 rules, unusable or 64-bit BAR0 ranges, and unaligned BAR0 ranges. Saving requires UEFI mode and
 `SeSystemEnvironmentPrivilege`. Readback proves the variable bytes, not that firmware has applied
 them; a reboot and driver-status check remain separate steps.
+
+Elevation is single-flight at both renderer and native boundaries. The Rust application state
+allows only one `runas` launch per process; a duplicate command returns without launching another
+copy. If the launch fails or UAC is cancelled, the gate resets so a later explicit retry remains
+possible.
+
+### BAR Settings state
+
+`SystemSnapshot.barSettings` keeps three facts separate:
+
+~~~ts
+type BarSettingsStatus = {
+  currentBootDxeState:
+    | "observedThisBoot"
+    | "notObservedThisBoot"
+    | "indeterminate";
+  currentBootDxeReasonCode:
+    | "currentBootStatusObserved"
+    | "statusVariableMissing"
+    | "statusVariableMalformed"
+    | "statusVariableUnavailable"
+    | "statusValueUnrecognized";
+  controlEvidence:
+    | "currentBootDxe"
+    | "expandedTuringAperture"
+    | "notObserved"
+    | "indeterminate";
+  settingsAvailable: boolean;
+  savedConfigurationState: "enabled" | "disabled" | "invalid" | "unreadable";
+  topologyToken: string;
+  configToken: string | null;
+};
+~~~
+
+The status variable is volatile. A recognized status, including a driver-reported error, proves
+that the DXE driver executed during this boot. It does not prove permanent installation. An
+expanded Windows aperture on a canonical Turing GPU is a second control-evidence path because
+Turing has no native expanded-ReBAR path. It keeps older upstream installations usable when the
+status variable is absent or unreadable. The non-volatile configuration alone never unlocks
+Settings.
+
+`settingsAvailable` describes whether BAR Settings applies to the machine, not whether the
+current process can read or write EFI variables. Without elevation it can therefore be `true`
+while `savedConfigurationState` is `unreadable` and `configToken` is `null`. The renderer must
+request elevation instead of constructing an editable default draft in that state.
+
+The topology token covers every NVIDIA GPU identity, PCI location, parent bridge, and BAR0 range
+in canonical order. The configuration token covers the exact current EFI-variable bytes. A
+`save_bar_settings` request re-reads both and returns `stale_topology` or
+`stale_configuration` before writing when either token changed. The command also rechecks
+current-boot DXE or expanded-Turing evidence, validates and rebuilds the wire model from the fresh
+inventory, writes the variable, and requires exact readback.
+
+Upstream E/D behavior changes only the global automatic-GPU policy. It is not a universal ReBAR
+boolean: target PCI sizing and per-GPU rules are independent `ConfigDraft` fields. A completely
+default draft encodes as deletion of the saved operational configuration.
 
 ## Deployment commands
 
@@ -185,6 +242,10 @@ Stable error codes are:
 - `unsupported_platform`
 - `windows_api_error`
 - `firmware_unavailable`
+- `bar_settings_control_not_observed`
+- `stale_topology`
+- `stale_configuration`
+- `readback_mismatch`
 - `invalid_configuration`
 - `device_inventory_failed`
 - `machine_identity_failed`

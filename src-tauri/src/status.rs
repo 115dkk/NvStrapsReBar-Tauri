@@ -44,6 +44,42 @@ impl DriverStatus {
             20 | 30 | 40 | 50 | 60 | 70 | 80 | 90 | 100 | 110 | 120 | 130 | 135 | 140 | 150
         )
     }
+
+    /// Proves that the DXE driver executed during the current boot, even when it reported an
+    /// error. The status variable is volatile, so any recognized value other than the sentinel
+    /// `NotLoaded` value is current-boot evidence. Deployment verification deliberately remains
+    /// stricter and continues to use `proves_driver_loaded`.
+    pub fn proves_current_boot_execution(&self) -> bool {
+        matches!(
+            self.code,
+            20 | 30
+                | 40
+                | 50
+                | 60
+                | 70
+                | 80
+                | 90
+                | 100
+                | 110
+                | 120
+                | 130
+                | 135
+                | 140
+                | 150
+                | 159
+                | 160
+                | 161
+                | 162
+                | 163
+                | 164
+                | 165
+                | 166
+                | 170
+                | 180
+                | 190
+                | 200
+        )
+    }
 }
 
 fn status_description(code: u32) -> (&'static str, &'static str, &'static str) {
@@ -127,5 +163,14 @@ mod tests {
         assert!(!DriverStatus::from_raw(10).proves_driver_loaded());
         assert!(!DriverStatus::from_raw(159).proves_driver_loaded());
         assert!(!DriverStatus::from_raw(42).proves_driver_loaded());
+    }
+
+    #[test]
+    fn recognized_error_statuses_still_prove_current_boot_execution() {
+        assert!(DriverStatus::from_raw(40).proves_current_boot_execution());
+        assert!(DriverStatus::from_raw(159).proves_current_boot_execution());
+        assert!(DriverStatus::from_raw(200).proves_current_boot_execution());
+        assert!(!DriverStatus::from_raw(10).proves_current_boot_execution());
+        assert!(!DriverStatus::from_raw(42).proves_current_boot_execution());
     }
 }

@@ -140,6 +140,22 @@ textarea:focus-visible {
         border-color: #555f68;
         background: #2a3035;
 }
+.settings-lock-banner {
+        min-height: 34px;
+        padding: 8px 28px;
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        border-bottom: 1px solid var(--line);
+        background: #201d18;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.45;
+}
+.settings-lock-banner strong {
+        flex: 0 0 auto;
+        color: var(--warn);
+}
 button:disabled {
         opacity: 0.42;
         cursor: not-allowed;
@@ -1142,6 +1158,33 @@ dd {
         color: var(--muted);
         font-size: 14px;
 }
+.settings-summary {
+        flex: 0 1 360px;
+        min-width: 280px;
+        margin: 0;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        border: 1px solid var(--line);
+        background: #171d20;
+}
+.settings-summary > div {
+        min-width: 0;
+        padding: 13px 15px;
+}
+.settings-summary > div + div {
+        border-left: 1px solid var(--line);
+}
+.settings-summary dt {
+        color: var(--muted);
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+}
+.settings-summary dd {
+        margin: 5px 0 0;
+        color: var(--ink);
+        font-size: 13px;
+}
 .rebar-verdict {
         flex: 0 1 360px;
         min-width: 300px;
@@ -1743,6 +1786,9 @@ html:lang(ko) .language-select select {
         font-weight: var(--ko-weight-button);
 }
 @media (max-width: 900px) {
+        .settings-lock-banner {
+                padding-inline: 18px;
+        }
         .language-select span {
                 position: absolute;
                 width: 1px;

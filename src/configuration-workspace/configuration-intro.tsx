@@ -1,7 +1,8 @@
-import { translateMessage, useI18n } from "../i18n";
+import { useI18n } from "../i18n";
 import type { StaticMessageId } from "../i18n-catalog";
 import type { ResizableBarStatusPresentation } from "../resizable-bar-status";
 import { useConfigurationWorkspaceController } from "./context";
+import { WorkspaceNotices } from "./workspace-notices";
 
 const verdictIds: Record<
         ResizableBarStatusPresentation["tone"],
@@ -30,8 +31,8 @@ const verdictIds: Record<
 };
 
 export const ConfigurationIntro = () => {
-        const { locale, t, gpuCountLabel } = useI18n();
-        const { snap, error, setError, systemNotices, rebarStatus } =
+        const { t, gpuCountLabel } = useI18n();
+        const { snap, rebarStatus } =
                 useConfigurationWorkspaceController();
         if (!snap) return null;
         const verdict = verdictIds[rebarStatus.tone];
@@ -71,35 +72,7 @@ export const ConfigurationIntro = () => {
                                         </span>
                                 </div>
                         </section>
-                        {error && (
-                                <div className="notice error" role="alert">
-                                        <strong>
-                                                {t("ui.operationFailed")}
-                                        </strong>
-                                        <span>
-                                                {translateMessage(
-                                                        locale,
-                                                        error,
-                                                )}
-                                        </span>
-                                        <button
-                                                onClick={() => setError(null)}
-                                                aria-label={t(
-                                                        "ui.dismissError",
-                                                )}
-                                        >
-                                                ×
-                                        </button>
-                                </div>
-                        )}
-                        {systemNotices.map((notice) => (
-                                <div
-                                        className={`notice ${notice.tone}`}
-                                        key={notice.id}
-                                >
-                                        {t(notice.id)}
-                                </div>
-                        ))}
+                        <WorkspaceNotices />
                 </>
         );
 };

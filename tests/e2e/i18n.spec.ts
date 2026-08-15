@@ -8,6 +8,7 @@ test("language switch is accessible, immediate, persisted, and preserves the dra
         await page.goto("/");
         const selector = page.getByTestId("language-select");
         await expect(selector).toHaveAccessibleName("Language");
+        await page.getByRole("button", { name: "Configure" }).click();
         await page.getByLabel("Built-in list + fallback").check();
         await selector.focus();
         await page.keyboard.press("ArrowDown");
@@ -23,6 +24,7 @@ test("language switch is accessible, immediate, persisted, and preserves the dra
         expect(await page.evaluate(() => window.__NVSTRAPS_I18N_MISSING__ ?? [])).toEqual([]);
         await page.reload();
         await expect(page.locator("html")).toHaveAttribute("lang", "ko");
+        await page.getByRole("button", { name: "구성" }).click();
         await expect(page.getByRole("heading", { name: "펌웨어 구성" })).toBeVisible();
 });
 
@@ -30,6 +32,7 @@ test("Korean consequential configuration modal remains truthful at the minimum w
         await page.setViewportSize({ width: 900, height: 760 });
         await page.goto("/");
         await page.getByTestId("language-select").selectOption("ko");
+        await page.getByRole("button", { name: "구성" }).click();
         await page.getByLabel("내장 목록 + 대체값").check();
         await page.getByRole("button", { name: "검토 후 저장" }).click();
         const dialog = page.getByRole("dialog");
@@ -65,6 +68,7 @@ test("English is the fallback and remains selectable", async ({ page }) => {
         await expect(page.locator("html")).toHaveAttribute("lang", "en");
         await page.getByTestId("language-select").selectOption("ko");
         await page.getByTestId("language-select").selectOption("en");
+        await page.getByRole("button", { name: "Configure" }).click();
         await expect(page.getByRole("heading", { name: "Firmware configuration" })).toBeVisible();
 });
 

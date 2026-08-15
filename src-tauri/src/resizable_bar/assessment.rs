@@ -5,9 +5,9 @@ use nvstraps_core::registry::{
 use nvstraps_deploy::Sha256Digest;
 
 use super::{
-    NvidiaBar1Observation, NvidiaSmiEvidence, PatchConfigurationAssessment,
-    PatchConfigurationReasonCode, PatchConfigurationState, ResizableBarApertureState,
-    ResizableBarGpuInspection, ResizableBarInspection,
+    LEGACY_BAR_APERTURE_BYTES, NvidiaBar1Observation, NvidiaSmiEvidence,
+    PatchConfigurationAssessment, PatchConfigurationReasonCode, PatchConfigurationState,
+    ResizableBarApertureState, ResizableBarGpuInspection, ResizableBarInspection,
     nvidia_smi::{NvidiaSmiCapture, decode_xml, parse_memory_bytes, parse_pci_bus_id},
 };
 use crate::{
@@ -230,7 +230,6 @@ fn classify_aperture(
     device: &GpuDevice,
     observation: Option<&NvidiaBar1Observation>,
 ) -> ResizableBarGpuInspection {
-    const LEGACY_BAR1_BYTES: u64 = 256 * 1024 * 1024;
     let location = format!(
         "00000000:{:02X}:{:02X}.{}",
         device.bus, device.device, device.function
@@ -284,12 +283,12 @@ fn classify_aperture(
             "BAR1 does not match the independent Windows PCI resource observation".into(),
         );
     }
-    let (state, reason) = if total > LEGACY_BAR1_BYTES {
+    let (state, reason) = if total > LEGACY_BAR_APERTURE_BYTES {
         (
             ResizableBarApertureState::Expanded,
             "BAR1 is larger than the legacy 256 MiB window and matches Windows".into(),
         )
-    } else if total == LEGACY_BAR1_BYTES {
+    } else if total == LEGACY_BAR_APERTURE_BYTES {
         (
             ResizableBarApertureState::Legacy256MiB,
             "BAR1 is the legacy 256 MiB window".into(),

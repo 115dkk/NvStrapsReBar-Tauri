@@ -1,5 +1,7 @@
-import type { Dispatch, SetStateAction } from "react";
-import { bridge } from "../bridge";
+import {
+        settingsLockMessageId,
+        type ApplicationSurface,
+} from "../bar-settings-routing";
 import { useI18n } from "../i18n";
 import { driverStatusMessageId } from "../system-messages";
 import { useConfigurationWorkspaceController } from "./context";
@@ -16,12 +18,13 @@ export const ApplicationHeader = ({
         surface,
         setSurface,
 }: {
-        surface: "configure" | "deploy";
-        setSurface: Dispatch<SetStateAction<"configure" | "deploy">>;
+        surface: ApplicationSurface;
+        setSurface: (surface: ApplicationSurface) => void;
 }) => {
         const { locale, setLocale, t } = useI18n();
-        const { licenseButton, setShowLicenses, dirty, load, busy } =
+        const { licenseButton, setShowLicenses, dirty, load, busy, snap } =
                 useConfigurationWorkspaceController();
+        const lockMessageId = snap ? settingsLockMessageId(snap) : null;
         return (
                 <header>
                         <div className="product-heading">
@@ -34,7 +37,11 @@ export const ApplicationHeader = ({
                                                         ? t(
                                                                   "ui.firmwareConfiguration",
                                                           )
-                                                        : t(
+                                                        : surface === "settings"
+                                                          ? t(
+                                                                    "ui.barSettings",
+                                                            )
+                                                          : t(
                                                                   "ui.deploymentWorkspace",
                                                           )}
                                         </h1>
@@ -93,6 +100,24 @@ export const ApplicationHeader = ({
                                         </button>
                                         <button
                                                 aria-current={
+                                                        surface === "settings"
+                                                                ? "page"
+                                                                : undefined
+                                                }
+                                                aria-describedby={
+                                                        lockMessageId
+                                                                ? "settings-lock-reason"
+                                                                : undefined
+                                                }
+                                                disabled={Boolean(lockMessageId)}
+                                                onClick={() =>
+                                                        setSurface("settings")
+                                                }
+                                        >
+                                                {t("ui.settings")}
+                                        </button>
+                                        <button
+                                                aria-current={
                                                         surface === "deploy"
                                                                 ? "page"
                                                                 : undefined
@@ -104,7 +129,8 @@ export const ApplicationHeader = ({
                                                 {t("ui.deploy")}
                                         </button>
                                 </nav>
-                                {surface === "configure" && (
+                                {(surface === "configure" ||
+                                        surface === "settings") && (
                                         <span
                                                 className={
                                                         dirty
@@ -282,7 +308,7 @@ export const ResizableBarStatusStrip = () => {
 
 export const SystemStatusSidebar = () => {
         const { t } = useI18n();
-        const { snap } = useConfigurationWorkspaceController();
+        const { snap, busy, elevate } = useConfigurationWorkspaceController();
         if (!snap) return null;
         return (
                 <aside aria-label={t("ui.systemStatus")}>
@@ -331,7 +357,8 @@ export const SystemStatusSidebar = () => {
                         {!snap.platform.elevated && (
                                 <button
                                         className="elevate"
-                                        onClick={() => void bridge.elevate()}
+                                        disabled={busy}
+                                        onClick={() => void elevate()}
                                 >
                                         {t("ui.restartAsAdministrator")}
                                 </button>

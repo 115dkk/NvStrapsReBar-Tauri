@@ -3,8 +3,9 @@ import { useConfigurationWorkspaceController } from "./context";
 
 export const SaveConfirmationDialog = () => {
         const { t } = useI18n();
-        const { showConfirm, dialog, setShowConfirm, save } =
+        const { showConfirm, savePath, report, dialog, setShowConfirm, save } =
                 useConfigurationWorkspaceController();
+        const removesConfiguration = report?.variableWillExist === false;
         return (
                 <>
                         {showConfirm && (
@@ -25,14 +26,32 @@ export const SaveConfirmationDialog = () => {
                                                         )}
                                                 </span>
                                                 <h2 id="confirm-title">
-                                                        {t(
-                                                                "ui.writeThisDraftToUefiFirmware",
-                                                        )}
+                                                        {removesConfiguration
+                                                                ? t(
+                                                                          "ui.removeSavedOperationalConfiguration",
+                                                                  )
+                                                                : savePath ===
+                                                                    "settings"
+                                                                  ? t(
+                                                                            "ui.saveTheseBarSettingsToUefi",
+                                                                    )
+                                                                  : t(
+                                                                            "ui.writeThisDraftToUefiFirmware",
+                                                                    )}
                                                 </h2>
                                                 <p>
-                                                        {t(
-                                                                "ui.theApplicationWillWriteAndReadBackTheNvstrapsrebarConfigurationVariableARestartIsRequiredBeforeTheDriverCanApplyIt",
-                                                        )}
+                                                        {removesConfiguration
+                                                                ? t(
+                                                                          "ui.removingTheSavedConfigurationClearsAllOperationalRules",
+                                                                  )
+                                                                : savePath ===
+                                                                    "settings"
+                                                                  ? t(
+                                                                            "ui.settingsSaveUsesTheCurrentTopologyAndConfigurationTokensThenReadsTheValueBack",
+                                                                    )
+                                                                  : t(
+                                                                            "ui.theApplicationWillWriteAndReadBackTheNvstrapsrebarConfigurationVariableARestartIsRequiredBeforeTheDriverCanApplyIt",
+                                                                    )}
                                                 </p>
                                                 <div className="warning-box">
                                                         <strong>
@@ -64,9 +83,18 @@ export const SaveConfirmationDialog = () => {
                                                                         void save()
                                                                 }
                                                         >
-                                                                {t(
-                                                                        "ui.writeConfiguration",
-                                                                )}
+                                                                {removesConfiguration
+                                                                        ? t(
+                                                                                  "ui.removeSavedConfiguration",
+                                                                          )
+                                                                        : savePath ===
+                                                                            "settings"
+                                                                          ? t(
+                                                                                    "ui.saveBarSettings",
+                                                                            )
+                                                                          : t(
+                                                                                    "ui.writeConfiguration",
+                                                                            )}
                                                         </button>
                                                 </div>
                                         </div>
