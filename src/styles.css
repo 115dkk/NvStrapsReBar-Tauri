@@ -441,6 +441,14 @@ aside hr {
 .journey-head {
         margin-bottom: 22px;
 }
+.journey-head > div {
+        flex: 0 1 auto;
+        min-width: 0;
+}
+.section-head.journey-head p {
+        flex: 1 1 420px;
+        max-width: none;
+}
 .detected-route {
         display: grid;
         grid-template-columns: 190px 1fr;
@@ -912,35 +920,46 @@ aside hr {
 .export-control {
         margin-top: 16px;
 }
-.manual-gates,
 .verification-grid {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 10px;
         margin-bottom: 18px;
 }
-.manual-gates > div,
+.manual-handoff-task,
 .tool-card {
         padding: 16px;
         border: 1px solid #3d444a;
         background: #1d2226;
 }
-.manual-gates span {
+.manual-handoff-task {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(280px, 0.65fr);
+        gap: 20px;
+}
+.manual-handoff-task.single {
+        grid-template-columns: minmax(0, 1fr);
+}
+.manual-handoff-task span {
         display: block;
         margin-bottom: 8px;
         color: var(--warn);
         font: 700 10px var(--font-technical);
         letter-spacing: 0.11em;
 }
-.manual-gates strong {
+.manual-handoff-task strong {
         font-size: 13px;
 }
-.manual-gates p,
+.manual-handoff-task p,
 .tool-card p {
         margin: 7px 0 0;
         color: var(--muted);
         font-size: 12px;
         line-height: 1.5;
+}
+.manual-handoff-prerequisite {
+        padding-left: 20px;
+        border-left: 1px solid var(--line);
 }
 .verification-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -998,8 +1017,14 @@ aside hr {
                 gap: 5px;
         }
         .plan-list,
-        .manual-gates {
+        .manual-handoff-task {
                 grid-template-columns: 1fr;
+        }
+        .manual-handoff-prerequisite {
+                padding-top: 16px;
+                padding-left: 0;
+                border-top: 1px solid var(--line);
+                border-left: 0;
         }
 }
 
