@@ -137,8 +137,6 @@ export const messages = {
         "ui.currentHardwarePreparedFiles": { en: "CURRENT HARDWARE / PREPARED FILES", ko: "현재 하드웨어 / 준비된 파일" },
         "ui.firmwarePreparationAndInstallation": { en: "Firmware preparation and installation", ko: "펌웨어 준비 및 적용" },
         "ui.prepareAndInspectFirmwareFilesHereFlashThePreparedImageWithTheVendorToolThenReturnToRecordTheResult": { en: "Prepare and inspect firmware files here. Flash the prepared image with the vendor tool, then return to record the result.", ko: "여기에서 펌웨어 파일을 준비하고 검사합니다. 준비된 이미지는 제조사 도구로 플래시한 뒤 돌아와 결과를 기록하세요." },
-        "ui.flashWithVendorTool": { en: "FLASH WITH VENDOR TOOL", ko: "제조사 도구에서 플래시" },
-        "ui.useThePreparedImage": { en: "Use the prepared image", ko: "준비된 이미지 사용" },
         "ui.sourceImageAndRecoveryFiles": { en: "Source image and recovery files", ko: "원본 이미지 및 복구 파일" },
         "ui.selectTheVendorImageInspectItsSizeAndSha256AndRecordTheInstallationAndRecoveryInstructions": { en: "Select the vendor image, inspect its size and SHA-256, and record the installation and recovery instructions.", ko: "제조사 이미지를 선택해 크기와 SHA-256을 확인하고 설치 및 복구 지침을 기록합니다." },
         "ui.boardDetected": { en: "board detected", ko: "보드 감지됨" },

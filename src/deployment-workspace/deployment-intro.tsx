@@ -24,14 +24,6 @@ export const DeploymentIntro = () => {
                                                 )}
                                         </p>
                                 </div>
-                                <div className="truth-badge">
-                                        <strong>
-                                                {t("ui.flashWithVendorTool")}
-                                        </strong>
-                                        <span>
-                                                {t("ui.useThePreparedImage")}
-                                        </span>
-                                </div>
                         </section>
 
                         {activity && (

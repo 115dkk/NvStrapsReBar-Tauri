@@ -411,27 +411,6 @@ aside hr {
         color: var(--muted);
         line-height: 1.55;
 }
-.truth-badge {
-        flex: 0 0 auto;
-        min-width: 166px;
-        padding: 13px 15px;
-        border: 1px solid #714531;
-        background: #2a1d17;
-}
-.truth-badge strong,
-.truth-badge span {
-        display: block;
-}
-.truth-badge strong {
-        color: #f0a176;
-        font: 700 11px var(--font-technical);
-        letter-spacing: 0.12em;
-}
-.truth-badge span {
-        margin-top: 5px;
-        color: var(--muted);
-        font-size: 12px;
-}
 .journey-panel {
         margin-top: 16px;
         padding: 25px;
@@ -1005,9 +984,6 @@ aside hr {
         }
         .deployment-intro {
                 align-items: stretch;
-        }
-        .truth-badge {
-                min-width: 150px;
         }
         .journey-panel {
                 padding: 20px;
