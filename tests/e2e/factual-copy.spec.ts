@@ -39,12 +39,12 @@ test("English copy names hardware, selected files, and the next vendor action", 
 }) => {
         await page.setViewportSize({ width: 1180, height: 760 });
         await page.goto("/");
-        await page.getByRole("button", { name: "Deploy" }).click();
+        await page.getByRole("button", { name: "Install firmware" }).click();
         await page.getByRole("button", { name: "Choose file" }).click();
 
         await expect(
                 page.getByRole("heading", {
-                        name: "Firmware preparation and installation",
+                        name: "Put the NvStraps driver into the motherboard BIOS",
                 }),
         ).toBeVisible();
         await expect(
@@ -61,10 +61,9 @@ test("English copy names hardware, selected files, and the next vendor action", 
         await page.screenshot({ path: `${evidence}/english-deployment-1180x760.png` });
 
         await page.setViewportSize({ width: 900, height: 760 });
-        await page.getByRole("button", { name: "Configure" }).click();
+        await page.getByRole("button", { name: "BAR Settings" }).click();
         await expect(page.getByRole("heading", { name: "Firmware behavior" })).toBeVisible();
-        await expect(page.getByText("Hardware changes")).toBeVisible();
-        await expect(page.getByText(/A rule is a per-GPU exception that overrides the automatic policy/)).toBeVisible();
+        await expect(page.getByText(/A rule is a per-GPU exception that overrides the expansion policy/)).toBeVisible();
         await expectCopyAbsent(page, forbiddenEnglish);
         await expectNoHorizontalOverflow(page);
         await page.screenshot({ path: `${evidence}/english-configure-900x760.png` });
@@ -76,11 +75,11 @@ test("Korean copy states the same facts and actions without accuracy claims", as
         await page.setViewportSize({ width: 1180, height: 760 });
         await page.goto("/");
         await page.getByTestId("language-select").selectOption("ko");
-        await page.getByRole("button", { name: "배포" }).click();
+        await page.getByRole("button", { name: "펌웨어 설치" }).click();
         await page.getByRole("button", { name: "파일 선택" }).click();
 
         await expect(
-                page.getByRole("heading", { name: "펌웨어 준비 및 적용" }),
+                page.getByRole("heading", { name: "메인보드 BIOS에 NvStraps 드라이버 넣기" }),
         ).toBeVisible();
         await expect(
                 page
@@ -96,10 +95,9 @@ test("Korean copy states the same facts and actions without accuracy claims", as
         await page.screenshot({ path: `${evidence}/korean-deployment-1180x760.png` });
 
         await page.setViewportSize({ width: 900, height: 760 });
-        await page.getByRole("button", { name: "구성" }).click();
+        await page.getByRole("button", { name: "BAR 설정" }).click();
         await expect(page.getByRole("heading", { name: "펌웨어 동작" })).toBeVisible();
-        await expect(page.getByText("하드웨어 변경")).toBeVisible();
-        await expect(page.getByText(/규칙은 특정 GPU에만 적용되는 예외로, 자동 정책보다 우선합니다/)).toBeVisible();
+        await expect(page.getByText(/규칙은 특정 GPU에만 적용되는 예외로, 위의 확장 정책보다 우선합니다/)).toBeVisible();
         await expectCopyAbsent(page, forbiddenKorean);
         await expectNoHorizontalOverflow(page);
         expect(await page.evaluate(() => window.__NVSTRAPS_I18N_MISSING__ ?? [])).toEqual([]);

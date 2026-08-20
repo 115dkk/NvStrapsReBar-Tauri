@@ -276,7 +276,7 @@ async function auditVisibleTechnicalText(
 
 async function reachRecommendedConfiguration(page: Page) {
         await page.getByTestId("language-select").selectOption("en");
-        await page.getByRole("button", { name: "Deploy" }).click();
+        await page.getByRole("button", { name: "Install firmware" }).click();
         await page.getByRole("button", { name: "Choose file" }).click();
         await page
                 .getByText(
@@ -298,9 +298,6 @@ async function reachRecommendedConfiguration(page: Page) {
                         })
                         .click();
                 const dialog = page.getByRole("dialog");
-                await dialog
-                        .getByLabel("I completed this step and reviewed the result.")
-                        .check();
                 await dialog
                         .getByRole("button", { name: "Record completed step" })
                         .click();

@@ -1,26 +1,16 @@
-import type { ResizableBarInspectionLoadState } from "./resizable-bar-status";
-import type { StaticMessageId } from "./i18n-catalog";
 import type { SystemSnapshot } from "./types";
 
-export type ApplicationSurface = "configure" | "settings" | "deploy";
+export type ApplicationSurface = "bar" | "deploy";
 
+/** The DXE driver left evidence in this boot, so step 1 (install) is done. */
+export const firmwareInstalled = (snapshot: SystemSnapshot): boolean =>
+        snapshot.barSettings.controlEvidence === "currentBootDxe" ||
+        snapshot.barSettings.controlEvidence === "expandedTuringAperture";
+
+/**
+ * Open the step the user most likely needs next: BAR settings once the
+ * driver is present, the firmware install journey before that.
+ */
 export const initialApplicationSurface = (
         snapshot: SystemSnapshot,
-        inspection: ResizableBarInspectionLoadState,
-): ApplicationSurface =>
-        snapshot.barSettings.settingsAvailable &&
-        inspection.status === "ready" &&
-        inspection.inspection.state === "expanded"
-                ? "settings"
-                : "configure";
-
-export const settingsLockMessageId = (
-        snapshot: SystemSnapshot,
-): StaticMessageId | null => {
-        if (snapshot.barSettings.settingsAvailable) return null;
-        if (snapshot.barSettings.controlEvidence === "notObserved")
-                return "ui.settingsLockedControlNotObserved";
-        if (snapshot.barSettings.controlEvidence === "indeterminate")
-                return "ui.settingsLockedDriverStateIndeterminate";
-        return "ui.settingsLockedCurrentConfigurationUnavailable";
-};
+): ApplicationSurface => (firmwareInstalled(snapshot) ? "bar" : "deploy");

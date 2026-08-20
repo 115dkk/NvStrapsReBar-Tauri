@@ -11,7 +11,7 @@ async function reachRecommendedConfiguration(
         expectRecommendation = true,
 ) {
         await page.goto("/");
-        await page.getByRole("button", { name: "Deploy" }).click();
+        await page.getByRole("button", { name: "Install firmware" }).click();
         await page.getByRole("button", { name: "Choose file" }).click();
         if (firmwarePath) {
                 await page
@@ -42,11 +42,6 @@ async function reachRecommendedConfiguration(
                         .click();
                 const dialog = page.getByRole("dialog");
                 await dialog
-                        .getByLabel(
-                                "I completed this step and reviewed the result.",
-                        )
-                        .check();
-                await dialog
                         .getByRole("button", { name: "Record completed step" })
                         .click();
         }
@@ -67,11 +62,11 @@ test("preview discloses simulation and completes guarded save journey", async ({
 }) => {
         await page.setViewportSize({ width: 1180, height: 760 });
         await page.goto("/");
-        await page.getByRole("button", { name: "Configure" }).click();
+        await page.getByRole("button", { name: "BAR Settings" }).click();
         await expect(page).toHaveTitle("NvStrapsReBar");
         await expect(page.getByText("PREVIEW DATA")).toBeVisible();
         await expect(
-                page.getByRole("heading", { name: "Firmware configuration" }),
+                page.getByRole("heading", { name: "BAR Settings", exact: true }),
         ).toBeVisible();
         await expect(
                 page.getByRole("heading", {
@@ -98,15 +93,15 @@ test("preview discloses simulation and completes guarded save journey", async ({
         ).toBeVisible();
         await page.getByRole("button", { name: "Review & save" }).click();
         await expect(page.getByRole("dialog")).toContainText(
-                "Write this draft to UEFI firmware?",
+                "Save these BAR Settings to UEFI?",
         );
         await page.screenshot({
                 path: `${evidence}/production-1180-confirmation.png`,
                 fullPage: true,
         });
-        await page.getByRole("button", { name: "Write configuration" }).click();
+        await page.getByRole("button", { name: "Save BAR Settings" }).click();
         await expect(
-                page.getByText("Configuration written and read back", { exact: true }),
+                page.getByText("BAR Settings saved and read back", { exact: true }),
         ).toBeVisible();
         await expect(page.getByText("IN SYNC")).toBeVisible();
 });
@@ -156,9 +151,9 @@ test("durable deployment completes in order and distinguishes requests from rece
 }) => {
         await page.setViewportSize({ width: 1180, height: 760 });
         await page.goto("/");
-        await page.getByRole("button", { name: "Deploy" }).click();
+        await page.getByRole("button", { name: "Install firmware" }).click();
         await expect(
-                page.getByRole("heading", { name: "Deployment workspace" }),
+                page.getByRole("heading", { name: "Install firmware" }),
         ).toBeVisible();
         await expect(page.getByText("FLASH WITH VENDOR TOOL")).toHaveCount(0);
         await expect(
@@ -216,8 +211,7 @@ test("durable deployment completes in order and distinguishes requests from rece
                 dialog.getByRole("button", {
                         name: "Restart to firmware UI",
                 }),
-        ).toBeDisabled();
-        await dialog.getByLabel("I saved and closed my work.").check();
+        ).toBeEnabled();
         await page.screenshot({
                 path: `${evidence}/workflow-1180-firmware-restart.png`,
                 fullPage: true,
@@ -232,12 +226,10 @@ test("durable deployment completes in order and distinguishes requests from rece
         await expect(manual).not.toContainText("token is bound");
         await expect(manual).not.toContainText("flashFirmware");
         await expect(manual).not.toContainText("REVISION");
-        await manual.getByLabel("I completed this step and reviewed the result.").check();
         await manual.getByRole("button", { name: "Record completed step" }).click();
         await expect(page.getByRole("heading", { name: "Confirm firmware setup values" })).toBeVisible();
 
         await page.getByRole("button", { name: "Review & confirm completed step" }).click();
-        await page.getByRole("dialog").getByLabel("I completed this step and reviewed the result.").check();
         await page.getByRole("dialog").getByRole("button", { name: "Record completed step" }).click();
         await expect(page.getByRole("heading", { name: "Boot Windows after the firmware handoff" })).toBeVisible();
 
@@ -271,9 +263,8 @@ test("durable deployment completes in order and distinguishes requests from rece
 
         await page.getByRole("button", { name: "Review restart after configuration" }).click();
         const configurationRestart = page.getByRole("dialog");
-        await expect(configurationRestart).toContainText("Applications receive the standard shutdown request.");
+        await expect(configurationRestart).toContainText("Windows restarts immediately.");
         await expect(configurationRestart).toContainText("Return after Windows boots so the app can compare the new boot time.");
-        await configurationRestart.getByLabel("I saved and closed my work.").check();
         await page.screenshot({
                 path: `${evidence}/workflow-1180-configuration-restart.png`,
                 fullPage: true,
@@ -283,7 +274,7 @@ test("durable deployment completes in order and distinguishes requests from rece
         await expect(page.getByRole("heading", { name: "Restart after configuration" })).toBeVisible();
 
         await page.reload();
-        await page.getByRole("button", { name: "Deploy" }).click();
+        await page.getByRole("button", { name: "Install firmware" }).click();
         await expect(page.getByRole("heading", { name: "Restart after configuration" })).toBeVisible();
         await page.getByRole("button", { name: "Check Windows boot time" }).click();
         await expect(page.getByText("Windows boot time recorded")).toBeVisible();
@@ -308,7 +299,6 @@ test("durable deployment completes in order and distinguishes requests from rece
                 path: `${evidence}/workflow-1180-policy-confirmation.png`,
                 fullPage: true,
         });
-        await page.getByRole("dialog").getByLabel("I completed this step and reviewed the result.").check();
         await page.getByRole("dialog").getByRole("button", { name: "Record completed step" }).click();
         await expect(page.getByText("Deployment plan complete", { exact: true })).toBeVisible();
         await expect(page.locator(".deployment-rail .rail-note")).toHaveCount(0);
@@ -319,7 +309,7 @@ test("deployment remains reachable without horizontal overflow at 900px", async 
 }) => {
         await page.setViewportSize({ width: 900, height: 620 });
         await page.goto("/");
-        await page.getByRole("button", { name: "Deploy" }).click();
+        await page.getByRole("button", { name: "Install firmware" }).click();
         await page.getByRole("button", { name: "Choose file" }).click();
         await expect(page.getByText(/E7D25IMS\.1N0 · 32 MiB/)).toBeVisible();
         await page.getByText("I checked the vendor install and recovery instructions for this board.").click();
@@ -345,7 +335,7 @@ test("manual preview suppresses duplicate submit and locks profile selection whi
         page,
 }) => {
         await page.goto("/");
-        await page.getByRole("button", { name: "Deploy" }).click();
+        await page.getByRole("button", { name: "Install firmware" }).click();
         await page.getByRole("button", { name: "Choose file" }).click();
         await page.getByText("I checked the vendor install and recovery instructions for this board.").click();
         await page.getByRole("button", { name: "Create profile for this computer" }).click();
@@ -375,7 +365,7 @@ test("machine preflight mismatch is an error and never claims an exact match", a
         page,
 }) => {
         await page.goto("/");
-        await page.getByRole("button", { name: "Deploy" }).click();
+        await page.getByRole("button", { name: "Install firmware" }).click();
         await page.getByRole("button", { name: "Choose file" }).click();
         await page
                 .getByText(
@@ -541,7 +531,7 @@ test("legacy analysis selects only the recommended safe rule before profile crea
 }) => {
         await page.setViewportSize({ width: 1180, height: 760 });
         await page.goto("/");
-        await page.getByRole("button", { name: "Deploy" }).click();
+        await page.getByRole("button", { name: "Install firmware" }).click();
         await page.getByLabel("Board path").selectOption("legacyAbove4g");
         await page.getByRole("button", { name: "Choose file" }).click();
         await page
@@ -597,12 +587,6 @@ test("legacy analysis selects only the recommended safe rule before profile crea
                 .click();
         await page
                 .getByRole("dialog")
-                .getByLabel(
-                        "I completed this step and reviewed the result.",
-                )
-                .check();
-        await page
-                .getByRole("dialog")
                 .getByRole("button", { name: "Record completed step" })
                 .click();
         await page
@@ -620,12 +604,12 @@ test("legacy analysis selects only the recommended safe rule before profile crea
         await page.keyboard.press("Escape");
 });
 
-test("risky legacy rule requires a fingerprint-specific acknowledgement", async ({
+test("risky legacy rule requires an explicit confirmation", async ({
         page,
 }) => {
         await page.setViewportSize({ width: 1180, height: 760 });
         await page.goto("/");
-        await page.getByRole("button", { name: "Deploy" }).click();
+        await page.getByRole("button", { name: "Install firmware" }).click();
         await page.getByLabel("Board path").selectOption("legacyAbove4g");
         await page.getByRole("button", { name: "Choose file" }).click();
         await page
@@ -644,18 +628,12 @@ test("risky legacy rule requires a fingerprint-specific acknowledgement", async 
         });
         await expect(create).toBeDisabled();
         await expect(
-                page.getByText(/Add an image-specific note and confirmation for DSDT modification/),
+                page.getByText(/Confirm the DSDT modification below to continue/),
         ).toBeVisible();
 
         await page
-                .getByLabel("Image-specific acknowledgement note")
-                .fill(
-                        "For firmware 71717171 this DSDT change may alter resource windows and recovery behavior on this board.",
-                );
-        await page
-                .getByLabel(
-                        "I reviewed this risk for the analyzed firmware.",
-                )
+                .locator(".legacy-risk")
+                .getByRole("checkbox")
                 .check();
         await expect(create).toBeEnabled();
         await page.screenshot({
@@ -673,7 +651,7 @@ test("legacy selections are invalidated by path and fingerprint drift", async ({
         page,
 }) => {
         await page.goto("/");
-        await page.getByRole("button", { name: "Deploy" }).click();
+        await page.getByRole("button", { name: "Install firmware" }).click();
         await page.getByLabel("Board path").selectOption("legacyAbove4g");
         await page.getByRole("button", { name: "Choose file" }).click();
         const firmwarePath = page.getByPlaceholder(
@@ -713,7 +691,7 @@ test("legacy analysis remains reachable at the supported minimum window", async 
 }) => {
         await page.setViewportSize({ width: 900, height: 620 });
         await page.goto("/");
-        await page.getByRole("button", { name: "Deploy" }).click();
+        await page.getByRole("button", { name: "Install firmware" }).click();
         await page.getByLabel("Board path").selectOption("legacyAbove4g");
         await page.getByRole("button", { name: "Choose file" }).click();
         await page.getByRole("button", { name: "Analyze image" }).click();

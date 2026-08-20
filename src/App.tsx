@@ -3,7 +3,6 @@ import { previewMode } from "./bridge";
 import { BarSettingsWorkspace } from "./BarSettingsWorkspace";
 import {
         initialApplicationSurface,
-        settingsLockMessageId,
         type ApplicationSurface,
 } from "./bar-settings-routing";
 import { DeploymentWorkspace } from "./DeploymentWorkspace";
@@ -20,7 +19,7 @@ import {
 } from "./configuration-workspace/panels";
 import {
         ApplicationHeader,
-        ResizableBarStatusStrip,
+        ResizableBarHero,
         SystemStatusSidebar,
 } from "./configuration-workspace/workspace-shell";
 import { SaveConfirmationDialog } from "./configuration-workspace/dialogs";
@@ -36,32 +35,24 @@ export function App() {
                 load,
                 closeLicenses,
         } = workspace;
-        const [surface, setSurface] =
-                useState<ApplicationSurface>("configure");
+        const [surface, setSurface] = useState<ApplicationSurface>("bar");
         const userSelectedSurface = useRef(false);
         const initialSurfaceResolved = useRef(false);
         useEffect(() => {
                 if (
                         initialSurfaceResolved.current ||
                         userSelectedSurface.current ||
-                        !snap ||
-                        workspace.rebarInspection.status === "loading"
+                        !snap
                 )
                         return;
-                setSurface(
-                        initialApplicationSurface(
-                                snap,
-                                workspace.rebarInspection,
-                        ),
-                );
+                setSurface(initialApplicationSurface(snap));
                 initialSurfaceResolved.current = true;
-        }, [snap, workspace.rebarInspection]);
+        }, [snap]);
         const selectSurface = (next: ApplicationSurface) => {
                 userSelectedSurface.current = true;
                 initialSurfaceResolved.current = true;
                 setSurface(next);
         };
-        const settingsLockId = snap ? settingsLockMessageId(snap) : null;
         if (busy && !snap)
                 return (
                         <main className="center">
@@ -80,13 +71,10 @@ export function App() {
                                 <h1>{t("ui.systemStateUnavailable")}</h1>
                                 <p>
                                         {error
-                                                ? translateMessage(
-                                                          locale,
-                                                          error,
-                                                  )
+                                                ? translateMessage(locale, error)
                                                 : t(
-                                                          "ui.theNativeBridgeDidNotReturnASnapshot",
-                                                  )}
+                                                                "ui.theNativeBridgeDidNotReturnASnapshot",
+                                                        )}
                                 </p>
                                 <button onClick={() => load()}>
                                         {t("ui.tryAgain")}
@@ -98,29 +86,17 @@ export function App() {
                         <div className="app">
                                 {previewMode && (
                                         <div className="preview" role="status">
-                                                {t(
-                                                        "ui.previewDataBrowserFixture",
-                                                )}
+                                                {t("ui.previewDataBrowserFixture")}
                                         </div>
                                 )}
                                 <ApplicationHeader
                                         surface={surface}
                                         setSurface={selectSurface}
                                 />
-                                {settingsLockId && (
-                                        <div
-                                                id="settings-lock-reason"
-                                                className="settings-lock-banner"
-                                                role="status"
-                                        >
-                                                <strong>{t("ui.settings")}</strong>
-                                                <span>{t(settingsLockId)}</span>
-                                        </div>
-                                )}
-                                <ResizableBarStatusStrip />
+                                <ResizableBarHero />
                                 {surface === "deploy" ? (
                                         <DeploymentWorkspace snapshot={snap} />
-                                ) : surface === "settings" ? (
+                                ) : snap.barSettings.settingsAvailable ? (
                                         <BarSettingsWorkspace />
                                 ) : (
                                         <div className="workspace">

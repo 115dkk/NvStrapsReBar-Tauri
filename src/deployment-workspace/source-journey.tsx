@@ -38,7 +38,6 @@ export const SourceJourney = () => {
                 legacyAnalysisValid,
                 selectedLegacyEntries,
                 selectedLegacyRisks,
-                acknowledgementHash,
                 missingLegacyRisk,
                 legacyReady,
                 legacyNextAction,
@@ -54,7 +53,6 @@ export const SourceJourney = () => {
                 setInstallNote,
                 setRouteConfirmed,
                 toggleLegacyRule,
-                setLegacyRiskNote,
                 setLegacyRiskConfirmed,
                 chooseFirmware,
                 inspectManualPath,
@@ -384,56 +382,28 @@ export const SourceJourney = () => {
                                                                                                 aria-labelledby="legacy-risk-title"
                                                                                         >
                                                                                                 <h5 id="legacy-risk-title">{t("ui.explicitRiskAcknowledgements")}</h5>
-                                                                                                <p>
-                                                                                                        {t("ui.forEachSelectedRiskDescribeThisImageAndIncludeFingerprint")} <code>{acknowledgementHash}</code>. {t("ui.includeTheImageSpecificConsequence")}
-                                                                                                </p>
                                                                                                 {selectedLegacyRisks.map(
-                                                                                                        (risk) => {
-                                                                                                                const acknowledgement =
-                                                                                                                        legacyAcknowledgements[
-                                                                                                                                risk
-                                                                                                                        ];
-                                                                                                                const noteId = `risk-${risk}-note`;
-                                                                                                                return (
-                                                                                                                        <div
-                                                                                                                                className="legacy-risk"
-                                                                                                                                key={risk}
-                                                                                                                        >
-                                                                                                                                <label htmlFor={noteId}>
-                                                                                                                                        <strong>
-                                                                                                                                                {t(riskLabelIds[risk])}
-                                                                                                                                        </strong>
-                                                                                                                                        <span>{t("ui.imageSpecificAcknowledgementNote")}</span>
-                                                                                                                                </label>
-                                                                                                                                <textarea
-                                                                                                                                        id={noteId}
-                                                                                                                                        value={acknowledgement?.note ?? ""}
-                                                                                                                                        onChange={(event) =>
-                                                                                                                                                setLegacyRiskNote(
-                                                                                                                                                        risk,
-                                                                                                                                                        event.target.value,
-                                                                                                                                                )
-                                                                                                                                        }
-                                                                                                                                        placeholder={`Describe the consequence for image ${acknowledgementHash}`}
-                                                                                                                                />
-                                                                                                                                <label className="consequence-check compact-check">
-                                                                                                                                        <input
-                                                                                                                                                type="checkbox"
-                                                                                                                                                checked={acknowledgement?.confirmed ?? false}
-                                                                                                                                                onChange={(event) =>
-                                                                                                                                                        setLegacyRiskConfirmed(
-                                                                                                                                                                risk,
-                                                                                                                                                                event.target.checked,
-                                                                                                                                                        )
-                                                                                                                                                }
-                                                                                                                                        />
-                                                                                                                                        <span>
-                                                                                                                                                <strong>{t("ui.iReviewedThisRiskForTheAnalyzedFirmware")}</strong>
-                                                                                                                                        </span>
-                                                                                                                                </label>
-                                                                                                                        </div>
-                                                                                                                );
-                                                                                                        },
+                                                                                                        (risk) => (
+                                                                                                                <label
+                                                                                                                        className="consequence-check compact-check legacy-risk"
+                                                                                                                        key={risk}
+                                                                                                                >
+                                                                                                                        <input
+                                                                                                                                type="checkbox"
+                                                                                                                                checked={legacyAcknowledgements[risk]?.confirmed ?? false}
+                                                                                                                                onChange={(event) =>
+                                                                                                                                        setLegacyRiskConfirmed(
+                                                                                                                                                risk,
+                                                                                                                                                event.target.checked,
+                                                                                                                                        )
+                                                                                                                                }
+                                                                                                                        />
+                                                                                                                        <span>
+                                                                                                                                <strong>{t(riskLabelIds[risk])}</strong>
+                                                                                                                                <small>{t("ui.iReviewedThisRiskForTheAnalyzedFirmware")}</small>
+                                                                                                                        </span>
+                                                                                                                </label>
+                                                                                                        ),
                                                                                                 )}
                                                                                         </section>
                                                                                 )}

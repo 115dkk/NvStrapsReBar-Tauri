@@ -70,7 +70,16 @@ export const AutomaticPolicyPanel = () => {
                                                                 })
                                                         }
                                                 />
-                                                <strong>{l}</strong>
+                                                <strong>
+                                                        {l}
+                                                        {v === 2 && (
+                                                                <b className="chip-recommended">
+                                                                        {t(
+                                                                                "ui.recommended",
+                                                                        )}
+                                                                </b>
+                                                        )}
+                                                </strong>
                                                 <span>{d}</span>
                                         </label>
                                 ))}

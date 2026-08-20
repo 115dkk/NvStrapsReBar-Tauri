@@ -8,11 +8,6 @@ export const DeploymentIntro = () => {
                 <>
                         <section className="deployment-intro">
                                 <div>
-                                        <span className="kicker">
-                                                {t(
-                                                        "ui.currentHardwarePreparedFiles",
-                                                )}
-                                        </span>
                                         <h2>
                                                 {t(
                                                         "ui.firmwarePreparationAndInstallation",

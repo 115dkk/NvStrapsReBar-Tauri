@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bridge } from "../bridge";
 import { barSettingsErrorMessageId } from "../bar-settings-errors";
-import { settingsLockMessageId } from "../bar-settings-routing";
 import { presentMotherboardSupport } from "../hardware-support";
 import { useI18n } from "../i18n";
 import { message, type MessageDescriptor } from "../i18n-catalog";
@@ -248,12 +247,9 @@ export const useConfigurationWorkspace = () => {
                         ) {
                                 setError(
                                         message(
-                                                snap
-                                                        ? (settingsLockMessageId(
-                                                                  snap,
-                                                          ) ??
-                                                                  "ui.settingsLockedCurrentConfigurationUnavailable")
-                                                        : "ui.settingsLockedCurrentConfigurationUnavailable",
+                                                status?.settingsAvailable
+                                                        ? "ui.savedConfigurationUnavailableRefresh"
+                                                        : "ui.barSettingsErrorControlNotObserved",
                                         ),
                                 );
                                 return;

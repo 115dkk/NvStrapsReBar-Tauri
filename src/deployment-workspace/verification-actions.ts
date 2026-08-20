@@ -24,7 +24,6 @@ export class VerificationActions {
                         );
                         tx.patch({
                                 manualPreview: preview,
-                                manualConfirmed: false,
                                 showManual: true,
                         });
                         tx.success(
@@ -149,7 +148,6 @@ export class VerificationActions {
                                         );
                                 tx.patch({
                                         configurationRebootPreview: preview,
-                                        savedWork: false,
                                         showConfigurationReboot: true,
                                 });
                                 tx.success(
@@ -166,7 +164,6 @@ export class VerificationActions {
                 const before = state.plan!;
                 const preview = state.configurationRebootPreview!;
                 const selectedProfileId = state.selectedProfileId;
-                const savedWork = state.savedWork;
                 this.runtime.patch({ showConfigurationReboot: false });
                 return this.runtime.run("configuration-reboot", async (tx) => {
                         await requestConfigurationReboot(
@@ -174,7 +171,9 @@ export class VerificationActions {
                                 before,
                                 preview,
                                 selectedProfileId,
-                                savedWork,
+                                // Confirming the restart dialog is the
+                                // explicit unsaved-work acknowledgement.
+                                true,
                         );
                         tx.patch({
                                 workflowReceipt: {
