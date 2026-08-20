@@ -1,7 +1,7 @@
 # Frontend gallery
 
 This is a visual archive of the NvStrapsReBar Tauri frontend, from guarded
-configuration to the deployment workflow. The current factual-copy surfaces
+configuration to the deployment workflow. The current concept-first surfaces
 are shown first; earlier captures remain below as revision history.
 
 > [!IMPORTANT]
@@ -14,6 +14,41 @@ are shown first; earlier captures remain below as revision history.
 The 900 px captures show the app's supported minimum **desktop** window. The
 gallery uses one image per section so it remains comfortable to browse on a
 phone; it does not imply a mobile app or a 390 px application viewport.
+
+## Current concept-first surfaces
+
+These captures show the two-step journey shell: a header tagline that states
+what the program does, a step navigation (1. Install firmware, 2. BAR
+Settings) with completion marks, and a status hero that draws the BAR
+aperture itself — a small 256 MiB block expanding into the multi-GiB target.
+
+### 21. BAR Settings with the expansion hero
+
+The default surface once the driver left evidence in the current boot. The
+hero shows the expanded aperture as a filled bar and the first panel is the
+Resizable BAR expansion switch.
+
+[Open full-size image](21-concept-hero-bar-settings-1180x760.png)
+
+![Current English BAR Settings at 1180 by 760 pixels](21-concept-hero-bar-settings-1180x760.png)
+
+### 22. 설치 전 안내와 확장 목표
+
+드라이버 증거가 없으면 1단계(펌웨어 설치)가 열리고, 히어로가 256 MiB 창과
+점선으로 그린 확장 목표, 그리고 다음 할 일을 한 줄로 보여줍니다.
+
+[원본 크기로 보기](22-concept-korean-install-step-900x760.png)
+
+![900×760 한국어 설치 단계 화면](22-concept-korean-install-step-900x760.png)
+
+### 23. GPU마다 다른 상태를 그대로 그리기
+
+혼재 상태에서는 GPU별로 확장 완료 바와 256 MiB → 목표 바가 나란히 그려져
+어떤 GPU가 아직 확장 가능한지 즉시 드러납니다.
+
+[원본 크기로 보기](23-concept-korean-mixed-900x760.png)
+
+![900×760 한국어 혼재 상태 화면](23-concept-korean-mixed-900x760.png)
 
 ## Current factual-copy surfaces — `ffe4de9`
 

@@ -10,7 +10,7 @@ async function chooseFirmwareAndCreateProfile(
         page: Page,
         locale: "en" | "ko",
 ) {
-        await page.getByRole("button", { name: locale === "ko" ? "배포" : "Deploy" }).click();
+        await page.getByRole("button", { name: locale === "ko" ? "펌웨어 설치" : "Install firmware" }).click();
         await expect(nextStepCard(page)).toHaveCount(0);
         await page
                 .getByRole("button", { name: locale === "ko" ? "파일 선택" : "Choose file" })

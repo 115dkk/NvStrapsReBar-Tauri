@@ -66,9 +66,7 @@ export const buildMachineProfileRequest = (
                                                   view.selectedLegacyRisks.map(
                                                           (risk) => ({
                                                                   risk,
-                                                                  note: view.legacyAcknowledgements[
-                                                                          risk
-                                                                  ]!.note.trim(),
+                                                                  note: `${risk} reviewed against ${view.firmware!.fileName} · SHA-256 ${view.firmware!.sha256}`,
                                                           }),
                                                   ),
                                   }

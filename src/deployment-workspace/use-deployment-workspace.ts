@@ -104,18 +104,12 @@ export const useDeploymentWorkspace = (snapshot: SystemSnapshot) => {
                         send({ type: "setRouteConfirmed", value }),
                 setDestination: (value: string) =>
                         send({ type: "setDestination", value }),
-                setSavedWork: (value: boolean) =>
-                        send({ type: "setSavedWork", value }),
-                setManualConfirmed: (value: boolean) =>
-                        send({ type: "setManualConfirmed", value }),
                 setGuardedConfigConfirmed: (value: boolean) =>
                         send({ type: "setGuardedConfigConfirmed", value }),
                 setSelectedProfileId: (value: string) =>
                         send({ type: "setSelectedProfile", value }),
                 toggleLegacyRule: (key: string, checked: boolean) =>
                         send({ type: "toggleLegacyRule", key, checked }),
-                setLegacyRiskNote: (risk: LegacyPatchRisk, note: string) =>
-                        send({ type: "setLegacyRiskNote", risk, note }),
                 setLegacyRiskConfirmed: (
                         risk: LegacyPatchRisk,
                         confirmed: boolean,

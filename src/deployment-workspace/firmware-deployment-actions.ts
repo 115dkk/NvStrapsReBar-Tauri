@@ -95,7 +95,6 @@ export class FirmwareDeploymentActions {
                         };
                         tx.patch({
                                 rebootPreview: preview,
-                                savedWork: false,
                                 showReboot: true,
                         });
                         tx.success(
@@ -127,10 +126,12 @@ export class FirmwareDeploymentActions {
                                 throw new Error(
                                         "The firmware restart preview is stale.",
                                 );
+                        // Confirming the restart dialog is the explicit
+                        // unsaved-work acknowledgement the backend requires.
                         const receipt =
                                 await this.runtime.adapter.rebootToFirmwareSetup(
                                         preview,
-                                        state.savedWork,
+                                        true,
                                 );
                         if (
                                 receipt.profileId !== preview.profileId ||

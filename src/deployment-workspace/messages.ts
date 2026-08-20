@@ -74,17 +74,6 @@ export const manualWarningIds = (
         return [];
 };
 
-export const firmwareRebootWarningIds: StaticMessageId[] = [
-        "ui.saveAndCloseBeforeRestart",
-        "ui.windowsOpensTheFirmwareSetupScreenContinueThereWithTheVendorInstructions",
-];
-
-export const configurationRebootWarningIds: StaticMessageId[] = [
-        "ui.saveAndCloseBeforeRestart",
-        "ui.windowsRestartsWithStandardShutdown",
-        "ui.returnAfterWindowsBootsSoTheAppCanCompareTheNewBootTime",
-];
-
 const legacyRuleDescriptionIds: Record<string, StaticMessageId> = {
         ["4b".repeat(32)]: "ui.above4gDecodingCompatibilityRule",
         ["5c".repeat(32)]: "ui.dsdtResourceWindowCompatibilityPatch",

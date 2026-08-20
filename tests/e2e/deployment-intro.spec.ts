@@ -22,16 +22,16 @@ test("Deploy omits the redundant flash badge and retains the contextual handoff"
 }) => {
         await page.setViewportSize({ width: 1180, height: 760 });
         await page.goto("/");
-        await page.getByRole("button", { name: "Deploy" }).click();
+        await page.getByRole("button", { name: "Install firmware" }).click();
 
         await expect(
                 page.getByRole("heading", {
-                        name: "Firmware preparation and installation",
+                        name: "Put the NvStraps driver into the motherboard BIOS",
                 }),
         ).toBeVisible();
         await expect(
                 page.getByText(
-                        "Prepare and inspect firmware files here. Flash the prepared image with the vendor tool, then return to record the result.",
+                        "This screen builds a BIOS image with the driver inside and exports it as a package. Flash that package with the vendor tool, then return here to record the result.",
                 ),
         ).toBeVisible();
         await expect(redundantBadge(page)).toHaveCount(0);
@@ -118,14 +118,14 @@ test("Korean Deploy intro remains readable at the 900 px minimum without the bad
         await page.setViewportSize({ width: 900, height: 760 });
         await page.goto("/");
         await page.getByTestId("language-select").selectOption("ko");
-        await page.getByRole("button", { name: "배포" }).click();
+        await page.getByRole("button", { name: "펌웨어 설치" }).click();
 
         await expect(
-                page.getByRole("heading", { name: "펌웨어 준비 및 적용" }),
+                page.getByRole("heading", { name: "메인보드 BIOS에 NvStraps 드라이버 넣기" }),
         ).toBeVisible();
         await expect(
                 page.getByText(
-                        "여기에서 펌웨어 파일을 준비하고 검사합니다. 준비된 이미지는 제조사 도구로 플래시한 뒤 돌아와 결과를 기록하세요.",
+                        "여기에서 드라이버를 넣은 BIOS 이미지를 만들어 패키지로 내보냅니다. 플래시는 제조사 도구로 진행하고, 끝나면 돌아와 결과를 기록하세요.",
                 ),
         ).toBeVisible();
         await expect(redundantBadge(page)).toHaveCount(0);

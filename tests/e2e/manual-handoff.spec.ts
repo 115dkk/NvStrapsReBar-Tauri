@@ -8,7 +8,7 @@ const manualHandoff = (page: Page) =>
 
 async function createProfile(page: Page) {
         await page.goto("/");
-        await page.getByRole("button", { name: "Deploy" }).click();
+        await page.getByRole("button", { name: "Install firmware" }).click();
         await page.getByRole("button", { name: "Choose file" }).click();
         await page
                 .getByText(
@@ -25,9 +25,6 @@ async function recordCurrentManualStep(page: Page) {
                 .getByRole("button", { name: "Review & confirm completed step" })
                 .click();
         const dialog = page.getByRole("dialog");
-        await dialog
-                .getByLabel("I completed this step and reviewed the result.")
-                .check();
         await dialog
                 .getByRole("button", { name: "Record completed step" })
                 .click();
@@ -118,7 +115,7 @@ test("journey headings use available width and remain overflow-free", async ({
 }) => {
         await page.setViewportSize({ width: 1824, height: 900 });
         await page.goto("/");
-        await page.getByRole("button", { name: "Deploy" }).click();
+        await page.getByRole("button", { name: "Install firmware" }).click();
 
         const sourceHeading = page.locator("#source-title").locator("..").locator("..");
         const sourceCopy = sourceHeading.locator("p");
@@ -153,7 +150,7 @@ test("journey headings use available width and remain overflow-free", async ({
 
         await page.getByTestId("language-select").selectOption("ko");
         await expect(
-                page.getByRole("heading", { name: "원본 이미지 및 복구 파일" }),
+                page.getByRole("heading", { name: "BIOS 이미지와 복구 수단" }),
         ).toBeVisible();
         const koreanWideMetrics = await readWideMetrics();
         expect(koreanWideMetrics.lines).toBe(1);

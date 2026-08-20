@@ -26,17 +26,6 @@ const sameFirmware = (
 export const legacyRuleKey = (catalog: string, ruleId: string) =>
         `${catalog}:${ruleId}`;
 
-const validAcknowledgementNote = (note: string, fingerprintPrefix: string) => {
-        const normalized = note.trim();
-        return (
-                normalized.length >= 40 &&
-                normalized.split(/\s+/).length >= 8 &&
-                normalized
-                        .toLowerCase()
-                        .includes(fingerprintPrefix.toLowerCase())
-        );
-};
-
 const riskAcknowledgementMessageIds = {
         dsdtModification: "ui.addDsdtRiskAcknowledgement",
         nvramWhitelist: "ui.addNvramRiskAcknowledgement",
@@ -128,17 +117,9 @@ export const projectDeploymentWorkspace = (
                         ),
                 ),
         ];
-        const acknowledgementHash = state.firmware?.sha256.slice(0, 8) ?? "";
-        const missingLegacyRisk = selectedLegacyRisks.find((risk) => {
-                const acknowledgement = state.legacyAcknowledgements[risk];
-                return !(
-                        acknowledgement?.confirmed &&
-                        validAcknowledgementNote(
-                                acknowledgement.note,
-                                acknowledgementHash,
-                        )
-                );
-        });
+        const missingLegacyRisk = selectedLegacyRisks.find(
+                (risk) => !state.legacyAcknowledgements[risk]?.confirmed,
+        );
         const legacyReady =
                 state.boardPath !== "legacyAbove4g" ||
                 (state.legacyAnalysisStatus === "ready" &&
@@ -195,7 +176,6 @@ export const projectDeploymentWorkspace = (
                 legacyAnalysisValid,
                 selectedLegacyEntries,
                 selectedLegacyRisks,
-                acknowledgementHash,
                 missingLegacyRisk,
                 legacyReady,
                 legacyNextAction,

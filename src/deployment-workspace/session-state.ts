@@ -57,10 +57,8 @@ export const createInitialDeploymentState = (
                 packageReceipt: null,
                 rebootPreview: null,
                 showReboot: false,
-                savedWork: false,
                 manualPreview: null,
                 showManual: false,
-                manualConfirmed: false,
                 configurationRebootPreview: null,
                 showConfigurationReboot: false,
                 guardedConfigConfirmed: false,
@@ -87,7 +85,6 @@ export const resetProfileProjection = (
         packageReceipt: null,
         rebootPreview: null,
         showReboot: false,
-        savedWork: false,
         manualPreview: null,
         showManual: false,
         configurationRebootPreview: null,
@@ -139,10 +136,6 @@ export const reduceLocalDeploymentIntent = (
                         return { routeConfirmed: intent.value };
                 case "setDestination":
                         return { destination: intent.value };
-                case "setSavedWork":
-                        return { savedWork: intent.value };
-                case "setManualConfirmed":
-                        return { manualConfirmed: intent.value };
                 case "setGuardedConfigConfirmed":
                         return { guardedConfigConfirmed: intent.value };
                 case "toggleLegacyRule":
@@ -158,30 +151,11 @@ export const reduceLocalDeploymentIntent = (
                                                   (key) => key !== intent.key,
                                           ),
                         };
-                case "setLegacyRiskNote":
-                        return {
-                                legacyAcknowledgements: {
-                                        ...state.legacyAcknowledgements,
-                                        [intent.risk]: {
-                                                note: intent.note,
-                                                confirmed:
-                                                        state
-                                                                .legacyAcknowledgements[
-                                                                intent.risk
-                                                        ]?.confirmed ?? false,
-                                        },
-                                },
-                        };
                 case "setLegacyRiskConfirmed":
                         return {
                                 legacyAcknowledgements: {
                                         ...state.legacyAcknowledgements,
                                         [intent.risk]: {
-                                                note:
-                                                        state
-                                                                .legacyAcknowledgements[
-                                                                intent.risk
-                                                        ]?.note ?? "",
                                                 confirmed: intent.confirmed,
                                         },
                                 },

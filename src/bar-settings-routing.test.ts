@@ -1,103 +1,64 @@
 import { describe, expect, it } from "vitest";
 import {
+        firmwareInstalled,
         initialApplicationSurface,
-        settingsLockMessageId,
 } from "./bar-settings-routing";
-import type { ResizableBarInspectionLoadState } from "./resizable-bar-status";
 import type { SystemSnapshot } from "./types";
 
 const snapshot = (
-        currentBootDxeState: SystemSnapshot["barSettings"]["currentBootDxeState"],
-        settingsAvailable: boolean,
+        controlEvidence: SystemSnapshot["barSettings"]["controlEvidence"],
 ): SystemSnapshot =>
         ({
                 barSettings: {
-                        currentBootDxeState,
+                        currentBootDxeState:
+                                controlEvidence === "currentBootDxe"
+                                        ? "observedThisBoot"
+                                        : "notObservedThisBoot",
                         currentBootDxeReasonCode:
-                                currentBootDxeState === "observedThisBoot"
+                                controlEvidence === "currentBootDxe"
                                         ? "currentBootStatusObserved"
-                                        : currentBootDxeState ===
-                                            "notObservedThisBoot"
-                                          ? "statusVariableMissing"
-                                          : "statusVariableUnavailable",
-                        controlEvidence: settingsAvailable
-                                ? currentBootDxeState === "observedThisBoot"
-                                        ? "currentBootDxe"
-                                        : "expandedTuringAperture"
-                                : currentBootDxeState ===
-                                    "notObservedThisBoot"
-                                  ? "notObserved"
-                                  : "indeterminate",
-                        settingsAvailable,
+                                        : "statusVariableMissing",
+                        controlEvidence,
+                        settingsAvailable:
+                                controlEvidence === "currentBootDxe" ||
+                                controlEvidence === "expandedTuringAperture",
                         savedConfigurationState: "enabled",
                         topologyToken: "topology",
                         configToken: "configuration",
                 },
         }) as SystemSnapshot;
 
-const inspection = (
-        state: "expanded" | "mixed" | "legacy256MiB" | "indeterminate",
-): ResizableBarInspectionLoadState => ({
-        status: "ready",
-        inspection: { state } as never,
-});
+describe("application surface routing", () => {
+        it("treats current-boot DXE or an expanded Turing aperture as an installed driver", () => {
+                expect(firmwareInstalled(snapshot("currentBootDxe"))).toBe(
+                        true,
+                );
+                expect(
+                        firmwareInstalled(snapshot("expandedTuringAperture")),
+                ).toBe(true);
+                expect(firmwareInstalled(snapshot("notObserved"))).toBe(false);
+                expect(firmwareInstalled(snapshot("indeterminate"))).toBe(
+                        false,
+                );
+        });
 
-describe("BAR Settings routing", () => {
-        it("opens Settings only for expanded aperture with settings available", () => {
+        it("opens BAR settings once the driver left evidence in this boot", () => {
+                expect(
+                        initialApplicationSurface(snapshot("currentBootDxe")),
+                ).toBe("bar");
                 expect(
                         initialApplicationSurface(
-                                snapshot("observedThisBoot", true),
-                                inspection("expanded"),
+                                snapshot("expandedTuringAperture"),
                         ),
-                ).toBe("settings");
-                for (const state of [
-                        "mixed",
-                        "legacy256MiB",
-                        "indeterminate",
-                ] as const)
-                        expect(
-                                initialApplicationSurface(
-                                        snapshot("observedThisBoot", true),
-                                        inspection(state),
-                                ),
-                        ).toBe("configure");
+                ).toBe("bar");
         });
 
-        it("never unlocks from aperture or saved configuration alone", () => {
-                for (const currentBootDxeState of [
-                        "notObservedThisBoot",
-                        "indeterminate",
-                ] as const)
-                        expect(
-                                initialApplicationSurface(
-                                        snapshot(currentBootDxeState, false),
-                                        inspection("expanded"),
-                                ),
-                        ).toBe("configure");
-        });
-
-        it("keeps loading and inspection failures on Configure", () => {
-                const available = snapshot("observedThisBoot", true);
+        it("opens the firmware install journey before the driver is installed", () => {
                 expect(
-                        initialApplicationSurface(available, {
-                                status: "loading",
-                        }),
-                ).toBe("configure");
+                        initialApplicationSurface(snapshot("notObserved")),
+                ).toBe("deploy");
                 expect(
-                        initialApplicationSurface(available, {
-                                status: "error",
-                        }),
-                ).toBe("configure");
-        });
-
-        it("selects a typed lock explanation without display-string logic", () => {
-                expect(
-                        settingsLockMessageId(
-                                snapshot("notObservedThisBoot", false),
-                        ),
-                ).toBe("ui.settingsLockedControlNotObserved");
-                expect(
-                        settingsLockMessageId(snapshot("indeterminate", false)),
-                ).toBe("ui.settingsLockedDriverStateIndeterminate");
+                        initialApplicationSurface(snapshot("indeterminate")),
+                ).toBe("deploy");
         });
 });

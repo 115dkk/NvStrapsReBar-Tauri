@@ -57,7 +57,7 @@ export interface DeploymentWorkspaceView {
         legacyAnalysisError: string;
         selectedLegacyRules: string[];
         legacyAcknowledgements: Partial<
-                Record<LegacyPatchRisk, { note: string; confirmed: boolean }>
+                Record<LegacyPatchRisk, { confirmed: boolean }>
         >;
         profiles: MachineProfile[];
         selectedProfileId: string;
@@ -74,10 +74,8 @@ export interface DeploymentWorkspaceView {
         packageReceipt: DeploymentPackageReceipt | null;
         rebootPreview: FirmwareSetupRebootPreview | null;
         showReboot: boolean;
-        savedWork: boolean;
         manualPreview: ManualDeploymentStepPreview | null;
         showManual: boolean;
-        manualConfirmed: boolean;
         configurationRebootPreview: ConfigurationRebootPreview | null;
         showConfigurationReboot: boolean;
         guardedConfigConfirmed: boolean;
@@ -104,7 +102,6 @@ export interface DeploymentWorkspaceView {
                 rule: LegacyFirmwareAnalysis["catalogs"][number]["rules"][number];
         }[];
         selectedLegacyRisks: LegacyPatchRisk[];
-        acknowledgementHash: string;
         missingLegacyRisk: LegacyPatchRisk | undefined;
         legacyReady: boolean;
         legacyNextAction: MessageDescriptor | null;
@@ -122,11 +119,8 @@ type FieldIntent =
         | { type: "setRouteConfirmed"; value: boolean }
         | { type: "setDestination"; value: string }
         | { type: "setSelectedProfile"; value: string }
-        | { type: "setSavedWork"; value: boolean }
-        | { type: "setManualConfirmed"; value: boolean }
         | { type: "setGuardedConfigConfirmed"; value: boolean }
         | { type: "toggleLegacyRule"; key: string; checked: boolean }
-        | { type: "setLegacyRiskNote"; risk: LegacyPatchRisk; note: string }
         | {
                   type: "setLegacyRiskConfirmed";
                   risk: LegacyPatchRisk;
@@ -179,7 +173,6 @@ export type DeploymentWorkspaceState = Omit<
         | "legacyAnalysisValid"
         | "selectedLegacyEntries"
         | "selectedLegacyRisks"
-        | "acknowledgementHash"
         | "missingLegacyRisk"
         | "legacyReady"
         | "legacyNextAction"

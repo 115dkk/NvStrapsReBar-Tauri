@@ -14,7 +14,7 @@ BAR behavior required by this project.
 
 ## What is automated
 
-The `Deploy` workspace provides one guarded, resumable journey:
+The `Install firmware` step provides one guarded, resumable deployment journey:
 
 1. inventory the exact board, BIOS, GPU, bridge, and BAR0 topology;
 2. select and SHA-256 fingerprint an official vendor firmware image;
@@ -127,7 +127,8 @@ isolated copied variable store. It never accesses host NVRAM.
 
 ## Windows configuration
 
-The `Configure` workspace inventories NVIDIA adapters, reads the existing EFI configuration and
+The configuration editor (shown under `BAR Settings` until the driver leaves evidence
+in the current boot) inventories NVIDIA adapters, reads the existing EFI configuration and
 driver status, validates drafts against the current topology, and writes only after explicit
 confirmation. A successful write is read back byte-for-byte and still requires a reboot before
 the DXE driver can apply it. Administrator elevation is requested only for the privileged UEFI
@@ -142,17 +143,18 @@ is direct evidence that the NvStraps technique is active because Turing has no n
 expanded ReBAR aperture. A process without EFI-variable privilege may enter BAR Settings but must
 restart as administrator before the saved draft can be loaded or changed.
 
-An entirely expanded Turing inventory opens BAR Settings initially. A mixed inventory keeps
-Configure as the initial workspace while leaving BAR Settings available; each GPU row identifies
-its current aperture and whether an application-owned patch configuration can be generated. If
-neither current-boot DXE nor expanded-Turing evidence exists, BAR Settings remains locked and
-Configure stays initial.
+The application presents the journey as two steps: `Install firmware` and `BAR Settings`.
+With current-boot DXE or expanded-Turing evidence the app opens on BAR Settings and edits the
+token-bound saved configuration; without evidence it opens on Install firmware, and the BAR
+Settings step falls back to the pre-install configuration editor. Each GPU row in the status
+hero identifies its current aperture and whether an application-owned patch configuration can
+be generated.
 
 Newer boards normally use GPU-side Turing auto-configuration and system-default PCI sizing. Older
 boards may also need an explicit PCI target size, but this must follow the exact analyzed board
 profile rather than trial-and-error defaults.
 
-The `Deploy` workspace does not submit a browser constant. At the configuration step, Rust
+The `Install firmware` step does not submit a browser constant. At the configuration step, Rust
 re-enumerates the exact machine and derives a guarded draft: registry mode `1`, system-default PCI
 sizing, setup-change protection, and exact-location 2 GiB fallback rules only for unlisted Turing
 devices. The recommendation is rederived and must match the submitted draft at the privileged

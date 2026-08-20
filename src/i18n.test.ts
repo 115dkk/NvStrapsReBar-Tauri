@@ -105,16 +105,16 @@ describe("i18n locale policy", () => {
 
         it("uses a fact-first motherboard capability label in both locales", () => {
                 expect(translate("en", "ui.motherboardResizableBarSupport")).toBe(
-                        "Motherboard Resizable BAR support:",
+                        "Motherboard native ReBAR:",
                 );
                 expect(translate("ko", "ui.motherboardResizableBarSupport")).toBe(
-                        "메인보드 Resizable BAR 지원:",
+                        "메인보드 자체 ReBAR:",
                 );
                 expect(
                         translate("ko", "ui.motherboardResizableBarSupportState", {
                                 status: "지원됨",
                         }),
-                ).toBe("메인보드 Resizable BAR: 지원됨");
+                ).toBe("메인보드 자체 ReBAR: 지원됨");
         });
 
         it("maps every deployment step from StepId rather than a wire title", () => {

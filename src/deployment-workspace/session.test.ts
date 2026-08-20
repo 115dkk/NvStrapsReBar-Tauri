@@ -598,7 +598,6 @@ describe("DeploymentWorkspaceSession", () => {
                 );
                 await tick();
                 await session.dispatch({ type: "openConfigurationReboot" });
-                await session.dispatch({ type: "setSavedWork", value: true });
                 await session.dispatch({ type: "requestConfigurationReboot" });
                 expect(session.view().plan?.revision).toBe(3);
                 expect(session.view().workflowReceipt?.detail).toEqual({

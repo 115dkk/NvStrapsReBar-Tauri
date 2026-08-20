@@ -25,19 +25,20 @@ const captureFromDocumentTop = async (page: Page, path: string) => {
         await page.screenshot({ path });
 };
 
-test("expanded and observed opens Settings once, saves through its own path, and refresh preserves a user tab choice", async ({
+test("an installed driver opens BAR Settings, saves through its own path, and refresh preserves a user step choice", async ({
         page,
 }) => {
         await page.setViewportSize({ width: 1180, height: 760 });
         await page.goto("/");
 
-        const settings = page.getByRole("button", { name: "Settings" });
-        const configure = page.getByRole("button", { name: "Configure" });
+        const settings = page.getByRole("button", { name: "BAR Settings" });
+        const install = page.getByRole("button", { name: "Install firmware" });
         await expect(settings).toHaveAttribute("aria-current", "page");
-        await expect(settings).toBeEnabled();
+        await expect(install).toBeEnabled();
         await expect(page.getByTestId("bar-settings-workspace")).toBeVisible();
-        await expect(page.getByText("POST-INSTALL / SAVED CONFIGURATION")).toBeVisible();
-        await expect(page.getByText("Current-boot DXE")).toBeVisible();
+        await expect(
+                page.getByRole("heading", { name: "Edit saved BAR Settings" }),
+        ).toBeVisible();
         await expect(
                 page.locator(".rebar-gpu-row", {
                         hasText: "NVIDIA GeForce RTX 2080 SUPER",
@@ -69,13 +70,13 @@ test("expanded and observed opens Settings once, saves through its own path, and
                 path: `${evidence}/english-settings-save-receipt-1180x760.png`,
         });
 
-        await configure.click();
+        await install.click();
         await page.getByRole("button", { name: "Refresh system" }).click();
-        await expect(configure).toHaveAttribute("aria-current", "page");
+        await expect(install).toHaveAttribute("aria-current", "page");
         await expect(page.getByTestId("bar-settings-workspace")).toHaveCount(0);
 });
 
-test("mixed aperture opens Configure but keeps Settings usable at the minimum window in Korean", async ({
+test("mixed apertures open BAR Settings and stay usable at the minimum window in Korean", async ({
         page,
 }) => {
         await page.addInitScript(() =>
@@ -85,15 +86,11 @@ test("mixed aperture opens Configure but keeps Settings usable at the minimum wi
         await page.goto("/");
         await page.getByTestId("language-select").selectOption("ko");
 
-        const configure = page.getByRole("button", { name: "구성" });
-        const settings = page.getByRole("button", { name: "설정" });
-        await expect(configure).toHaveAttribute("aria-current", "page");
-        await expect(settings).toBeEnabled();
-        await settings.click();
+        const settings = page.getByRole("button", { name: "BAR 설정" });
         await expect(settings).toHaveAttribute("aria-current", "page");
         await expect(page.getByRole("heading", { name: "저장된 BAR 설정 편집" })).toBeVisible();
         await expect(page.locator(".rebar-gpu-row")).toHaveCount(2);
-        await expect(page.getByText("Resizable BAR 메모리 창 혼재")).toBeVisible();
+        await expect(page.getByText("GPU마다 Resizable BAR 상태가 다름")).toBeVisible();
         await captureFromDocumentTop(
                 page,
                 `${evidence}/korean-settings-mixed-top-900x760.png`,
@@ -122,7 +119,7 @@ test("mixed aperture opens Configure but keeps Settings usable at the minimum wi
         });
 });
 
-test("a DXE driver not observed this boot keeps Configure selected and exposes a semantic Settings lock", async ({
+test("a DXE driver not observed this boot opens Install firmware and keeps configuration editable", async ({
         page,
 }) => {
         await page.addInitScript(() =>
@@ -135,29 +132,35 @@ test("a DXE driver not observed this boot keeps Configure selected and exposes a
         await page.goto("/");
         await page.getByTestId("language-select").selectOption("ko");
 
-        await expect(page.getByRole("button", { name: "구성" })).toHaveAttribute(
-                "aria-current",
-                "page",
-        );
-        const settings = page.getByRole("button", { name: "설정" });
-        await expect(settings).toBeDisabled();
-        await expect(settings).toHaveAttribute(
-                "aria-describedby",
-                "settings-lock-reason",
-        );
-        await expect(page.locator("#settings-lock-reason")).toContainText(
-                "이번 부팅에서 DXE 드라이버 실행이 확인되거나 Turing GPU의 Windows 메모리 창이 확장된 경우 설정을 열 수 있습니다.",
-        );
+        await expect(
+                page.getByRole("button", { name: "펌웨어 설치" }),
+        ).toHaveAttribute("aria-current", "page");
+        await expect(
+                page.getByRole("heading", {
+                        name: "메인보드 BIOS에 NvStraps 드라이버 넣기",
+                }),
+        ).toBeVisible();
+        await expect(page.getByText("1단계 — 펌웨어 설치에서 드라이버를 BIOS에 넣으세요.")).toBeVisible();
+
+        const settings = page.getByRole("button", { name: "BAR 설정" });
+        await expect(settings).toBeEnabled();
+        await settings.click();
+        await expect(settings).toHaveAttribute("aria-current", "page");
         await expect(page.getByTestId("bar-settings-workspace")).toHaveCount(0);
+        await expect(
+                page.getByRole("heading", {
+                        name: "다음 부팅 때 적용할 펌웨어 설정",
+                }),
+        ).toBeVisible();
         expect(await noHorizontalOverflow(page)).toBe(true);
         expect(await page.evaluate(() => window.__NVSTRAPS_I18N_MISSING__ ?? [])).toEqual([]);
         await captureFromDocumentTop(
                 page,
-                `${evidence}/korean-settings-locked-900x760.png`,
+                `${evidence}/korean-settings-preinstall-900x760.png`,
         );
 });
 
-test("expanded Turing evidence opens Settings without inventing an editable draft when UEFI read access is missing", async ({
+test("expanded Turing evidence opens BAR Settings without inventing an editable draft when UEFI read access is missing", async ({
         page,
 }) => {
         await page.addInitScript(() =>
@@ -169,10 +172,8 @@ test("expanded Turing evidence opens Settings without inventing an editable draf
         await page.setViewportSize({ width: 1180, height: 760 });
         await page.goto("/");
 
-        const settings = page.getByRole("button", { name: "Settings" });
-        await expect(settings).toBeEnabled();
+        const settings = page.getByRole("button", { name: "BAR Settings" });
         await expect(settings).toHaveAttribute("aria-current", "page");
-        await expect(page.getByText("Expanded Turing aperture")).toBeVisible();
         await expect(
                 page.getByRole("heading", {
                         name: "Load the saved configuration to edit",
@@ -186,7 +187,9 @@ test("expanded Turing evidence opens Settings without inventing an editable draf
                                 name: "Restart as administrator",
                         }),
         ).toBeVisible();
-        await expect(page.getByText("Automatic policy", { exact: true })).toHaveCount(0);
+        await expect(
+                page.getByText("Resizable BAR expansion", { exact: true }),
+        ).toHaveCount(0);
         await expect(page.getByRole("button", { name: "Review & save" })).toHaveCount(0);
         expect(await noHorizontalOverflow(page)).toBe(true);
         await captureFromDocumentTop(
