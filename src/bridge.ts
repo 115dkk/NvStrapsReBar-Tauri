@@ -188,13 +188,15 @@ type PreviewState =
         | "expanded"
         | "expanded-no-access"
         | "mixed"
-        | "not-observed";
+        | "not-observed"
+        | "driver-cleared";
 const previewState = (): PreviewState => {
         if (typeof sessionStorage === "undefined") return "expanded";
         const value = sessionStorage.getItem(PREVIEW_REBAR_STATE_KEY);
         return value === "mixed" ||
                 value === "not-observed" ||
-                value === "expanded-no-access"
+                value === "expanded-no-access" ||
+                value === "driver-cleared"
                 ? value
                 : "expanded";
 };
@@ -248,6 +250,17 @@ const currentPreviewSnapshot = (): SystemSnapshot => {
                         currentBootDxeReasonCode: "statusVariableMissing",
                         controlEvidence: "notObserved",
                         settingsAvailable: false,
+                };
+                value.devices[0].currentBarSize = "268435456";
+        }
+        if (previewState() === "driver-cleared") {
+                value.driverStatus = {
+                        raw: "0x0000000000000032",
+                        code: 50,
+                        kind: "cleared",
+                        label: "Cleared",
+                        severity: "neutral",
+                        pciLocation: null,
                 };
                 value.devices[0].currentBarSize = "268435456";
         }
@@ -312,7 +325,8 @@ export const previewConfigureBridge: ConfigureBridge = {
                 structuredClone(
                         previewState() === "mixed"
                                 ? mixedPreviewInspection
-                                : previewState() === "not-observed"
+                                : previewState() === "not-observed" ||
+                                    previewState() === "driver-cleared"
                                   ? notObservedPreviewInspection
                                 : previewResizableBarInspection,
                 ),

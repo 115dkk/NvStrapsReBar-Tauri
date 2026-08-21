@@ -37,6 +37,46 @@ export const driverStatusMessageId = (
         status: NonNullable<SystemSnapshot["driverStatus"]>,
 ): StaticMessageId => driverStatusIds[status.kind] ?? "ui.driverUnknown";
 
+type DriverAdvice = {
+        tone: "error" | "warning";
+        id: StaticMessageId;
+};
+
+const driverAdvice: Record<string, DriverAdvice> = {
+        cleared: { tone: "warning", id: "ui.driverAdviceCleared" },
+        gpu_unconfigured: {
+                tone: "warning",
+                id: "ui.driverAdviceGpuUnconfigured",
+        },
+        straps_unconfirmed: {
+                tone: "warning",
+                id: "ui.driverAdviceStrapsUnconfirmed",
+        },
+        capability_missing: {
+                tone: "warning",
+                id: "ui.driverAdviceCapabilityMissing",
+        },
+        missing_bridge: { tone: "warning", id: "ui.driverAdviceHardwareMismatch" },
+        bad_bridge: { tone: "warning", id: "ui.driverAdviceHardwareMismatch" },
+        bridge_order: { tone: "warning", id: "ui.driverAdviceHardwareMismatch" },
+        missing_gpu: { tone: "warning", id: "ui.driverAdviceHardwareMismatch" },
+        bad_gpu: { tone: "warning", id: "ui.driverAdviceHardwareMismatch" },
+        bad_setup_attributes: {
+                tone: "warning",
+                id: "ui.driverAdviceSetupVariable",
+        },
+        ambiguous_setup: { tone: "warning", id: "ui.driverAdviceSetupVariable" },
+        missing_setup: { tone: "warning", id: "ui.driverAdviceSetupVariable" },
+        allocation_error: { tone: "error", id: "ui.driverAdviceEfiError" },
+        efi_error: { tone: "error", id: "ui.driverAdviceEfiError" },
+        nvar_api_error: { tone: "error", id: "ui.driverAdviceEfiError" },
+        parse_error: { tone: "error", id: "ui.driverAdviceParseError" },
+};
+
+export const driverAdviceNotice = (
+        status: SystemSnapshot["driverStatus"],
+): DriverAdvice | null => (status && driverAdvice[status.kind]) || null;
+
 export type SystemNoticePresentation = {
         tone: "error" | "warning";
         id: StaticMessageId;
@@ -58,6 +98,8 @@ export function presentSystemNotices(
                 });
         else if (!snapshot.driverStatus)
                 notices.push({ tone: "warning", id: "ui.driverStatusUnavailable" });
+        const advice = driverAdviceNotice(snapshot.driverStatus);
+        if (advice) notices.push(advice);
         if (snapshot.devices.length === 0)
                 notices.push({
                         tone: "warning",
