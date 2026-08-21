@@ -1,198 +1,120 @@
 # NvStrapsReBar
 
-NvStrapsReBar is a Rust/Tauri toolchain for enabling and validating Resizable BAR on NVIDIA
-Turing GPUs (GTX 1600 and RTX 2000). It includes a stable-Rust UEFI driver, firmware preparation,
-an exact-machine deployment plan, Windows EFI-variable configuration, and post-boot evidence.
+**Resizable BAR for NVIDIA Turing GPUs (GTX 1600 / RTX 2000) on motherboards that never got a
+ReBAR BIOS update.**
 
-> **Physical deployment is not yet hardware-verified.** The Rust driver and firmware tooling are
-> covered by host tests and an isolated OVMF/QEMU boot test. No recoverable trial has yet proved a
-> prepared vendor image on the pinned physical machine. The application never flashes firmware,
-> never overwrites the selected source image, and never bypasses vendor signatures.
+[한국어 안내 → README.ko.md](README.ko.md)
 
-Pascal and older NVIDIA GPUs are not supported. Their Windows driver does not accept the changed
-BAR behavior required by this project.
+Turing GPUs support Resizable BAR in hardware, but NVIDIA never shipped it for them, and older
+motherboards have no ReBAR option in BIOS setup. NvStrapsReBar closes that gap with a small UEFI
+driver that runs at boot, before Windows, and widens the GPU's BAR — the memory window the CPU
+uses to reach VRAM — from the default 256 MiB up to the full VRAM size. This repository is a
+stable-Rust implementation of the original C/C++
+[NvStrapsReBar](https://github.com/terminatorul/NvStrapsReBar), together with a Rust/Tauri
+Windows app that prepares your BIOS image and edits the driver's settings.
 
-## What is automated
+## The two steps
 
-The `Install firmware` step provides one guarded, resumable deployment journey:
+The app presents the whole journey as two steps, in the order you meet them:
 
-1. inventory the exact board, BIOS, GPU, bridge, and BAR0 topology;
-2. select and SHA-256 fingerprint an official vendor firmware image;
-3. choose the modern native-ReBAR path or analyze an older image for pinned legacy patches;
-4. pin the recovery and vendor-install routes in an immutable `MachineProfile`;
-5. re-check the current machine and source image before every consequential operation;
-6. build and verify the bundled Rust DXE FFS, apply selected legacy patches when required, and
-   inject the driver into a new artifact;
-7. export the artifact, preserved original, manifests, receipts, operator instructions, and
-   checksums as a deployment package;
-8. record vendor flash and firmware-setting completion only through profile-, step-, and
-   revision-bound operator confirmations;
-9. prove the returned firmware boot and Rust DXE execution from the current boot's volatile status;
-10. derive a guarded configuration from the current Turing inventory, using the canonical registry
-    plus exact-location fallback rules, then validate and save it with byte-for-byte readback;
-11. request a normal restart without `/f`, then advance only after Windows proves a later boot;
-12. accept BAR1 evidence only when every pinned GPU has complete, consistent telemetry matching
-    the independent Windows PCI resource size and exceeding 256 MiB; and
-13. install a pinned official NVIDIA Profile Inspector release, preserve a profile backup, open
-    the external UI, and keep policy completion manual and explicit.
+1. **Install firmware** — pick the official BIOS image for your exact motherboard. The app
+   fingerprints it, adds the NvStrapsReBar DXE driver (plus, for older boards, any BIOS patches
+   you select from the pinned catalogs), and exports a package: the new image, the untouched
+   original, checksums, and step-by-step instructions. You then flash the new image with your
+   vendor's own tool — M-FLASH, a flashback button, whatever your board uses. The app does not
+   flash; that stays in your hands.
+2. **BAR Settings** — once the new BIOS has booted, the app talks to the driver through a UEFI
+   variable. Turn Resizable BAR expansion on or off, set per-GPU sizes or exclusions, and set a
+   motherboard-side BAR limit for boards that need one. Saving asks for one confirmation and
+   takes effect at the next restart.
 
-The application hard-stops on an unapproved identity change, firmware hash, legacy catalog, patch
-match count, stale plan revision, invalid DXE status, unproven reboot, or incomplete BAR1 evidence.
-Only the controlled post-flash handoff may change BIOS version/release date and BAR0, and only the
-configuration reboot may relocate BAR0; each proven boot immediately re-pins the complete current
-identity. Preparation, reboot acceptance, and external-tool launch are never reported as the
-result owned by the next system or person.
+The home screen shows every NVIDIA GPU with its current BAR size and what to do next. If you
+already installed the original NvStrapsReBar with other tools, the app recognizes the expanded
+aperture and edits the same UEFI variable.
 
-## Modern and legacy board paths
+## What you need
 
-| Board path | Application work | Required firmware work |
-| --- | --- | --- |
-| Native ReBAR | Inject the Rust driver and use system-default PCI sizing | Enable ReBAR and Above 4G Decoding; disable CSM if the vendor requires it |
-| Legacy Above 4G | Read-only scan of the exact image, authoritative match counts, selected pinned patches, then driver injection | Enable Above 4G Decoding, disable CSM, and use the documented vendor flash/recovery route |
+- An NVIDIA Turing GPU: GTX 1600 or RTX 2000 series.
+- A motherboard booting in UEFI mode, with **Above 4G Decoding** enabled and **CSM** disabled in
+  BIOS setup.
+- The official BIOS image for your exact board and revision, plus a flash route and a recovery
+  route that actually work (flashback button, dual BIOS, or an SPI programmer).
+- Windows with an administrator account — reading and writing the UEFI variable needs it. The app
+  offers to restart itself as administrator when required.
 
-Legacy analysis classifies every pinned rule as `applicable`, `absent`, or `blocked`. Only exact
-applicable matches can be selected. Zero-risk matches may be recommended; chipset-specific or
-DSDT changes require an explicit risk acknowledgment. Profile creation repeats the complete patch
-operation in memory, so stale counts or incompatible combinations cannot be stored.
+GTX 1000 (Pascal) and older cards are not supported: their Windows driver crashes when the BAR
+changes, so the app does not offer them.
 
-## Manual and physical boundary
+## Current status
 
-These steps intentionally remain outside a generic one-click action:
+The Rust driver and the firmware tooling are covered by host tests and a QEMU/OVMF boot test, but
+no end-to-end flash on a physical machine has been verified by this project yet. A bad BIOS flash
+can leave a board unbootable; continue only after confirming your recovery route works. For the
+MSI PRO Z690-A DDR4 (MS-7D25) the app prefills the documented M-FLASH install and Flash BIOS
+Button recovery routes; on other boards you choose the routes yourself.
 
-- obtain the exact official image for the exact motherboard and revision;
-- verify that the selected recovery route is documented or has actually been tested;
-- review hashes and the prepared artifact before crossing the flash boundary;
-- run the vendor flasher or physical flashback procedure;
-- change UEFI settings and wait through the update without interrupting power;
-- move a USB drive, press a rear-panel button, clear CMOS, use an SPI programmer, or change a GPU;
-- choose per-application NVIDIA policy values in Profile Inspector.
+## Checking the result
 
-For the specifically detected MSI PRO Z690-A DDR4 (MS-7D25), the application can prefill the
-documented M-FLASH route and Flash BIOS Button recovery route. It still requires the operator to
-confirm the exact model, image, recovery capability, and physical actions. A different identity is
-not treated as equivalent.
+Run `nvidia-smi -q -d memory`, or just look at the app's home screen: an expanded GPU shows its
+new BAR size in green. The NVIDIA driver applies Resizable BAR per application, so for game-level
+control the app installs the official
+[NVIDIA Profile Inspector](https://github.com/Orbmu2k/nvidiaProfileInspector) release, backs up
+your current profiles, and opens it for you.
 
-Before any GPU, PCI, or relevant UEFI-setting change, disable NvStrapsReBar, save the disabled
-configuration, reboot, power down, and only then alter the topology. After the change, boot,
-refresh inventory, validate the new topology, re-enable, save, and reboot again. BAR0 addresses
-are allocated by firmware and must never be assumed stable across those changes.
+## Before changing hardware
 
-See [RIIR and one-click deployment boundaries](docs/RIIR_AND_ONE_CLICK.md) for the complete
-separation between source replacement, in-app automation, external adapters, and physical gates.
+Turn the expansion off in BAR Settings, save, shut down, and only then swap GPUs or move cards
+between slots. The driver finds the GPU by addresses the firmware assigns at boot, and those
+addresses move when the hardware changes. Two escape hatches work without Windows: when BIOS
+setup settings change, the driver sits out that boot (this guard is on by default), and after a
+CMOS reset — clock battery pulled or jumper cleared — it saves itself in the off state.
 
-## Build and run
+## Development
 
-Requirements for developers are Node.js 24+, stable Rust with `rustfmt` and `clippy`, and the
-`x86_64-unknown-uefi` Rust target. End users of a packaged build do not need Rust, EDK2, Python,
-BaseTools, a C/C++ compiler, or a separate firmware-volume editor.
+Requirements: Node.js 24+, stable Rust with `rustfmt` and `clippy`, and the `x86_64-unknown-uefi`
+target. Users of a packaged build need none of these.
 
 ```powershell
 npm ci
-npm run check
-npm run check:rust
+npm run check        # TypeScript, unit tests, lint
+npm run check:rust   # fmt, clippy, host and UEFI-target tests
 npm run tauri dev
 ```
 
-Install nightly Miri once and interpret the host-safe contracts plus the actual volatile BAR1
-MMIO read/write implementation with:
+Release builds and the remaining gates:
 
 ```powershell
-rustup toolchain install nightly --component miri --profile minimal
-npm run check:miri
-```
-
-Miri cannot call the external Windows SetupAPI/EFI functions or UEFI protocols. Those target-only
-boundaries remain covered by Windows compilation and tests, UEFI-target Clippy, and QEMU/OVMF;
-the Miri gate dynamically checks only code it can genuinely interpret.
-
-Build the Windows executable and bundled Rust FFS with:
-
-```powershell
-npm run tauri:ci
-```
-
-The outputs are `target/release/NvStrapsReBar.exe` and
-`target/x86_64-unknown-uefi/release/NvStrapsReBar.ffs`. The Tauri build embeds the verified FFS.
-
-Additional gates:
-
-```powershell
-npm run test:e2e
+npm run tauri:ci     # NvStrapsReBar.exe + NvStrapsReBar.ffs (embedded into the app)
+npm run test:e2e     # Playwright journeys
 npm run check:firmware
-npm run check:riir
+npm run check:riir   # rejects tracked C/C++ and the removed EDK2 build trees
+npm run check:miri   # needs: rustup toolchain install nightly --component miri --profile minimal
 ```
 
-On Linux with QEMU and OVMF installed, `npm run test:qemu` boots an injected copy of OVMF with an
-isolated copied variable store. It never accesses host NVRAM.
+`npm run check:miri` interprets the host-safe contracts and the volatile BAR1 MMIO code. Windows
+FFI and UEFI protocol boundaries stay covered by compilation, Clippy, native tests, and — on
+Linux with QEMU and OVMF installed — `npm run test:qemu`, which boots an injected OVMF copy with
+an isolated variable store.
 
-## Windows configuration
-
-The configuration editor (shown under `BAR Settings` until the driver leaves evidence
-in the current boot) inventories NVIDIA adapters, reads the existing EFI configuration and
-driver status, validates drafts against the current topology, and writes only after explicit
-confirmation. A successful write is read back byte-for-byte and still requires a reboot before
-the DXE driver can apply it. Administrator elevation is requested only for the privileged UEFI
-variable boundary.
-
-Both the renderer action and the Rust command are single-flight, so repeated clicks cannot launch
-multiple concurrent UAC prompts. A cancelled or failed elevation request may be tried again.
-
-The `BAR Settings` workspace edits an existing NvStraps configuration after the backend observes
-either the current boot's DXE status or an expanded aperture on a canonical Turing GPU. The latter
-is direct evidence that the NvStraps technique is active because Turing has no native path to an
-expanded ReBAR aperture. A process without EFI-variable privilege may enter BAR Settings but must
-restart as administrator before the saved draft can be loaded or changed.
-
-The application presents the journey as two steps: `Install firmware` and `BAR Settings`.
-With current-boot DXE or expanded-Turing evidence the app opens on BAR Settings and edits the
-token-bound saved configuration; without evidence it opens on Install firmware, and the BAR
-Settings step falls back to the pre-install configuration editor. Each GPU row in the status
-hero identifies its current aperture and whether an application-owned patch configuration can
-be generated.
-
-Newer boards normally use GPU-side Turing auto-configuration and system-default PCI sizing. Older
-boards may also need an explicit PCI target size, but this must follow the exact analyzed board
-profile rather than trial-and-error defaults.
-
-The `Install firmware` step does not submit a browser constant. At the configuration step, Rust
-re-enumerates the exact machine and derives a guarded draft: registry mode `1`, system-default PCI
-sizing, setup-change protection, and exact-location 2 GiB fallback rules only for unlisted Turing
-devices. The recommendation is rederived and must match the submitted draft at the privileged
-write boundary before the wire model is built and validated again.
-
-## NVIDIA evidence and application profiles
-
-The app invokes the installed `nvidia-smi.exe` read-only and records BAR1 totals matched to the
-pinned Windows PCI inventory. The deployment plan advances only when all pinned GPUs are present,
-BAR1 total/used/free are available and consistent, Windows reports the same size independently,
-and the aperture is larger than 256 MiB. This does not prove that every application uses ReBAR.
-
-Per-application enablement remains in the official
-[NVIDIA Profile Inspector](https://github.com/Orbmu2k/nvidiaProfileInspector). The app downloads
-one pinned release from its official GitHub repository, verifies its archive and installed files,
-exports an immutable backup, and then launches the UI. It never silently chooses game profiles.
-
-## Implementation and contracts
+Deeper documentation:
 
 - [Rust UEFI implementation status](docs/RUST_UEFI_PORT.md)
 - [Tauri backend contract](docs/TAURI_BACKEND.md)
 - [RIIR and one-click deployment boundaries](docs/RIIR_AND_ONE_CLICK.md)
-
-The repository-owned runtime and build path are Rust, TypeScript, shell, and data. CI rejects
-tracked C/C++ and the removed C/EDK2 build trees. Windows, WebView2, vendor firmware, motherboard
-flash logic, the NVIDIA driver, GPU vBIOS, QEMU/OVMF, and optional third-party tools remain
-external owners rather than being misrepresented as rewritten code.
+- [Domain language](CONTEXT.md)
 
 ## Credits
 
-This work builds on findings from [envytools](https://github.com/envytools/envytools), @mupuf,
-@Xelafic, and the original [ReBarUEFI](https://github.com/xCuri0/ReBarUEFI) project. The pinned
-legacy patch catalogs retain their upstream provenance and hashes.
+This work builds on the original C/C++
+[NvStrapsReBar](https://github.com/terminatorul/NvStrapsReBar) by @terminatorul, the
+[ReBarUEFI](https://github.com/xCuri0/ReBarUEFI) project it grew from, and findings from
+[envytools](https://github.com/envytools/envytools), @mupuf, and @Xelafic. The pinned legacy
+patch catalogs retain their upstream provenance and hashes.
 
 ## Licenses
 
 Repository-owned source code is distributed under the [MIT license](LICENSE). The bundled
 Pretendard Variable and Jetendard fonts remain under the SIL Open Font License 1.1; they are not
-relicensed under MIT. See [third-party notices](THIRD_PARTY_NOTICES.md) for their pinned provenance
-and hashes, or use the application's **Licenses** button to read the copyright notices and full OFL
-texts offline.
+relicensed under MIT. See [third-party notices](THIRD_PARTY_NOTICES.md) for their pinned
+provenance and hashes, or use the application's **Licenses** button to read the copyright notices
+and full OFL texts offline.
