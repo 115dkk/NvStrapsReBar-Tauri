@@ -722,9 +722,13 @@ pub mod test_support {
         firmware[56..60].copy_from_slice(&1_u32.to_le_bytes());
         firmware[60..64].copy_from_slice(&(length as u32).to_le_bytes());
         firmware[64..72].fill(0);
-        let sum = firmware[..72].chunks_exact(2).fold(0_u16, |sum, pair| {
-            sum.wrapping_add(u16::from_le_bytes([pair[0], pair[1]]))
-        });
+        let sum = firmware[..72]
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .fold(0_u16, |sum, pair| {
+                sum.wrapping_add(u16::from_le_bytes(*pair))
+            });
         firmware[50..52].copy_from_slice(&0_u16.wrapping_sub(sum).to_le_bytes());
 
         let dxe_core = 72;
@@ -740,8 +744,12 @@ pub mod test_support {
     fn decode_hex(value: &str) -> Vec<u8> {
         value
             .as_bytes()
-            .chunks_exact(2)
-            .map(|pair| u8::from_str_radix(std::str::from_utf8(pair).unwrap(), 16).unwrap())
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|pair| {
+                u8::from_str_radix(std::str::from_utf8(pair.as_slice()).unwrap(), 16).unwrap()
+            })
             .collect()
     }
 
