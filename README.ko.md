@@ -7,8 +7,8 @@
 
 Turing GPU는 하드웨어로는 Resizable BAR를 지원하지만 NVIDIA가 끝내 켜 주지 않았고, 오래된
 메인보드에는 BIOS 설정에 ReBAR 항목 자체가 없습니다. NvStrapsReBar가 이 틈을 메웁니다. 부팅
-때 Windows보다 먼저 실행되는 작은 UEFI 드라이버가 GPU의 BAR — CPU가 VRAM을 읽고 쓸 때
-지나가는 메모리 창 — 를 기본 256 MiB에서 VRAM 전체 크기까지 넓혀 줍니다. 이 저장소는 원본
+때 Windows보다 먼저 실행되는 작은 UEFI 드라이버가 GPU의 BAR(CPU가 VRAM을 읽고 쓸 때
+지나가는 메모리 창)를 기본 256 MiB에서 VRAM 전체 크기까지 넓혀 줍니다. 이 저장소는 원본
 C/C++ [NvStrapsReBar](https://github.com/terminatorul/NvStrapsReBar)를 안정판 Rust로 다시 만든
 것으로, BIOS 이미지를 준비하고 드라이버 설정을 고치는 Rust/Tauri Windows 앱까지 함께 들어
 있습니다.
@@ -17,12 +17,12 @@ C/C++ [NvStrapsReBar](https://github.com/terminatorul/NvStrapsReBar)를 안정�
 
 앱은 전체 과정을 만나는 순서 그대로 두 단계로 보여 줍니다.
 
-1. **펌웨어 설치** — 내 메인보드의 공식 BIOS 파일을 고릅니다. 앱이 파일을 확인하고
+1. **펌웨어 설치**: 내 메인보드의 공식 BIOS 파일을 고릅니다. 앱이 파일을 확인하고
    NvStrapsReBar DXE 드라이버를 넣은 뒤(오래된 보드라면 미리 준비된 목록에서 고른 BIOS 패치도
    함께), 새 이미지·손대지 않은 원본·체크섬·따라 하기 안내를 한 묶음으로 내보냅니다. 플래시는
    M-FLASH나 플래시백 버튼처럼 보드 제조사가 주는 도구로 직접 합니다. 앱은 플래시하지
    않습니다.
-2. **BAR 설정** — 새 BIOS로 한 번 부팅하고 나면, 앱이 UEFI 변수를 통해 드라이버와 대화합니다.
+2. **BAR 설정**: 새 BIOS로 한 번 부팅하고 나면, 앱이 UEFI 변수를 통해 드라이버와 대화합니다.
    Resizable BAR 확장을 켜고 끄고, GPU마다 크기를 정하거나 빼고, 필요한 보드에는 메인보드 쪽
    BAR 크기 제한도 정합니다. 저장은 확인 한 번이면 되고, 다음 재시작 때 적용됩니다.
 
@@ -37,7 +37,7 @@ NvStrapsReBar를 설치해 뒀더라도, 앱이 넓어진 BAR를 알아보고 �
   합니다.
 - 내 보드와 리비전에 맞는 공식 BIOS 이미지, 그리고 실제로 되는 플래시 방법과 복구
   방법(플래시백 버튼, 듀얼 BIOS, SPI 프로그래머 등)
-- 관리자 권한을 쓸 수 있는 Windows 계정 — UEFI 변수를 읽고 쓰는 데 필요합니다. 필요해지면
+- 관리자 권한을 쓸 수 있는 Windows 계정 (UEFI 변수를 읽고 쓰는 데 필요합니다). 필요해지면
   앱이 관리자 권한으로 다시 시작할지 물어봅니다.
 
 GTX 1000(Pascal) 이하는 지원하지 않습니다. BAR가 바뀌면 Windows용 NVIDIA 드라이버가 죽기

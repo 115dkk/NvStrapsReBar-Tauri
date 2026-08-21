@@ -140,14 +140,14 @@ test("a DXE driver not observed this boot opens Install firmware and keeps confi
                         name: "메인보드 BIOS에 NvStraps 드라이버 넣기",
                 }),
         ).toBeVisible();
-        await expect(page.getByText("1단계 — 펌웨어 설치에서 드라이버를 BIOS에 넣으세요.")).toBeVisible();
+        await expect(page.getByText("1단계: 펌웨어 설치에서 드라이버를 BIOS에 넣으세요.")).toBeVisible();
 
         const checklist = page.locator(".rail-note.bios-checklist");
         await expect(checklist).toContainText("플래시 전 BIOS 설정에서");
         await expect(checklist).toContainText("Above 4G Decoding 켜기");
         await expect(checklist).toContainText("CSM 끄기");
         await expect(checklist).toContainText(
-                "Resizable BAR 켜기 — 이 보드는 자체 지원이 있습니다",
+                "Resizable BAR 켜기 (이 보드는 자체 지원이 있음)",
         );
 
         const settings = page.getByRole("button", { name: "BAR 설정" });
