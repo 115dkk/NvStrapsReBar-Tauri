@@ -38,6 +38,16 @@ export type GpuDevice = {
 };
 export type ApiError = { code: string; message: string; recoverable: boolean };
 
+export type SettingsSnapshotExportReceipt = {
+        path: string;
+        bytesWritten: number;
+};
+export type SettingsSnapshotInspection = {
+        draft: ConfigDraft;
+        savedAtUnixMs: number;
+        validation: ValidationReport;
+};
+
 export type CurrentBootDxeState =
         | "observedThisBoot"
         | "notObservedThisBoot"

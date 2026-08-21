@@ -223,6 +223,17 @@ Pretendard v1.3.9의 저작권 고지와 SIL OFL 1.1 전문을 앱 안에서 확
 
 ![900×760 Pretendard 라이선스 화면](12-korean-pretendard-license-900x760.png)
 
+### 24. Settings file round-trip
+
+The BAR Settings save area keeps a settings-file row: save the current
+configuration to a JSON file before hardware changes or a CMOS clear, and load
+it later to restore. Loading fills the editor draft and the normal review and
+save path takes over.
+
+[Open full-size image](24-settings-file-round-trip-1180x760.png)
+
+![English BAR Settings with the settings-file row and a loaded-file receipt at 1180 by 760 pixels](24-settings-file-round-trip-1180x760.png)
+
 ---
 
 Captured on Windows with Chromium 151.0.7922.34, 1x device scale, and reduced

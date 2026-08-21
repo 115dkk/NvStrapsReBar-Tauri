@@ -19,6 +19,9 @@ export const ConfigurationReview = ({
                 setDraft,
                 setReport,
                 openSaveConfirmation,
+                settingsFile,
+                exportSettings,
+                importSettings,
         } = useConfigurationWorkspaceController();
         if (!snap) return null;
         return (
@@ -137,6 +140,54 @@ export const ConfigurationReview = ({
                                                 {t(warningId)}
                                         </div>
                                 ))}
+                        <section className="settings-file">
+                                <div>
+                                        <strong>{t("ui.settingsFile")}</strong>
+                                        <p>{t("ui.settingsFileHint")}</p>
+                                </div>
+                                <div className="commit">
+                                        <button
+                                                className="quiet"
+                                                disabled={busy || !snap.config}
+                                                onClick={() =>
+                                                        void exportSettings()
+                                                }
+                                        >
+                                                {t("ui.saveSettingsToFile")}
+                                        </button>
+                                        <button
+                                                className="quiet"
+                                                disabled={busy}
+                                                onClick={() =>
+                                                        void importSettings()
+                                                }
+                                        >
+                                                {t("ui.loadSettingsFromFile")}
+                                        </button>
+                                </div>
+                        </section>
+                        {settingsFile && (
+                                <div className="receipt" role="status">
+                                        <strong>
+                                                {settingsFile.kind ===
+                                                "exported"
+                                                        ? t(
+                                                                  "ui.settingsFileSaved",
+                                                          )
+                                                        : t(
+                                                                  "ui.settingsFileLoaded",
+                                                          )}
+                                        </strong>
+                                        <span>
+                                                {settingsFile.kind ===
+                                                "exported"
+                                                        ? settingsFile.path
+                                                        : t(
+                                                                  "ui.reviewTheLoadedDraftThenSave",
+                                                          )}
+                                        </span>
+                                </div>
+                        )}
                         {receipt?.path === savePath && (
                                 <div className="receipt" role="status">
                                         <strong>

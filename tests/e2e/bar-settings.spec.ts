@@ -140,14 +140,14 @@ test("a DXE driver not observed this boot opens Install firmware and keeps confi
                         name: "메인보드 BIOS에 NvStraps 드라이버 넣기",
                 }),
         ).toBeVisible();
-        await expect(page.getByText("1단계 — 펌웨어 설치에서 드라이버를 BIOS에 넣으세요.")).toBeVisible();
+        await expect(page.getByText("1단계: 펌웨어 설치에서 드라이버를 BIOS에 넣으세요.")).toBeVisible();
 
         const checklist = page.locator(".rail-note.bios-checklist");
         await expect(checklist).toContainText("플래시 전 BIOS 설정에서");
         await expect(checklist).toContainText("Above 4G Decoding 켜기");
         await expect(checklist).toContainText("CSM 끄기");
         await expect(checklist).toContainText(
-                "Resizable BAR 켜기 — 이 보드는 자체 지원이 있습니다",
+                "Resizable BAR 켜기 (이 보드는 자체 지원이 있음)",
         );
 
         const settings = page.getByRole("button", { name: "BAR 설정" });
@@ -204,6 +204,48 @@ test("expanded Turing evidence opens BAR Settings without inventing an editable 
                 page,
                 `${evidence}/english-settings-expanded-no-access-1180x760.png`,
         );
+});
+
+test("settings round-trip through a file: export confirms, import fills a reviewable draft", async ({
+        page,
+}) => {
+        await page.setViewportSize({ width: 1180, height: 760 });
+        await page.goto("/");
+
+        const fileSection = page.locator(".settings-file");
+        await expect(fileSection).toContainText("Settings file");
+        await fileSection
+                .getByRole("button", { name: "Save to file" })
+                .click();
+        await expect(
+                page.getByText("Settings saved to file", { exact: true }),
+        ).toBeVisible();
+
+        await fileSection
+                .getByRole("button", { name: "Load from file" })
+                .click();
+        await expect(
+                page.getByText("Settings loaded from file", { exact: true }),
+        ).toBeVisible();
+        await expect(
+                page.getByText("Review the loaded draft, then save."),
+        ).toBeVisible();
+        await expect(page.getByLabel("Target PCI BAR size")).toHaveValue("10");
+        await expect(
+                page.getByRole("heading", { name: "Draft is ready for review" }),
+        ).toBeVisible();
+        await expect(
+                page.getByRole("button", { name: "Review & save" }),
+        ).toBeEnabled();
+
+        await page.getByTestId("language-select").selectOption("ko");
+        await expect(fileSection).toContainText("설정 파일");
+        await expect(
+                fileSection.getByRole("button", { name: "파일에서 불러오기" }),
+        ).toBeVisible();
+        expect(
+                await page.evaluate(() => window.__NVSTRAPS_I18N_MISSING__ ?? []),
+        ).toEqual([]);
 });
 
 test("a safety-cleared driver explains why it is off and what to do next", async ({

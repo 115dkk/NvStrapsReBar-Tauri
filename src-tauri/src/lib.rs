@@ -13,6 +13,7 @@ mod profile_inspector;
 mod reboot;
 mod resizable_bar;
 mod resizable_bar_commands;
+mod settings_snapshot;
 mod status;
 
 pub fn run() {
@@ -25,6 +26,8 @@ pub fn run() {
             app::validate_config,
             app::save_config,
             bar_settings_commands::save_bar_settings,
+            settings_snapshot::export_bar_settings_snapshot,
+            settings_snapshot::inspect_bar_settings_snapshot,
             app::request_elevation,
             deployment::inspect_firmware_image,
             deployment::analyze_legacy_firmware,

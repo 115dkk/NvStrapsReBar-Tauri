@@ -1513,6 +1513,30 @@ dd {
         font-size: 15px;
         margin: 4px 0;
 }
+.settings-file {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        border: 1px solid #3d4449;
+        border-radius: 10px;
+        padding: 13px 19px;
+        margin-top: 14px;
+}
+.settings-file strong {
+        font-size: 13px;
+}
+.settings-file p {
+        font-size: 12px;
+        color: var(--muted);
+        margin: 3px 0 0;
+        text-wrap: pretty;
+}
+.settings-file .commit {
+        display: flex;
+        gap: 10px;
+        flex-shrink: 0;
+}
 .review p {
         margin: 3px 0;
         color: var(--muted);

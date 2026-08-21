@@ -9,6 +9,24 @@ import { DEFAULT_DRAFT } from "./types";
 describe("native ConfigureBridge BAR Settings contract", () => {
         beforeEach(() => invoke.mockReset());
 
+        it("maps settings snapshot commands onto the chosen file path", async () => {
+                invoke.mockResolvedValue({});
+                await nativeConfigureBridge.exportSettingsSnapshot(
+                        "C:/snap.json",
+                );
+                expect(invoke).toHaveBeenCalledWith(
+                        "export_bar_settings_snapshot",
+                        { path: "C:/snap.json" },
+                );
+                await nativeConfigureBridge.inspectSettingsSnapshot(
+                        "C:/snap.json",
+                );
+                expect(invoke).toHaveBeenCalledWith(
+                        "inspect_bar_settings_snapshot",
+                        { path: "C:/snap.json" },
+                );
+        });
+
         it("invokes save_bar_settings with the nested token-bound request", async () => {
                 invoke.mockResolvedValue({
                         save: {},
