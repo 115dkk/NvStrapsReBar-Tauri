@@ -17,6 +17,8 @@ native boundary.
 | `validate_config` | `{ draft }` | Errors, warnings, affected GPUs, encoded size, change state, and reboot requirement without writing |
 | `save_config` | `{ draft }` | A save receipt only after the EFI variable is written and read back byte-for-byte |
 | `save_bar_settings` | `{ request: { draft, expectedTopologyToken, expectedConfigToken } }` | Settings-only save after control-evidence, topology, and saved-configuration revalidation, followed by exact readback |
+| `export_bar_settings_snapshot` | `{ path }` | Writes the currently saved configuration draft to a JSON settings-snapshot file |
+| `inspect_bar_settings_snapshot` | `{ path }` | Parses a settings-snapshot file and returns its draft with a validation report against the current machine; never writes the EFI variable |
 | `request_elevation` | none | Starts one elevated copy with Windows `runas`, then exits the current copy; concurrent duplicate requests are idempotent |
 
 `ConfigDraft` follows this wire shape:
@@ -249,6 +251,7 @@ Stable error codes are:
 - `deployment_failed`
 - `state_unavailable`
 - `elevation_failed`
+- `settings_snapshot_failed`
 
 `recoverable: true` means the caller may present a correction or retry path. It does not mean the
 backend partially completed a failed operation, and it never converts a manual or physical gate

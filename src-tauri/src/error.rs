@@ -31,6 +31,8 @@ pub enum BackendError {
     StatePoisoned,
     #[error("failed to relaunch with administrator privileges: {0}")]
     Elevation(String),
+    #[error("settings snapshot failed: {0}")]
+    SettingsSnapshot(String),
 }
 
 impl BackendError {
@@ -86,6 +88,7 @@ impl From<BackendError> for ApiError {
             BackendError::Deployment(_) => ("deployment_failed", true, None),
             BackendError::StatePoisoned => ("state_unavailable", false, None),
             BackendError::Elevation(_) => ("elevation_failed", true, None),
+            BackendError::SettingsSnapshot(_) => ("settings_snapshot_failed", true, None),
         };
 
         Self {

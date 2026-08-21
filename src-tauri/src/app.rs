@@ -52,9 +52,9 @@ impl ElevationRequestGate {
 }
 
 #[derive(Default)]
-struct BackendState {
-    devices: Vec<GpuDevice>,
-    config: Option<NvConfig>,
+pub(crate) struct BackendState {
+    pub(crate) devices: Vec<GpuDevice>,
+    pub(crate) config: Option<NvConfig>,
     config_variable_present: Option<bool>,
     firmware_accessible: bool,
 }
@@ -147,10 +147,21 @@ pub fn validate_config(
     draft: ConfigDraft,
     state: State<'_, AppState>,
 ) -> CommandResult<ValidationReport> {
-    let guard = state
-        .inner
-        .lock()
-        .map_err(|_| ApiError::from(BackendError::StatePoisoned))?;
+    let guard = lock_backend_state(&state).map_err(ApiError::from)?;
+    validation_report_for(&draft, &guard)
+}
+
+pub(crate) fn lock_backend_state(
+    state: &AppState,
+) -> BackendResult<std::sync::MutexGuard<'_, BackendState>> {
+    state.inner.lock().map_err(|_| BackendError::StatePoisoned)
+}
+
+pub(crate) fn validation_report_for(
+    draft: &ConfigDraft,
+    guard: &BackendState,
+) -> CommandResult<ValidationReport> {
+    let draft = draft.clone();
     if let Err(error) = validate_draft(&draft, &guard.devices) {
         return Ok(ValidationReport {
             valid: false,
