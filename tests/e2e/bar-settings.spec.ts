@@ -206,6 +206,48 @@ test("expanded Turing evidence opens BAR Settings without inventing an editable 
         );
 });
 
+test("settings round-trip through a file: export confirms, import fills a reviewable draft", async ({
+        page,
+}) => {
+        await page.setViewportSize({ width: 1180, height: 760 });
+        await page.goto("/");
+
+        const fileSection = page.locator(".settings-file");
+        await expect(fileSection).toContainText("Settings file");
+        await fileSection
+                .getByRole("button", { name: "Save to file" })
+                .click();
+        await expect(
+                page.getByText("Settings saved to file", { exact: true }),
+        ).toBeVisible();
+
+        await fileSection
+                .getByRole("button", { name: "Load from file" })
+                .click();
+        await expect(
+                page.getByText("Settings loaded from file", { exact: true }),
+        ).toBeVisible();
+        await expect(
+                page.getByText("Review the loaded draft, then save."),
+        ).toBeVisible();
+        await expect(page.getByLabel("Target PCI BAR size")).toHaveValue("10");
+        await expect(
+                page.getByRole("heading", { name: "Draft is ready for review" }),
+        ).toBeVisible();
+        await expect(
+                page.getByRole("button", { name: "Review & save" }),
+        ).toBeEnabled();
+
+        await page.getByTestId("language-select").selectOption("ko");
+        await expect(fileSection).toContainText("설정 파일");
+        await expect(
+                fileSection.getByRole("button", { name: "파일에서 불러오기" }),
+        ).toBeVisible();
+        expect(
+                await page.evaluate(() => window.__NVSTRAPS_I18N_MISSING__ ?? []),
+        ).toEqual([]);
+});
+
 test("a safety-cleared driver explains why it is off and what to do next", async ({
         page,
 }) => {

@@ -63,8 +63,9 @@ your current profiles, and opens it for you.
 
 ## Before changing hardware
 
-Turn the expansion off in BAR Settings, save, shut down, and only then swap GPUs or move cards
-between slots. The driver finds the GPU by addresses the firmware assigns at boot, and those
+Save your settings to a file first (BAR Settings has a button for it), turn the expansion off,
+save, shut down, and only then swap GPUs or move cards between slots. After the change, load the
+file to restore your settings. The driver finds the GPU by addresses the firmware assigns at boot, and those
 addresses move when the hardware changes. Two escape hatches work without Windows: when BIOS
 setup settings change, the driver sits out that boot (this guard is on by default), and after a
 CMOS reset — clock battery pulled or jumper cleared — it saves itself in the off state.

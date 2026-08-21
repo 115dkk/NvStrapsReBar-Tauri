@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { bridge } from "../bridge";
+import { open as openFileDialog, save as saveFileDialog } from "@tauri-apps/plugin-dialog";
+import { bridge, previewMode } from "../bridge";
 import { barSettingsErrorMessageId } from "../bar-settings-errors";
 import { presentMotherboardSupport } from "../hardware-support";
 import { useI18n } from "../i18n";
@@ -51,7 +52,12 @@ export const useConfigurationWorkspace = () => {
                 [receipt, setReceipt] = useState<{
                         path: "configure" | "settings";
                         save: SaveReceipt;
-                } | null>(null);
+                } | null>(null),
+                [settingsFile, setSettingsFile] = useState<
+                        | { kind: "exported"; path: string }
+                        | { kind: "imported" }
+                        | null
+                >(null);
         const [rebarInspection, setRebarInspection] =
                 useState<ResizableBarInspectionLoadState>({
                         status: "loading",
@@ -106,6 +112,7 @@ export const useConfigurationWorkspace = () => {
                         setDraft(structuredClone(nextDraft));
                         setBaseline(structuredClone(nextDraft));
                         setReport(null);
+                        setSettingsFile(null);
                 } catch (cause) {
                         if (systemSnapshotGeneration.isCurrent(sequence))
                                 setError(
@@ -274,6 +281,7 @@ export const useConfigurationWorkspace = () => {
                                 saved = await bridge.save(draft);
                         }
                         setReceipt({ path: requestedPath, save: saved });
+                        setSettingsFile(null);
                         setDraft(structuredClone(saved.draft));
                         setBaseline(structuredClone(saved.draft));
                         setReport(null);
@@ -343,6 +351,67 @@ export const useConfigurationWorkspace = () => {
                 }
         };
 
+        const settingsFileFilters = [
+                {
+                        name: "NvStrapsReBar settings",
+                        extensions: ["json"],
+                },
+        ];
+        const describeFailure = (cause: unknown) =>
+                message("ui.configureOperationFailed", {
+                        detail:
+                                (cause as { message?: string }).message ||
+                                String(cause),
+                });
+        const exportSettings = async () => {
+                if (busy || !snap?.config) return;
+                setError(null);
+                try {
+                        const path = previewMode
+                                ? "NvStrapsReBar-settings.json"
+                                : await saveFileDialog({
+                                          defaultPath:
+                                                  "NvStrapsReBar-settings.json",
+                                          filters: settingsFileFilters,
+                                  });
+                        if (!path) return;
+                        setBusy(true);
+                        const written =
+                                await bridge.exportSettingsSnapshot(path);
+                        setSettingsFile({
+                                kind: "exported",
+                                path: written.path,
+                        });
+                } catch (cause) {
+                        setError(describeFailure(cause));
+                } finally {
+                        setBusy(false);
+                }
+        };
+        const importSettings = async () => {
+                if (busy) return;
+                setError(null);
+                try {
+                        const path = previewMode
+                                ? "NvStrapsReBar-settings.json"
+                                : await openFileDialog({
+                                          multiple: false,
+                                          filters: settingsFileFilters,
+                                  });
+                        if (!path || Array.isArray(path)) return;
+                        setBusy(true);
+                        const inspection =
+                                await bridge.inspectSettingsSnapshot(path);
+                        setDraft(structuredClone(inspection.draft));
+                        setReport(inspection.validation);
+                        setSettingsFile({ kind: "imported" });
+                } catch (cause) {
+                        setError(describeFailure(cause));
+                } finally {
+                        setBusy(false);
+                }
+        };
+
         const elevate = async () => {
                 if (busy) return;
                 await runSingleFlight(elevationInFlight, async () => {
@@ -392,6 +461,9 @@ export const useConfigurationWorkspace = () => {
                 add,
                 updateRule,
                 save,
+                settingsFile,
+                exportSettings,
+                importSettings,
                 setDraft,
                 setError,
                 setReport,

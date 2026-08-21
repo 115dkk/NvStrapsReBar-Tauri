@@ -7,6 +7,8 @@ import {
         type SaveBarSettingsReceipt,
         type SaveBarSettingsRequest,
         type SaveReceipt,
+        type SettingsSnapshotExportReceipt,
+        type SettingsSnapshotInspection,
         type SystemSnapshot,
         type ValidationReport,
 } from "./types";
@@ -21,6 +23,12 @@ export interface ConfigureBridge {
         saveBarSettings(
                 request: SaveBarSettingsRequest,
         ): Promise<SaveBarSettingsReceipt>;
+        exportSettingsSnapshot(
+                path: string,
+        ): Promise<SettingsSnapshotExportReceipt>;
+        inspectSettingsSnapshot(
+                path: string,
+        ): Promise<SettingsSnapshotInspection>;
         elevate(): Promise<void>;
 }
 
@@ -406,6 +414,23 @@ export const previewConfigureBridge: ConfigureBridge = {
                         configToken: previewConfigToken,
                 };
         },
+        exportSettingsSnapshot: async (path) => ({
+                path,
+                bytesWritten: 214,
+        }),
+        inspectSettingsSnapshot: async () => {
+                const draft = structuredClone(
+                        currentPreviewSnapshot().config?.draft ?? DEFAULT_DRAFT,
+                );
+                draft.targetPciBarSize = 10;
+                return {
+                        draft,
+                        savedAtUnixMs: 1755672000000,
+                        validation: await previewConfigureBridge.validate(
+                                draft,
+                        ),
+                };
+        },
         elevate: async () => {},
 };
 export const nativeConfigureBridge: ConfigureBridge = {
@@ -417,6 +442,10 @@ export const nativeConfigureBridge: ConfigureBridge = {
         save: (draft) => invoke("save_config", { draft }),
         saveBarSettings: (request) =>
                 invoke("save_bar_settings", { request }),
+        exportSettingsSnapshot: (path) =>
+                invoke("export_bar_settings_snapshot", { path }),
+        inspectSettingsSnapshot: (path) =>
+                invoke("inspect_bar_settings_snapshot", { path }),
         elevate: () => invoke("request_elevation"),
 };
 const isTauri = () =>
