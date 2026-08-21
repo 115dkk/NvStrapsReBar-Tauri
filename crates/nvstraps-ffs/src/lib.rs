@@ -362,8 +362,8 @@ fn decode_ui_name(bytes: &[u8]) -> Result<String, PackError> {
     }
     let unit_count = bytes.len() / 2;
     let mut units = Vec::with_capacity(unit_count);
-    for (index, pair) in bytes.chunks_exact(2).enumerate() {
-        let unit = u16::from_le_bytes([pair[0], pair[1]]);
+    for (index, pair) in bytes.as_chunks::<2>().0.iter().enumerate() {
+        let unit = u16::from_le_bytes(*pair);
         if unit == 0 {
             if index + 1 != unit_count {
                 return Err(PackError::InvalidFfs("UI name has data after NUL"));

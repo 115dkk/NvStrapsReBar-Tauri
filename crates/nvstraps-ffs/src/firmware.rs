@@ -1618,8 +1618,10 @@ fn build_firmware_section(
 
 fn header_checksum_is_valid(header: &[u8]) -> bool {
     header
-        .chunks_exact(2)
-        .map(|word| u16::from_le_bytes([word[0], word[1]]))
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|word| u16::from_le_bytes(*word))
         .fold(0_u16, u16::wrapping_add)
         == 0
 }
@@ -2070,8 +2072,10 @@ mod tests {
         firmware[60..64].copy_from_slice(&(length as u32).to_le_bytes());
         firmware[64..72].fill(0);
         let sum = firmware[..72]
-            .chunks_exact(2)
-            .map(|word| u16::from_le_bytes([word[0], word[1]]))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|word| u16::from_le_bytes(*word))
             .fold(0_u16, u16::wrapping_add);
         firmware[FV_CHECKSUM_OFFSET..FV_CHECKSUM_OFFSET + 2]
             .copy_from_slice(&0_u16.wrapping_sub(sum).to_le_bytes());

@@ -8,13 +8,11 @@ const LEGACY_ECMA_POLYNOMIAL: u64 = 0xc96c_5795_d787_0f42;
 /// byte-at-a-time CRC-64 implementation.
 pub fn setup_variable_crc64(data: &[u8]) -> u64 {
     let mut crc = u64::MAX;
-    let mut chunks = data.chunks_exact(8);
-    for chunk in &mut chunks {
-        let word: [u8; 8] = chunk.try_into().expect("chunks_exact yields eight bytes");
-        crc = update_word(crc, word);
+    let (words, remainder) = data.as_chunks::<8>();
+    for word in words {
+        crc = update_word(crc, *word);
     }
 
-    let remainder = chunks.remainder();
     if !remainder.is_empty() {
         let padding = (8 - remainder.len()) as u8;
         let mut word = [padding; 8];
