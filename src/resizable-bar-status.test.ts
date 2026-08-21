@@ -198,7 +198,7 @@ describe("Resizable BAR status presenter", () => {
                 });
 
                 expect(result.gpus[0]).toMatchObject({
-                        patchStateId: "ui.patchConfigurationUnavailable",
+                        patchStateId: "ui.patchConfigurationRegistryExcluded",
                         patchTone: "unavailable",
                 });
         });

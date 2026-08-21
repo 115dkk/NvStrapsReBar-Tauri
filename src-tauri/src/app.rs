@@ -264,12 +264,6 @@ pub fn request_elevation(app: AppHandle, state: State<'_, AppState>) -> CommandR
     Ok(())
 }
 
-#[tauri::command]
-pub fn get_machine_identity() -> CommandResult<MachineIdentity> {
-    let devices = enumerate_gpus().map_err(ApiError::from)?;
-    collect_machine_identity(&devices).map_err(ApiError::from)
-}
-
 fn refresh_snapshot(state: &AppState) -> BackendResult<SystemSnapshot> {
     let access = inspect_access();
     let mut devices = enumerate_gpus()?;

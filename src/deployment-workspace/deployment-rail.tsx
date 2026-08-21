@@ -1,9 +1,12 @@
+import { firmwareInstalled } from "../bar-settings-routing";
 import { useI18n } from "../i18n";
+import { above4gDecodingConfirmed } from "../system-readiness";
 import { useDeploymentWorkspaceController } from "./context";
 import { StatusLine } from "./presentation";
 export const DeploymentRail = () => {
         const { t } = useI18n();
-        const { view, stepCompleted } = useDeploymentWorkspaceController();
+        const { view, snapshot, stepCompleted } =
+                useDeploymentWorkspaceController();
         const {
                 selectedProfile,
                 preflightExact,
@@ -94,6 +97,34 @@ export const DeploymentRail = () => {
                                 <div className="rail-note safety-note">
                                         <strong>{t("ui.nextStep")}</strong>
                                         <p>{t(nextStepTitleId!)}</p>
+                                </div>
+                        )}
+                        {!firmwareInstalled(snapshot) && (
+                                <div className="rail-note bios-checklist">
+                                        <strong>
+                                                {t(
+                                                        "ui.beforeFlashingInBiosSetup",
+                                                )}
+                                        </strong>
+                                        <p>
+                                                {t(
+                                                        above4gDecodingConfirmed(
+                                                                snapshot,
+                                                        )
+                                                                ? "ui.above4gDecodingAlreadyOn"
+                                                                : "ui.turnOnAbove4gDecoding",
+                                                )}
+                                        </p>
+                                        <p>{t("ui.turnOffCsm")}</p>
+                                        {snapshot.hardwareSupport
+                                                ?.motherboardNativeResizableBar
+                                                .state === "supported" && (
+                                                <p>
+                                                        {t(
+                                                                "ui.turnOnNativeRebarToo",
+                                                        )}
+                                                </p>
+                                        )}
                                 </div>
                         )}
                 </aside>

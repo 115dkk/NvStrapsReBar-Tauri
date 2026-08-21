@@ -9,10 +9,9 @@ use nvstraps_deploy::{
     MachineIdentity, MachineProfile, ProfileDifference, ProfileMatch, RecoveryCapability,
     Sha256Digest, StepId, StoredArtifact,
 };
-use nvstraps_legacy::{
-    LegacyCatalogAuthority, LegacyFirmwareCatalogAnalysis, LegacyPatchCatalogView,
-    LegacyPatchReceipt,
-};
+#[cfg(test)]
+use nvstraps_legacy::LegacyPatchCatalogView;
+use nvstraps_legacy::{LegacyCatalogAuthority, LegacyFirmwareCatalogAnalysis, LegacyPatchReceipt};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, path::BaseDirectory};
 
@@ -106,8 +105,8 @@ pub struct LegacyFirmwareAnalysisView {
     pub catalogs: Vec<LegacyFirmwareCatalogAnalysis>,
 }
 
-#[tauri::command]
-pub fn list_legacy_patch_catalogs() -> CommandResult<Vec<LegacyPatchCatalogView>> {
+#[cfg(test)]
+fn legacy_patch_catalog_views() -> CommandResult<Vec<LegacyPatchCatalogView>> {
     legacy_authority()
         .and_then(|authority| authority.catalog_views().map_err(legacy_error))
         .map_err(ApiError::from)
@@ -1036,7 +1035,7 @@ mod tests {
 
     #[test]
     fn built_in_catalogs_are_pinned_and_profile_rules_cannot_be_forged() {
-        let views = list_legacy_patch_catalogs().unwrap();
+        let views = legacy_patch_catalog_views().unwrap();
         assert_eq!(views.len(), 5);
         assert!(views.iter().all(|view| {
             view.upstream_commit == LEGACY_PATCH_UPSTREAM_COMMIT

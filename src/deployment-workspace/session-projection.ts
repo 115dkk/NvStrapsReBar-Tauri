@@ -30,7 +30,6 @@ const riskAcknowledgementMessageIds = {
         dsdtModification: "ui.addDsdtRiskAcknowledgement",
         nvramWhitelist: "ui.addNvramRiskAcknowledgement",
         usbControllerBlacklist: "ui.addUsbRiskAcknowledgement",
-        experimentalX79: "ui.addX79RiskAcknowledgement",
 } as const satisfies Record<LegacyPatchRisk, StaticMessageId>;
 
 const nextActionFor = (stepId?: StepId): DeploymentNextAction => {

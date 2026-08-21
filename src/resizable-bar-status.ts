@@ -59,6 +59,9 @@ const presentGpu = (
         gpu,
         apertureId: apertureIds[gpu.state],
         ...patchPresentation[gpu.patchConfiguration.state],
+        ...(gpu.patchConfiguration.reasonCode === "registryExcluded" && {
+                patchStateId: "ui.patchConfigurationRegistryExcluded" as const,
+        }),
 });
 
 export function createRequestGenerationGuard() {

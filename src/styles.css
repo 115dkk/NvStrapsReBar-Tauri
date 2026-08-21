@@ -1224,6 +1224,12 @@ dd {
         color: var(--muted);
         line-height: 1.5;
 }
+.rail-note.bios-checklist {
+        border-left-color: var(--accent);
+}
+.rail-note.bios-checklist strong {
+        color: var(--accent);
+}
 .content {
         min-width: 0;
         padding: 32px clamp(24px, 4vw, 58px) 72px;

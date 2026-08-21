@@ -142,6 +142,14 @@ test("a DXE driver not observed this boot opens Install firmware and keeps confi
         ).toBeVisible();
         await expect(page.getByText("1단계 — 펌웨어 설치에서 드라이버를 BIOS에 넣으세요.")).toBeVisible();
 
+        const checklist = page.locator(".rail-note.bios-checklist");
+        await expect(checklist).toContainText("플래시 전 BIOS 설정에서");
+        await expect(checklist).toContainText("Above 4G Decoding 켜기");
+        await expect(checklist).toContainText("CSM 끄기");
+        await expect(checklist).toContainText(
+                "Resizable BAR 켜기 — 이 보드는 자체 지원이 있습니다",
+        );
+
         const settings = page.getByRole("button", { name: "BAR 설정" });
         await expect(settings).toBeEnabled();
         await settings.click();
@@ -196,6 +204,35 @@ test("expanded Turing evidence opens BAR Settings without inventing an editable 
                 page,
                 `${evidence}/english-settings-expanded-no-access-1180x760.png`,
         );
+});
+
+test("a safety-cleared driver explains why it is off and what to do next", async ({
+        page,
+}) => {
+        await page.addInitScript(() =>
+                sessionStorage.setItem(
+                        "nvstraps-preview-rebar-state",
+                        "driver-cleared",
+                ),
+        );
+        await page.setViewportSize({ width: 1180, height: 760 });
+        await page.goto("/");
+
+        await expect(
+                page.getByText(
+                        "The driver switched itself off after a BIOS setup change or CMOS reset. Check your BIOS settings, then turn expansion back on and save.",
+                ),
+        ).toBeVisible();
+
+        await page.getByTestId("language-select").selectOption("ko");
+        await expect(
+                page.getByText(
+                        "BIOS 설정 변경이나 CMOS 리셋 때문에 드라이버가 스스로 꺼졌습니다. BIOS 설정을 확인한 뒤 확장을 다시 켜고 저장하세요.",
+                ),
+        ).toBeVisible();
+        expect(
+                await page.evaluate(() => window.__NVSTRAPS_I18N_MISSING__ ?? []),
+        ).toEqual([]);
 });
 
 test("Settings presents a typed stale-configuration failure without false success", async ({
