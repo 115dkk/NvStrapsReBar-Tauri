@@ -252,6 +252,10 @@ const currentPreviewSnapshot = (): SystemSnapshot => {
                         settingsAvailable: false,
                 };
                 value.devices[0].currentBarSize = "268435456";
+                // Pre-install machines usually map every BAR below 4 GiB, so
+                // Above 4G Decoding cannot be confirmed from Windows.
+                value.devices[0].bar0Base = "4026531840";
+                value.devices[0].bar0Top = "4043309055";
         }
         if (previewState() === "driver-cleared") {
                 value.driverStatus = {

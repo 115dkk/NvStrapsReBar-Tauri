@@ -149,6 +149,7 @@ export const useDeploymentWorkspace = (snapshot: SystemSnapshot) => {
         return {
                 view,
                 commands,
+                snapshot,
                 msi: usesMsiProZ690Route(snapshot),
                 stepCompleted,
                 rebootDialog,
