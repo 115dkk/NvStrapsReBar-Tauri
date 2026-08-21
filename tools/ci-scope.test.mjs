@@ -18,6 +18,7 @@ test("recognizes documented CI scope keywords", () => {
 test("accepts only repository documentation and gallery paths", () => {
   for (const file of [
     "README.md",
+    "README.ko.md",
     "AGENTS.md",
     "docs/TAURI_BACKEND.md",
     "docs/frontend-gallery/example.png",

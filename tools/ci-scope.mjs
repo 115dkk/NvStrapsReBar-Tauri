@@ -12,6 +12,7 @@ const ROOT_DOCUMENTS = new Set([
   "CONTRIBUTING.md",
   "CONTEXT.md",
   "README.md",
+  "README.ko.md",
   "SECURITY.md",
 ]);
 
