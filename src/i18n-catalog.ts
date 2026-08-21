@@ -427,6 +427,7 @@ export const messages = {
         "ui.configurationNotNeeded": { en: "Not needed", ko: "불필요" },
         "ui.patchConfigurationAvailable": { en: "Available", ko: "가능" },
         "ui.patchConfigurationUnavailable": { en: "Unavailable", ko: "불가" },
+        "ui.patchConfigurationRegistryExcluded": { en: "Excluded — known problems on this model", ko: "제외됨 — 이 모델은 알려진 문제가 있음" },
         "ui.patchConfigurationIndeterminate": { en: "Indeterminate", ko: "판정 불가" },
         "ui.alreadyAbsentCompatibilityPattern": { en: "Already absent compatibility pattern", ko: "이미 없는 호환성 패턴" },
 } as const;
