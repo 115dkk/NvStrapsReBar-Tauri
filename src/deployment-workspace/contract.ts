@@ -37,8 +37,7 @@ export type FirmwareInstallRoute = {
 export type LegacyPatchRisk =
         | "dsdtModification"
         | "nvramWhitelist"
-        | "usbControllerBlacklist"
-        | "experimentalX79";
+        | "usbControllerBlacklist";
 export type LegacyPatchCatalogFile =
         | "general"
         | "haswellAbove4g"

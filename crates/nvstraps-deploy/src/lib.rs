@@ -265,7 +265,6 @@ pub enum LegacyPatchRisk {
     DsdtModification,
     NvramWhitelist,
     UsbControllerBlacklist,
-    ExperimentalX79,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -1489,7 +1488,6 @@ const fn legacy_risk_code(risk: LegacyPatchRisk) -> u8 {
         LegacyPatchRisk::DsdtModification => 1,
         LegacyPatchRisk::NvramWhitelist => 2,
         LegacyPatchRisk::UsbControllerBlacklist => 3,
-        LegacyPatchRisk::ExperimentalX79 => 4,
     }
 }
 

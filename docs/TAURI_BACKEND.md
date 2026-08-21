@@ -18,7 +18,6 @@ native boundary.
 | `save_config` | `{ draft }` | A save receipt only after the EFI variable is written and read back byte-for-byte |
 | `save_bar_settings` | `{ request: { draft, expectedTopologyToken, expectedConfigToken } }` | Settings-only save after control-evidence, topology, and saved-configuration revalidation, followed by exact readback |
 | `request_elevation` | none | Starts one elevated copy with Windows `runas`, then exits the current copy; concurrent duplicate requests are idempotent |
-| `get_machine_identity` | none | Exact board, BIOS, GPU, bridge, and BAR0 identity from Windows and live PCI inventory |
 
 `ConfigDraft` follows this wire shape:
 
@@ -118,7 +117,6 @@ default draft encodes as deletion of the saved operational configuration.
 | --- | --- | --- |
 | `inspect_firmware_image` | `{ path }` | Canonical absolute path inspection returning file name, byte length, and SHA-256 |
 | `analyze_legacy_firmware` | `{ path }` | Read-only rule analysis of the exact image, its fingerprint, pinned upstream commit, catalog hashes, match counts, risks, and blocked reasons |
-| `list_legacy_patch_catalogs` | none | Metadata for every compiled-in, content-addressed legacy catalog and rule |
 | `create_machine_profile` | `{ request }` | Immutable profile, preserved/re-hashed original, and initial append-only plan |
 | `list_machine_profiles` | none | All validated profiles in the application data store |
 | `get_deployment_plan` | `{ profileId }` | Newest validated revision from the append-only plan history |
@@ -151,8 +149,7 @@ type LegacyFirmwareRuleAnalysis = {
 ```
 
 The catalog values are `general`, `haswellAbove4g`, `ivyBridgeUsb3`, `haswellUsb3`, and
-`broadwellUsb3`. Risks are `dsdtModification`, `nvramWhitelist`, `usbControllerBlacklist`, and
-`experimentalX79`.
+`broadwellUsb3`. Risks are `dsdtModification`, `nvramWhitelist`, and `usbControllerBlacklist`.
 
 `recommended` is true only for an applicable exact match with no declared risk. It is a safe
 default-selection hint, not approval to flash. `expectedMatches` is authoritative only for an

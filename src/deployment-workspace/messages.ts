@@ -32,7 +32,6 @@ export const riskLabelIds: Record<LegacyPatchRisk, StaticMessageId> = {
         dsdtModification: "ui.dsdtModification",
         nvramWhitelist: "ui.nvramWhitelistChange",
         usbControllerBlacklist: "ui.usbControllerBlacklist",
-        experimentalX79: "ui.experimentalX79Patch",
 };
 
 export const stepStateIds: Record<DeploymentStep["state"], StaticMessageId> = {
