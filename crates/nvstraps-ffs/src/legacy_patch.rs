@@ -317,7 +317,7 @@ impl MaskedPattern {
         let mut values = Vec::with_capacity(text.len() / 2);
         let mut masks = Vec::with_capacity(text.len() / 2);
         let bytes = text.as_bytes();
-        for pair in bytes.chunks_exact(2) {
+        for pair in bytes.as_chunks::<2>().0 {
             let (high_value, high_mask) = parse_nibble(pair[0], line)?;
             let (low_value, low_mask) = parse_nibble(pair[1], line)?;
             values.push((high_value << 4) | low_value);
@@ -397,8 +397,8 @@ fn parse_guid(text: &str, line: usize) -> Result<[u8; 16], LegacyPatchError> {
     guid[..4].copy_from_slice(&data1.to_le_bytes());
     guid[4..6].copy_from_slice(&data2.to_le_bytes());
     guid[6..8].copy_from_slice(&data3.to_le_bytes());
-    for (index, pair) in tail.as_bytes().chunks_exact(2).enumerate() {
-        let pair = std::str::from_utf8(pair).expect("GUID pairs are ASCII boundaries");
+    for (index, pair) in tail.as_bytes().as_chunks::<2>().0.iter().enumerate() {
+        let pair = std::str::from_utf8(pair.as_slice()).expect("GUID pairs are ASCII boundaries");
         guid[8 + index] =
             u8::from_str_radix(pair, 16).map_err(|_| invalid(line, "file GUID is malformed"))?;
     }
