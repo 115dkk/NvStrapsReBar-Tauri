@@ -6,11 +6,13 @@ mod legacy_patch;
 
 pub use efi_compression::{EfiCompression, EfiCompressionError, efi_compress, efi_decompress};
 pub use firmware::{
-    FirmwareEnvelope, FirmwareInjection, InjectionError, LegacyFirmwareCatalogAnalysis,
+    FirmwareEnvelope, FirmwareFilePath, FirmwareInjection, FirmwareInjectionBatch,
+    FirmwareInjectionPlan, FirmwareVolumePath, InjectionError, LegacyFirmwareCatalogAnalysis,
     LegacyFirmwarePatch, LegacyFirmwarePatchApplication, LegacyFirmwarePatchChange,
     LegacyFirmwarePatchError, LegacyFirmwarePatchPath, LegacyFirmwareRuleAnalysis,
-    LegacyFirmwareRuleDisposition, LegacyPatchSelection, UefiCapsuleHeader,
-    analyze_legacy_firmware, inject_ffs, inspect_firmware_envelope, patch_legacy_firmware,
+    LegacyFirmwareRuleDisposition, LegacyPatchSelection, MalformedCapsuleHeader, UefiCapsuleHeader,
+    UefiCapsuleKind, analyze_legacy_firmware, inject_ffs, inject_ffs_all_targets,
+    inject_ffs_with_plan, inspect_firmware_envelope, patch_legacy_firmware, plan_ffs_injection,
 };
 pub use legacy_patch::{
     LegacyPatchApplication, LegacyPatchCatalog, LegacyPatchChange, LegacyPatchError,
@@ -19,6 +21,7 @@ pub use legacy_patch::{
 
 pub const DRIVER_NAME: &str = "NvStrapsReBar";
 pub const FFS_FILE_GUID: &str = "90d10790-bbfa-404b-873b-5bdb3ada3c56";
+pub const BUNDLED_DRIVER_FFS_SIZE_CEILING: usize = 24 * 1024;
 pub const FFS_FILE_GUID_BYTES: [u8; 16] = [
     0x90, 0x07, 0xd1, 0x90, 0xfa, 0xbb, 0x4b, 0x40, 0x87, 0x3b, 0x5b, 0xdb, 0x3a, 0xda, 0x3c, 0x56,
 ];
@@ -65,6 +68,7 @@ pub struct FfsInspection {
 pub enum PackError {
     InvalidPe(&'static str),
     InvalidFfs(&'static str),
+    BundledDriverTooLarge { actual: usize, maximum: usize },
 }
 
 impl fmt::Display for PackError {
@@ -72,6 +76,10 @@ impl fmt::Display for PackError {
         match self {
             Self::InvalidPe(reason) => write!(formatter, "invalid UEFI PE image: {reason}"),
             Self::InvalidFfs(reason) => write!(formatter, "invalid FFS file: {reason}"),
+            Self::BundledDriverTooLarge { actual, maximum } => write!(
+                formatter,
+                "bundled driver FFS is {actual} bytes; the measured size ceiling is {maximum} bytes"
+            ),
         }
     }
 }
@@ -192,6 +200,16 @@ pub fn build_ffs(driver_image: &[u8]) -> Result<Vec<u8>, PackError> {
     // Never emit an artifact that cannot make that round trip.
     inspect_ffs(&serialized)?;
     Ok(serialized)
+}
+
+pub fn inspect_bundled_ffs(bytes: &[u8]) -> Result<FfsInspection, PackError> {
+    if bytes.len() > BUNDLED_DRIVER_FFS_SIZE_CEILING {
+        return Err(PackError::BundledDriverTooLarge {
+            actual: bytes.len(),
+            maximum: BUNDLED_DRIVER_FFS_SIZE_CEILING,
+        });
+    }
+    inspect_ffs(bytes)
 }
 
 pub fn inspect_ffs(bytes: &[u8]) -> Result<FfsInspection, PackError> {
@@ -466,6 +484,20 @@ mod tests {
         let mut ffs = build_ffs(&synthetic_driver_image()).expect("FFS build");
         ffs[FFS_HEADER_SIZE + SECTION_HEADER_SIZE + 0x20] ^= 0xff;
         assert!(inspect_ffs(&ffs).is_err());
+    }
+
+    #[test]
+    fn enforces_the_measured_bundled_driver_size_ceiling() {
+        let mut oversized = build_ffs(&synthetic_driver_image()).expect("FFS build");
+        oversized.resize(BUNDLED_DRIVER_FFS_SIZE_CEILING + 1, 0);
+
+        assert!(matches!(
+            inspect_bundled_ffs(&oversized),
+            Err(PackError::BundledDriverTooLarge {
+                actual,
+                maximum: BUNDLED_DRIVER_FFS_SIZE_CEILING,
+            }) if actual == BUNDLED_DRIVER_FFS_SIZE_CEILING + 1
+        ));
     }
 
     pub(crate) fn synthetic_driver_image() -> Vec<u8> {

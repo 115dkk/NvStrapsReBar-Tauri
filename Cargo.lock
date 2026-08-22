@@ -1668,6 +1668,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad"
 
 [[package]]
+name = "lzma-sdk-rs"
+version = "0.2301.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2bcd2b73b761b866258ca43401fa0d3119f54fbff51132539e8d1d2b05a73a53"
+
+[[package]]
 name = "markup5ever"
 version = "0.38.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1826,6 +1832,8 @@ dependencies = [
 name = "nvstraps-ffs"
 version = "0.1.0"
 dependencies = [
+ "flate2",
+ "lzma-sdk-rs",
  "oxiarc-lzma",
  "sha2",
 ]
