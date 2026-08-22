@@ -1,13 +1,15 @@
 use std::{
+    borrow::Cow,
+    fmt::Write as _,
     fs,
     path::{Path, PathBuf},
 };
 
 use nvstraps_deploy::{
     ArtifactKind, BoardPath, DeploymentPackageReceipt, DeploymentPlan, DeploymentStore,
-    DeploymentWorkflow, FirmwareFingerprint, FirmwareInstallRoute, LegacyPatchProfile,
-    MachineIdentity, MachineProfile, ProfileDifference, ProfileMatch, RecoveryCapability,
-    Sha256Digest, StepId, StoredArtifact,
+    DeploymentWorkflow, FirmwareFingerprint, FirmwareInstallRoute, FirmwareTargetPolicy,
+    LegacyPatchProfile, MachineIdentity, MachineProfile, ProfileDifference, ProfileError,
+    ProfileMatch, ProvisionedDeployment, RecoveryCapability, Sha256Digest, StepId, StoredArtifact,
 };
 #[cfg(test)]
 use nvstraps_legacy::LegacyPatchCatalogView;
@@ -30,6 +32,8 @@ pub struct CreateProfileRequest {
     pub expected_firmware: FirmwareFingerprint,
     pub recovery: RecoveryCapability,
     pub firmware_install: FirmwareInstallRoute,
+    #[serde(default)]
+    pub firmware_target_policy: FirmwareTargetPolicy,
     pub legacy_patches: Option<LegacyPatchProfile>,
 }
 
@@ -73,6 +77,7 @@ pub struct FirmwarePreparation {
     pub legacy_patch_receipt: Option<StoredArtifact>,
     pub legacy_patch: Option<LegacyPatchReceipt>,
     pub patched_firmware: Option<StoredArtifact>,
+    pub firmware_injection_receipt: Option<StoredArtifact>,
     pub injection: Option<InjectionReceipt>,
 }
 
@@ -84,15 +89,35 @@ pub(crate) struct ExactDeployment {
     pub current_identity: MachineIdentity,
 }
 
-#[derive(Clone, Copy, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InjectionReceipt {
-    pub firmware_volume_offset: usize,
-    pub file_offset: usize,
+    pub firmware_target_policy: FirmwareTargetPolicy,
+    pub policy_version: u8,
+    pub source_sha256: String,
+    pub driver_sha256: String,
+    pub patched_firmware_sha256: String,
+    pub census_sha256: String,
+    pub patched_target_count: usize,
+    pub grew_firmware_volume: bool,
+    pub firmware_volume_growth_bytes: usize,
+    pub targets: Vec<InjectionTargetReceipt>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InjectionTargetReceipt {
+    pub target_container_file_offsets: Vec<usize>,
+    pub target_firmware_volume_offset: usize,
+    pub driver_file_offset: usize,
+    pub container_firmware_volume_offset: usize,
+    pub container_file_offset: usize,
     pub replaced_pad_file: bool,
     pub erase_polarity: bool,
     pub encapsulated_volume_image: bool,
     pub recompressed_guided_section: bool,
+    pub grew_firmware_volume: bool,
+    pub firmware_volume_growth_bytes: usize,
 }
 
 const MAX_FIRMWARE_IMAGE_BYTES: u64 = 512 * 1024 * 1024;
@@ -154,11 +179,16 @@ fn create_profile_command(
     let devices = enumerate_gpus()?;
     let identity = collect_machine_identity(&devices)?;
     let profile = build_profile(request, identity, firmware)?;
-    if profile.legacy_patches.is_some() {
-        let original = read_firmware_image(&firmware_path, &profile.original_firmware)?;
-        verify_legacy_profile_application(&profile, &original)?;
-    }
-    let provisioned = store(app)?.provision_profile(&profile, &firmware_path)?;
+    let original = read_firmware_image(&firmware_path, &profile.original_firmware)?;
+    let driver_ffs = read_bundled_driver(app)?;
+    let deployment_store = store(app)?;
+    let provisioned = provision_feasible_profile(
+        &deployment_store,
+        &profile,
+        &firmware_path,
+        &original,
+        &driver_ffs,
+    )?;
     Ok(DeploymentBundle {
         profile: provisioned.profile,
         plan: provisioned.plan,
@@ -261,28 +291,44 @@ fn export_package_command(
     request: ExportDeploymentPackageRequest,
 ) -> BackendResult<DeploymentPackageReceipt> {
     let exact = load_exact_deployment(app, &request.profile_id, "deployment package export")?;
+    let injection_receipt_sha256 =
+        validate_persisted_patched_artifact(&exact.store, &exact.profile, &exact.plan)?
+            .ok_or_else(|| {
+                BackendError::Deployment(
+                    "deployment package export requires a verified firmware injection receipt"
+                        .into(),
+                )
+            })?;
     exact
         .store
-        .export_deployment_package(&exact.profile, &exact.plan, request.destination_root)
+        .export_deployment_package(
+            &exact.profile,
+            &exact.plan,
+            &injection_receipt_sha256,
+            request.destination_root,
+        )
         .map_err(BackendError::from)
 }
 
 fn prepare_command(app: &AppHandle, profile_id: &str) -> BackendResult<FirmwarePreparation> {
     let exact = load_exact_deployment(app, profile_id, "firmware preparation")?;
+    let driver_ffs = read_bundled_driver(app)?;
+    prepare_from_bytes(&exact.store, &exact.profile, exact.plan, &driver_ffs)
+}
 
+fn read_bundled_driver(app: &AppHandle) -> BackendResult<Vec<u8>> {
     let driver_path = app
         .path()
         .resolve("NvStrapsReBar.ffs", BaseDirectory::Resource)
         .map_err(|error| {
             BackendError::Deployment(format!("bundled Rust driver path failed: {error}"))
         })?;
-    let driver_ffs = fs::read(&driver_path).map_err(|error| {
+    fs::read(&driver_path).map_err(|error| {
         BackendError::Deployment(format!(
             "bundled Rust driver could not be read at {}: {error}",
             driver_path.display()
         ))
-    })?;
-    prepare_from_bytes(&exact.store, &exact.profile, exact.plan, &driver_ffs)
+    })
 }
 
 pub(crate) fn load_exact_deployment(
@@ -359,7 +405,7 @@ fn prepare_from_bytes(
         let (artifact, bytes) = store
             .load_artifact(profile, ArtifactKind::RustDriverFfs)
             .map_err(BackendError::from)?;
-        nvstraps_ffs::inspect_ffs(&bytes).map_err(|error| {
+        nvstraps_ffs::inspect_bundled_ffs(&bytes).map_err(|error| {
             BackendError::Deployment(format!("persisted Rust driver is invalid: {error}"))
         })?;
         workflow
@@ -372,7 +418,7 @@ fn prepare_from_bytes(
             .plan()
             .require_active(StepId::PrepareRustDriver)
             .map_err(BackendError::from)?;
-        nvstraps_ffs::inspect_ffs(bundled_driver).map_err(|error| {
+        nvstraps_ffs::inspect_bundled_ffs(bundled_driver).map_err(|error| {
             BackendError::Deployment(format!("bundled Rust driver is invalid: {error}"))
         })?;
         let artifact = store
@@ -397,7 +443,8 @@ fn prepare_from_bytes(
                     .require_active(StepId::ApplyLegacyBoardPatches)
                     .map_err(BackendError::from)?;
                 let original = read_preserved_original(store, profile)?;
-                let (patched, receipt) = apply_builtin_legacy_patches(profile, &original)?;
+                let payload = firmware_payload_for_profile(profile, &original)?;
+                let (patched, receipt) = apply_builtin_legacy_patches(profile, payload.as_ref())?;
                 let patched_artifact = store
                     .preserve_artifact(profile, ArtifactKind::LegacyPatchedFirmware, &patched)
                     .map_err(BackendError::from)?;
@@ -434,9 +481,11 @@ fn prepare_from_bytes(
         .plan()
         .is_step_completed(StepId::VerifyPatchedArtifact)
     {
+        let _ = validate_persisted_patched_artifact(store, profile, workflow.plan())?;
         let (artifact, _) = store
             .load_artifact(profile, ArtifactKind::PatchedFirmware)
             .map_err(BackendError::from)?;
+        let (injection_receipt_artifact, injection) = load_injection_receipt(store, profile)?;
         workflow
             .plan()
             .require_completed_value(StepId::VerifyPatchedArtifact, artifact.sha256.as_str())
@@ -448,7 +497,8 @@ fn prepare_from_bytes(
             legacy_patch_receipt,
             legacy_patch,
             patched_firmware: Some(artifact),
-            injection: None,
+            firmware_injection_receipt: Some(injection_receipt_artifact),
+            injection: Some(injection),
         });
     }
 
@@ -465,10 +515,10 @@ fn prepare_from_bytes(
             .map_err(BackendError::from)?
             .1
     } else {
-        read_preserved_original(store, profile)?
+        let original = read_preserved_original(store, profile)?;
+        firmware_payload_for_profile(profile, &original)?.into_owned()
     };
-    let (patched, injection) = nvstraps_ffs::inject_ffs(&base_firmware, &driver_bytes)
-        .map_err(|error| BackendError::Deployment(format!("firmware injection failed: {error}")))?;
+    let (patched, injection) = inject_ffs_for_profile(profile, &base_firmware, &driver_bytes)?;
     match nvstraps_ffs::inject_ffs(&patched, &driver_bytes) {
         Err(nvstraps_ffs::InjectionError::DriverAlreadyPresent) => {}
         Err(error) => {
@@ -485,6 +535,19 @@ fn prepare_from_bytes(
     let patched_firmware = store
         .preserve_artifact(profile, ArtifactKind::PatchedFirmware, &patched)
         .map_err(BackendError::from)?;
+    let injection = injection_receipt(profile, injection, &patched_firmware.sha256)?;
+    let injection_receipt_bytes = serde_json::to_vec_pretty(&injection).map_err(|error| {
+        BackendError::Deployment(format!(
+            "firmware injection receipt could not be encoded: {error}"
+        ))
+    })?;
+    let injection_receipt_artifact = store
+        .preserve_artifact(
+            profile,
+            ArtifactKind::FirmwareInjectionReceipt,
+            &injection_receipt_bytes,
+        )
+        .map_err(BackendError::from)?;
     workflow
         .record_step(
             StepId::VerifyPatchedArtifact,
@@ -499,15 +562,90 @@ fn prepare_from_bytes(
         legacy_patch_receipt,
         legacy_patch,
         patched_firmware: Some(patched_firmware),
-        injection: Some(InjectionReceipt {
-            firmware_volume_offset: injection.firmware_volume_offset,
-            file_offset: injection.file_offset,
-            replaced_pad_file: injection.replaced_pad_file,
-            erase_polarity: injection.erase_polarity,
-            encapsulated_volume_image: injection.encapsulated_volume_image,
-            recompressed_guided_section: injection.recompressed_guided_section,
-        }),
+        firmware_injection_receipt: Some(injection_receipt_artifact),
+        injection: Some(injection),
     })
+}
+
+fn injection_receipt(
+    profile: &MachineProfile,
+    injection: nvstraps_ffs::FirmwareInjectionBatch,
+    patched_firmware_sha256: &Sha256Digest,
+) -> BackendResult<InjectionReceipt> {
+    let policy_version = injection.plan.policy_version;
+    let source_sha256 = sha256_bytes_hex(&injection.plan.source_sha256);
+    let driver_sha256 = sha256_bytes_hex(&injection.plan.driver_sha256);
+    let census_sha256 = sha256_bytes_hex(&injection.plan.census_sha256);
+    let patched_target_count = injection.targets.len();
+    let grew_firmware_volume = injection
+        .targets
+        .iter()
+        .any(|target| target.grew_firmware_volume);
+    let firmware_volume_growth_bytes =
+        injection
+            .targets
+            .iter()
+            .try_fold(0_usize, |total, target| {
+                total
+                    .checked_add(target.firmware_volume_growth_bytes)
+                    .ok_or_else(|| {
+                        BackendError::Deployment(
+                            "firmware-volume growth receipt byte count overflowed".into(),
+                        )
+                    })
+            })?;
+    let targets = injection
+        .targets
+        .into_iter()
+        .map(|target| InjectionTargetReceipt {
+            target_container_file_offsets: target.target.container_file_offsets,
+            target_firmware_volume_offset: target.target.firmware_volume_offset,
+            driver_file_offset: target.driver_file_offset,
+            container_firmware_volume_offset: target.firmware_volume_offset,
+            container_file_offset: target.file_offset,
+            replaced_pad_file: target.replaced_pad_file,
+            erase_polarity: target.erase_polarity,
+            encapsulated_volume_image: target.encapsulated_volume_image,
+            recompressed_guided_section: target.recompressed_guided_section,
+            grew_firmware_volume: target.grew_firmware_volume,
+            firmware_volume_growth_bytes: target.firmware_volume_growth_bytes,
+        })
+        .collect();
+    Ok(InjectionReceipt {
+        firmware_target_policy: profile.firmware_target_policy,
+        policy_version,
+        source_sha256,
+        driver_sha256,
+        patched_firmware_sha256: patched_firmware_sha256.to_string(),
+        census_sha256,
+        patched_target_count,
+        grew_firmware_volume,
+        firmware_volume_growth_bytes,
+        targets,
+    })
+}
+
+fn load_injection_receipt(
+    store: &DeploymentStore,
+    profile: &MachineProfile,
+) -> BackendResult<(StoredArtifact, InjectionReceipt)> {
+    let (artifact, bytes) = store
+        .load_artifact(profile, ArtifactKind::FirmwareInjectionReceipt)
+        .map_err(BackendError::from)?;
+    let receipt = serde_json::from_slice(&bytes).map_err(|error| {
+        BackendError::Deployment(format!(
+            "firmware injection receipt could not be decoded: {error}"
+        ))
+    })?;
+    Ok((artifact, receipt))
+}
+
+fn sha256_bytes_hex(bytes: &[u8; 32]) -> String {
+    let mut encoded = String::with_capacity(64);
+    for byte in bytes {
+        write!(&mut encoded, "{byte:02x}").expect("writing to a String cannot fail");
+    }
+    encoded
 }
 
 fn read_preserved_original(
@@ -517,11 +655,63 @@ fn read_preserved_original(
     let original_path = store
         .original_firmware_path(&profile.profile_id)
         .map_err(BackendError::from)?;
-    fs::read(&original_path).map_err(|error| {
-        BackendError::Deployment(format!(
-            "preserved original firmware could not be read: {error}"
-        ))
-    })
+    read_firmware_image(&original_path, &profile.original_firmware)
+}
+
+pub(crate) fn validate_persisted_patched_artifact(
+    store: &DeploymentStore,
+    profile: &MachineProfile,
+    plan: &DeploymentPlan,
+) -> BackendResult<Option<Sha256Digest>> {
+    if !plan.is_step_completed(StepId::VerifyPatchedArtifact) {
+        return Ok(None);
+    }
+
+    let (driver_artifact, driver_bytes) = store
+        .load_artifact(profile, ArtifactKind::RustDriverFfs)
+        .map_err(BackendError::from)?;
+    plan.require_completed_value(StepId::PrepareRustDriver, driver_artifact.sha256.as_str())
+        .map_err(BackendError::from)?;
+    nvstraps_ffs::inspect_bundled_ffs(&driver_bytes)
+        .map_err(nvstraps_ffs::InjectionError::from)
+        .map_err(BackendError::FirmwareInjection)?;
+
+    let base_firmware = if profile.board_path == BoardPath::LegacyAbove4g {
+        let _ = load_legacy_patch_artifacts(store, profile, plan)?;
+        store
+            .load_artifact(profile, ArtifactKind::LegacyPatchedFirmware)
+            .map_err(BackendError::from)?
+            .1
+    } else {
+        let original = read_preserved_original(store, profile)?;
+        firmware_payload_for_profile(profile, &original)?.into_owned()
+    };
+    let (expected, expected_injection) =
+        inject_ffs_for_profile(profile, &base_firmware, &driver_bytes)?;
+    let (patched_artifact, patched_bytes) = store
+        .load_artifact(profile, ArtifactKind::PatchedFirmware)
+        .map_err(BackendError::from)?;
+    plan.require_completed_value(
+        StepId::VerifyPatchedArtifact,
+        patched_artifact.sha256.as_str(),
+    )
+    .map_err(BackendError::from)?;
+    if patched_bytes != expected {
+        return Err(BackendError::Deployment(
+            "persisted patched firmware does not match the current atomic all-target injector; create a new machine profile so every proven DXE target is rebuilt"
+                .into(),
+        ));
+    }
+    let expected_receipt =
+        injection_receipt(profile, expected_injection, &patched_artifact.sha256)?;
+    let (receipt_artifact, persisted_receipt) = load_injection_receipt(store, profile)?;
+    if persisted_receipt != expected_receipt {
+        return Err(BackendError::Deployment(
+            "persisted firmware injection receipt does not match the exact current all-target rebuild"
+                .into(),
+        ));
+    }
+    Ok(Some(receipt_artifact.sha256))
 }
 
 fn apply_builtin_legacy_patches(
@@ -593,15 +783,30 @@ fn build_profile(
     identity: MachineIdentity,
     firmware: FirmwareFingerprint,
 ) -> BackendResult<MachineProfile> {
-    let profile = MachineProfile::create_with_legacy(
-        request.display_name,
-        request.board_path,
-        identity,
-        firmware,
-        request.recovery,
-        request.firmware_install,
-        request.legacy_patches,
-    )
+    let profile = match (request.board_path, request.legacy_patches) {
+        (BoardPath::NativeResizableBar, None) => MachineProfile::create_with_target_policy(
+            request.display_name,
+            request.board_path,
+            identity,
+            firmware,
+            request.recovery,
+            request.firmware_install,
+            request.firmware_target_policy,
+        ),
+        (BoardPath::LegacyAbove4g, Some(legacy_patches)) => {
+            MachineProfile::create_legacy_with_target_policy(
+                request.display_name,
+                identity,
+                firmware,
+                request.recovery,
+                request.firmware_install,
+                legacy_patches,
+                request.firmware_target_policy,
+            )
+        }
+        (BoardPath::NativeResizableBar, Some(_)) => Err(ProfileError::LegacyPatchProfileForbidden),
+        (BoardPath::LegacyAbove4g, None) => Err(ProfileError::LegacyPatchProfileRequired),
+    }
     .map_err(BackendError::from)?;
     validate_builtin_legacy_profile(&profile)?;
     Ok(profile)
@@ -688,15 +893,94 @@ fn read_firmware_image(path: &Path, expected: &FirmwareFingerprint) -> BackendRe
     Ok(bytes)
 }
 
+#[cfg(test)]
 fn verify_legacy_profile_application(
     profile: &MachineProfile,
     original: &[u8],
 ) -> BackendResult<()> {
-    if profile.legacy_patches.is_none() {
-        return Ok(());
-    }
-    let _ = apply_builtin_legacy_patches(profile, original)?;
+    let _ = dry_run_profile_firmware(profile, original)?;
     Ok(())
+}
+
+fn dry_run_profile_firmware<'a>(
+    profile: &MachineProfile,
+    original: &'a [u8],
+) -> BackendResult<Cow<'a, [u8]>> {
+    let payload = firmware_payload_for_profile(profile, original)?;
+    if profile.legacy_patches.is_some() {
+        apply_builtin_legacy_patches(profile, payload.as_ref())
+            .map(|(patched, _)| Cow::Owned(patched))
+    } else {
+        Ok(payload)
+    }
+}
+
+fn firmware_payload_for_profile<'a>(
+    _profile: &MachineProfile,
+    original: &'a [u8],
+) -> BackendResult<Cow<'a, [u8]>> {
+    match nvstraps_ffs::inspect_firmware_envelope(original) {
+        nvstraps_ffs::FirmwareEnvelope::RawOrVendorImage => Ok(Cow::Borrowed(original)),
+        nvstraps_ffs::FirmwareEnvelope::MalformedCapsule(header) => Err(
+            BackendError::FirmwareInjection(nvstraps_ffs::InjectionError::MalformedCapsule(header)),
+        ),
+        nvstraps_ffs::FirmwareEnvelope::UefiCapsule(header) => {
+            Err(BackendError::FirmwareInjection(
+                nvstraps_ffs::InjectionError::UnsupportedCapsule(header),
+            ))
+        }
+    }
+}
+
+fn injection_plan_for_profile(
+    profile: &MachineProfile,
+    firmware: &[u8],
+    driver_ffs: &[u8],
+) -> BackendResult<nvstraps_ffs::FirmwareInjectionPlan> {
+    let plan = nvstraps_ffs::plan_ffs_injection(firmware, driver_ffs)
+        .map_err(BackendError::FirmwareInjection)?;
+    if plan.targets.len() > 1
+        && profile.firmware_target_policy != FirmwareTargetPolicy::PatchEveryDxeDomain
+    {
+        return Err(BackendError::FirmwareInjection(
+            nvstraps_ffs::InjectionError::AmbiguousDxeTargets {
+                candidates: plan.targets,
+            },
+        ));
+    }
+    Ok(plan)
+}
+
+fn inject_ffs_for_profile(
+    profile: &MachineProfile,
+    firmware: &[u8],
+    driver_ffs: &[u8],
+) -> BackendResult<(Vec<u8>, nvstraps_ffs::FirmwareInjectionBatch)> {
+    let plan = injection_plan_for_profile(profile, firmware, driver_ffs)?;
+    nvstraps_ffs::inject_ffs_with_plan(firmware, driver_ffs, &plan)
+        .map_err(BackendError::FirmwareInjection)
+}
+
+fn verify_injection_feasibility(
+    profile: &MachineProfile,
+    firmware: &[u8],
+    driver_ffs: &[u8],
+) -> BackendResult<()> {
+    inject_ffs_for_profile(profile, firmware, driver_ffs).map(|_| ())
+}
+
+fn provision_feasible_profile(
+    store: &DeploymentStore,
+    profile: &MachineProfile,
+    firmware_path: &Path,
+    original: &[u8],
+    driver_ffs: &[u8],
+) -> BackendResult<ProvisionedDeployment> {
+    let base_firmware = dry_run_profile_firmware(profile, original)?;
+    verify_injection_feasibility(profile, base_firmware.as_ref(), driver_ffs)?;
+    store
+        .provision_profile(profile, firmware_path)
+        .map_err(BackendError::from)
 }
 
 fn inspect_firmware_path(path: &str) -> BackendResult<FirmwareFingerprint> {
@@ -827,6 +1111,26 @@ mod tests {
         .unwrap()
     }
 
+    fn profile_with_target_policy(
+        firmware: FirmwareFingerprint,
+        firmware_target_policy: FirmwareTargetPolicy,
+    ) -> MachineProfile {
+        MachineProfile::create_with_target_policy(
+            "test machine",
+            BoardPath::NativeResizableBar,
+            identity(),
+            firmware,
+            RecoveryCapability {
+                method: RecoveryMethod::UsbFlashback,
+                tested_or_documented: true,
+                note: "documented boot-independent recovery".into(),
+            },
+            firmware_install(),
+            firmware_target_policy,
+        )
+        .unwrap()
+    }
+
     fn advance_to_flash(profile: &MachineProfile, plan: &mut DeploymentPlan) {
         for (step, kind, value) in [
             (
@@ -923,6 +1227,19 @@ mod tests {
         firmware
     }
 
+    fn synthetic_full_firmware() -> Vec<u8> {
+        let mut firmware = synthetic_firmware();
+        let trailing = 96;
+        let trailing_size = firmware.len() - trailing;
+        firmware[trailing..].fill(0);
+        firmware[trailing..trailing + 16].fill(0x44);
+        firmware[trailing + 18] = 0x06;
+        firmware[trailing + 20..trailing + 23]
+            .copy_from_slice(&(trailing_size as u32).to_le_bytes()[..3]);
+        firmware[trailing + 23] = !0x07;
+        firmware
+    }
+
     #[test]
     fn profile_request_cannot_bypass_recovery_validation() {
         let request = CreateProfileRequest {
@@ -940,6 +1257,7 @@ mod tests {
                 note: String::new(),
             },
             firmware_install: firmware_install(),
+            firmware_target_policy: FirmwareTargetPolicy::RequireUnique,
             legacy_patches: None,
         };
         let firmware = FirmwareFingerprint {
@@ -954,6 +1272,59 @@ mod tests {
     fn relative_firmware_paths_are_rejected_before_file_access() {
         let error = canonical_firmware_path("relative/firmware.bin").unwrap_err();
         assert!(error.to_string().contains("must be absolute"));
+    }
+
+    #[test]
+    fn external_programmer_profiles_require_a_pinned_full_chip_or_bios_region_dump() {
+        let raw = synthetic_firmware();
+        let body_offset = 0x800_usize;
+        let mut capsule = vec![0_u8; body_offset + raw.len()];
+        capsule[..16].copy_from_slice(&[
+            0x8b, 0xa6, 0x3c, 0x4a, 0x23, 0x77, 0xfb, 0x48, 0x80, 0x3d, 0x57, 0x8c, 0xc1, 0xfe,
+            0xc4, 0x4d,
+        ]);
+        capsule[16..20].copy_from_slice(&(body_offset as u32).to_le_bytes());
+        capsule[20..24].copy_from_slice(&0x0001_0001_u32.to_le_bytes());
+        let capsule_size = capsule.len() as u32;
+        capsule[24..28].copy_from_slice(&capsule_size.to_le_bytes());
+        capsule[28..30].copy_from_slice(&(body_offset as u16).to_le_bytes());
+        capsule[body_offset..].copy_from_slice(&raw);
+
+        let fingerprint = FirmwareFingerprint {
+            file_name: "vendor.cap".into(),
+            byte_length: capsule.len() as u64,
+            sha256: Sha256Digest::from_bytes(&capsule),
+        };
+        let mut install = firmware_install();
+        install.method = FirmwareInstallMethod::ExternalSpiProgrammer;
+        install.artifact_file_name = "patched.bin".into();
+        let external = MachineProfile::create(
+            "external programmer",
+            BoardPath::NativeResizableBar,
+            identity(),
+            fingerprint.clone(),
+            RecoveryCapability {
+                method: RecoveryMethod::ExternalSpiProgrammer,
+                tested_or_documented: true,
+                note: "known-good programmer".into(),
+            },
+            install,
+        )
+        .unwrap();
+        assert!(matches!(
+            firmware_payload_for_profile(&external, &capsule),
+            Err(BackendError::FirmwareInjection(
+                nvstraps_ffs::InjectionError::UnsupportedCapsule(_)
+            ))
+        ));
+
+        let vendor_route = profile(BoardPath::NativeResizableBar, fingerprint);
+        assert!(matches!(
+            firmware_payload_for_profile(&vendor_route, &capsule),
+            Err(BackendError::FirmwareInjection(
+                nvstraps_ffs::InjectionError::UnsupportedCapsule(_)
+            ))
+        ));
     }
 
     #[test]
@@ -1060,6 +1431,7 @@ mod tests {
                 note: "tested clip and backup".into(),
             },
             firmware_install: firmware_install(),
+            firmware_target_policy: FirmwareTargetPolicy::RequireUnique,
             legacy_patches: Some(forged),
         };
         let firmware = FirmwareFingerprint {
@@ -1158,6 +1530,138 @@ mod tests {
     }
 
     #[test]
+    fn infeasible_profile_is_refused_before_any_store_state_is_created() {
+        let directory = TestDirectory::new();
+        let source = directory.0.join("full.bin");
+        let original = synthetic_full_firmware();
+        fs::write(&source, &original).unwrap();
+        let profile = profile(
+            BoardPath::NativeResizableBar,
+            FirmwareFingerprint::inspect(&source).unwrap(),
+        );
+        let store = DeploymentStore::new(directory.0.join("store"));
+
+        let error = provision_feasible_profile(
+            &store,
+            &profile,
+            &source,
+            &original,
+            &synthetic_driver_ffs(),
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            BackendError::FirmwareInjection(nvstraps_ffs::InjectionError::NoSpace { .. })
+        ));
+        assert!(!store.root().exists());
+    }
+
+    #[test]
+    fn multi_target_profile_requires_and_honors_the_bound_patch_every_policy() {
+        let directory = TestDirectory::new();
+        let source = directory.0.join("dual.bin");
+        let original = [synthetic_firmware(), synthetic_firmware()].concat();
+        fs::write(&source, &original).unwrap();
+        let fingerprint = FirmwareFingerprint::inspect(&source).unwrap();
+        let driver = synthetic_driver_ffs();
+
+        let unique = profile(BoardPath::NativeResizableBar, fingerprint.clone());
+        let unique_store = DeploymentStore::new(directory.0.join("unique-store"));
+        assert!(matches!(
+            provision_feasible_profile(&unique_store, &unique, &source, &original, &driver,),
+            Err(BackendError::FirmwareInjection(
+                nvstraps_ffs::InjectionError::AmbiguousDxeTargets { .. }
+            ))
+        ));
+        assert!(!unique_store.root().exists());
+
+        let patch_every =
+            profile_with_target_policy(fingerprint, FirmwareTargetPolicy::PatchEveryDxeDomain);
+        let approved_store = DeploymentStore::new(directory.0.join("approved-store"));
+        let provisioned =
+            provision_feasible_profile(&approved_store, &patch_every, &source, &original, &driver)
+                .unwrap();
+        assert_eq!(
+            provisioned.profile.firmware_target_policy,
+            FirmwareTargetPolicy::PatchEveryDxeDomain
+        );
+    }
+
+    #[test]
+    fn preserved_original_is_rehashed_at_the_read_boundary() {
+        let directory = TestDirectory::new();
+        let source = directory.0.join("vendor.bin");
+        fs::write(&source, synthetic_firmware()).unwrap();
+        let profile = profile(
+            BoardPath::NativeResizableBar,
+            FirmwareFingerprint::inspect(&source).unwrap(),
+        );
+        let store = DeploymentStore::new(directory.0.join("store"));
+        store.provision_profile(&profile, &source).unwrap();
+        let preserved = store.original_firmware_path(&profile.profile_id).unwrap();
+        let mut changed = synthetic_firmware();
+        changed[100] ^= 0x01;
+        fs::write(preserved, changed).unwrap();
+
+        assert!(
+            read_preserved_original(&store, &profile)
+                .unwrap_err()
+                .to_string()
+                .contains("changed while it was being analyzed")
+        );
+    }
+
+    #[test]
+    fn resume_refuses_a_partial_dual_target_artifact_from_an_older_injector() {
+        let directory = TestDirectory::new();
+        let source = directory.0.join("dual.bin");
+        let first = synthetic_firmware();
+        let original = [first.clone(), synthetic_firmware()].concat();
+        fs::write(&source, &original).unwrap();
+        let profile = profile_with_target_policy(
+            FirmwareFingerprint::inspect(&source).unwrap(),
+            FirmwareTargetPolicy::PatchEveryDxeDomain,
+        );
+        let store = DeploymentStore::new(directory.0.join("store"));
+        let provisioned = store.provision_profile(&profile, &source).unwrap();
+        let driver = synthetic_driver_ffs();
+        let driver_artifact = store
+            .preserve_artifact(&profile, ArtifactKind::RustDriverFfs, &driver)
+            .unwrap();
+
+        let mut partial = original;
+        partial[96..96 + driver.len()].copy_from_slice(&driver);
+        partial[96 + 23] = !0x07;
+        partial[96 + driver.len()..96 + ((driver.len() + 7) & !7)].fill(0xff);
+        let patched_artifact = store
+            .preserve_artifact(&profile, ArtifactKind::PatchedFirmware, &partial)
+            .unwrap();
+        let mut workflow =
+            DeploymentWorkflow::from_plan(&store, &profile, provisioned.plan).unwrap();
+        workflow
+            .record_step(
+                StepId::PrepareRustDriver,
+                driver_artifact.sha256.to_string(),
+            )
+            .unwrap();
+        workflow
+            .record_step(
+                StepId::VerifyPatchedArtifact,
+                patched_artifact.sha256.to_string(),
+            )
+            .unwrap();
+        let old_plan = workflow.into_plan();
+
+        let error = prepare_from_bytes(&store, &profile, old_plan, &driver).unwrap_err();
+        assert!(matches!(
+            error,
+            BackendError::Deployment(message)
+                if message.contains("does not match the current atomic all-target injector")
+        ));
+    }
+
+    #[test]
     fn modern_preparation_injects_once_and_advances_each_durable_revision() {
         let directory = TestDirectory::new();
         let source = directory.0.join("vendor.bin");
@@ -1177,6 +1681,7 @@ mod tests {
             StepId::FlashWithVendorRoute
         );
         assert!(prepared.injection.is_some());
+        assert!(prepared.firmware_injection_receipt.is_some());
         let (_, patched) = store
             .load_artifact(&profile, ArtifactKind::PatchedFirmware)
             .unwrap();
@@ -1187,8 +1692,24 @@ mod tests {
 
         let repeated = prepare_from_bytes(&store, &profile, prepared.plan, &driver).unwrap();
         assert_eq!(repeated.plan.revision, 5);
-        assert!(repeated.injection.is_none());
+        assert!(repeated.injection.is_some());
+        assert!(repeated.firmware_injection_receipt.is_some());
         assert_eq!(repeated.patched_firmware, prepared.patched_firmware);
+
+        let receipt_artifact = repeated.firmware_injection_receipt.clone().unwrap();
+        let mut forged_receipt = repeated.injection.clone().unwrap();
+        forged_receipt.census_sha256 = "00".repeat(32);
+        fs::write(
+            &receipt_artifact.path,
+            serde_json::to_vec_pretty(&forged_receipt).unwrap(),
+        )
+        .unwrap();
+        let error = prepare_from_bytes(&store, &profile, repeated.plan, &driver).unwrap_err();
+        assert!(matches!(
+            error,
+            BackendError::Deployment(message)
+                if message.contains("injection receipt does not match")
+        ));
     }
 
     #[test]
@@ -1218,14 +1739,31 @@ mod tests {
         assert!(prepared.injection.is_some());
         let destination = directory.0.join("usb");
         fs::create_dir(&destination).unwrap();
+        let injection_receipt_sha256 = prepared
+            .firmware_injection_receipt
+            .as_ref()
+            .unwrap()
+            .sha256
+            .clone();
         let package = store
-            .export_deployment_package(&profile, &prepared.plan, &destination)
+            .export_deployment_package(
+                &profile,
+                &prepared.plan,
+                &injection_receipt_sha256,
+                &destination,
+            )
             .unwrap();
-        assert_eq!(package.manifest.files.len(), 6);
+        assert_eq!(package.manifest.files.len(), 7);
         assert!(
             package
                 .package_path
                 .join("receipts/legacy-patch-receipt.json")
+                .is_file()
+        );
+        assert!(
+            package
+                .package_path
+                .join("receipts/firmware-injection-receipt.json")
                 .is_file()
         );
         let mut forged_receipt = prepared.legacy_patch.clone().unwrap();
@@ -1254,7 +1792,8 @@ mod tests {
         let repeated =
             prepare_from_bytes(&store, &profile, prepared.plan, &synthetic_driver_ffs()).unwrap();
         assert_eq!(repeated.plan.revision, 6);
-        assert!(repeated.injection.is_none());
+        assert!(repeated.injection.is_some());
+        assert!(repeated.firmware_injection_receipt.is_some());
         assert_eq!(repeated.patched_firmware, prepared.patched_firmware);
         assert_eq!(repeated.legacy_patch, prepared.legacy_patch);
     }

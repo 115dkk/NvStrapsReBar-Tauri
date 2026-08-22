@@ -35,6 +35,7 @@ pub enum ArtifactKind {
     LegacyPatchedFirmware,
     PatchedFirmware,
     LegacyPatchReceipt,
+    FirmwareInjectionReceipt,
 }
 
 impl ArtifactKind {
@@ -44,6 +45,7 @@ impl ArtifactKind {
             Self::LegacyPatchedFirmware => "legacy-patched-firmware.bin",
             Self::PatchedFirmware => "patched-firmware.bin",
             Self::LegacyPatchReceipt => "legacy-patch-receipt.json",
+            Self::FirmwareInjectionReceipt => "firmware-injection-receipt.json",
         }
     }
 }
@@ -65,6 +67,7 @@ pub enum PackageFilePurpose {
     MachineProfile,
     DeploymentPlan,
     LegacyPatchReceipt,
+    FirmwareInjectionReceipt,
     OperatorInstructions,
 }
 
@@ -326,6 +329,7 @@ impl DeploymentStore {
         &self,
         profile: &MachineProfile,
         plan: &DeploymentPlan,
+        expected_injection_receipt_sha256: &Sha256Digest,
         destination_root: impl AsRef<Path>,
     ) -> Result<DeploymentPackageReceipt, StoreError> {
         profile.validate()?;
@@ -377,6 +381,17 @@ impl DeploymentStore {
         } else {
             None
         };
+        let firmware_injection_receipt = self
+            .load_artifact(profile, ArtifactKind::FirmwareInjectionReceipt)
+            .map_err(|error| match error {
+                StoreError::Io { source, .. } if source.kind() == io::ErrorKind::NotFound => {
+                    StoreError::MissingFirmwareInjectionReceipt
+                }
+                other => other,
+            })?;
+        if firmware_injection_receipt.0.sha256 != *expected_injection_receipt_sha256 {
+            return Err(StoreError::FirmwareInjectionReceiptChanged);
+        }
 
         let destination_root = destination_root.as_ref();
         if !destination_root.is_absolute() {
@@ -439,6 +454,12 @@ impl DeploymentStore {
                 plan_relative,
                 PackageFilePurpose::DeploymentPlan,
                 &plan_bytes,
+            )?);
+            files.push(write_package_file(
+                &staging_path,
+                "receipts/firmware-injection-receipt.json",
+                PackageFilePurpose::FirmwareInjectionReceipt,
+                &firmware_injection_receipt.1,
             )?);
             if let Some((_, receipt_bytes)) = legacy_receipt.as_ref() {
                 files.push(write_package_file(
@@ -692,10 +713,14 @@ pub enum StoreError {
     EmptyArtifact,
     #[error("persisted content conflicts with an immutable deployment record: {0}")]
     ImmutableConflict(PathBuf),
-    #[error("deployment packages require a schema-3 profile with a pinned install route")]
+    #[error("deployment packages require a current profile with a pinned install route")]
     PackageRequiresPinnedInstallRoute,
     #[error("the patched firmware artifact has not been verified by the deployment plan")]
     PatchedArtifactNotVerified,
+    #[error("the firmware injection receipt required by this profile is missing")]
+    MissingFirmwareInjectionReceipt,
+    #[error("the firmware injection receipt changed after backend validation")]
+    FirmwareInjectionReceiptChanged,
     #[error("the legacy patch receipt required by this profile is missing")]
     MissingLegacyPatchReceipt,
     #[error("the legacy patch receipt does not match the deployment plan evidence")]
@@ -1118,11 +1143,40 @@ mod tests {
         )
         .unwrap();
         store.save_plan(&profile, &plan).unwrap();
+        let firmware_injection_receipt = br#"{"schemaVersion":1,"targetCount":1}"#;
+        let persisted_firmware_injection_receipt = store
+            .preserve_artifact(
+                &profile,
+                ArtifactKind::FirmwareInjectionReceipt,
+                firmware_injection_receipt,
+            )
+            .unwrap();
+        assert_eq!(
+            persisted_firmware_injection_receipt
+                .path
+                .file_name()
+                .unwrap(),
+            "firmware-injection-receipt.json"
+        );
 
         let destination = directory.0.join("usb");
         fs::create_dir(&destination).unwrap();
+        assert!(matches!(
+            store.export_deployment_package(
+                &profile,
+                &plan,
+                &Sha256Digest::from_bytes(b"stale validated receipt"),
+                &destination,
+            ),
+            Err(StoreError::FirmwareInjectionReceiptChanged)
+        ));
         let receipt = store
-            .export_deployment_package(&profile, &plan, &destination)
+            .export_deployment_package(
+                &profile,
+                &plan,
+                &persisted_firmware_injection_receipt.sha256,
+                &destination,
+            )
             .unwrap();
         assert_eq!(
             fs::read(receipt.package_path.join("flash/vendor-bios.bin")).unwrap(),
@@ -1137,7 +1191,21 @@ mod tests {
         )
         .unwrap();
         assert_eq!(persisted_manifest, receipt.manifest);
-        assert_eq!(persisted_manifest.files.len(), 5);
+        assert_eq!(persisted_manifest.files.len(), 6);
+        assert_eq!(
+            fs::read(
+                receipt
+                    .package_path
+                    .join("receipts/firmware-injection-receipt.json")
+            )
+            .unwrap(),
+            firmware_injection_receipt
+        );
+        assert!(persisted_manifest.files.iter().any(|file| {
+            file.relative_path == "receipts/firmware-injection-receipt.json"
+                && file.purpose == PackageFilePurpose::FirmwareInjectionReceipt
+                && file.sha256 == Sha256Digest::from_bytes(firmware_injection_receipt)
+        }));
         assert_eq!(
             Sha256Digest::from_bytes(
                 fs::read(receipt.package_path.join("deployment-manifest.json")).unwrap()
@@ -1147,7 +1215,12 @@ mod tests {
         assert!(receipt.package_path.join("SHA256SUMS.txt").is_file());
         assert!(receipt.package_path.join("DEPLOYMENT.txt").is_file());
         assert!(matches!(
-            store.export_deployment_package(&profile, &plan, &destination),
+            store.export_deployment_package(
+                &profile,
+                &plan,
+                &persisted_firmware_injection_receipt.sha256,
+                &destination,
+            ),
             Err(StoreError::PackageAlreadyExists(_))
         ));
     }
@@ -1164,7 +1237,12 @@ mod tests {
             .preserve_artifact(&profile, ArtifactKind::PatchedFirmware, b"unverified")
             .unwrap();
         assert!(matches!(
-            store.export_deployment_package(&profile, &plan, &directory.0),
+            store.export_deployment_package(
+                &profile,
+                &plan,
+                &Sha256Digest::from_bytes(b"missing receipt"),
+                &directory.0,
+            ),
             Err(StoreError::PatchedArtifactNotVerified)
         ));
 
@@ -1193,7 +1271,28 @@ mod tests {
             )
             .unwrap();
         assert!(matches!(
-            store.export_deployment_package(&profile, &verified, "relative-usb"),
+            store.export_deployment_package(
+                &profile,
+                &verified,
+                &Sha256Digest::from_bytes(b"missing receipt"),
+                &directory.0,
+            ),
+            Err(StoreError::MissingFirmwareInjectionReceipt)
+        ));
+        let injection_receipt = store
+            .preserve_artifact(
+                &profile,
+                ArtifactKind::FirmwareInjectionReceipt,
+                br#"{"schemaVersion":1}"#,
+            )
+            .unwrap();
+        assert!(matches!(
+            store.export_deployment_package(
+                &profile,
+                &verified,
+                &injection_receipt.sha256,
+                "relative-usb",
+            ),
             Err(StoreError::PackageDestinationMustBeAbsolute)
         ));
     }

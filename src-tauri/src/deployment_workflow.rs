@@ -12,7 +12,7 @@ use crate::{
         ConfigDraft, DeploymentConfigRecommendation, recommend_deployment_config,
         require_recommended_deployment_config,
     },
-    deployment::load_exact_deployment,
+    deployment::{load_exact_deployment, validate_persisted_patched_artifact},
     devices::{GpuDevice, enumerate_gpus},
     error::{ApiError, BackendError, BackendResult, CommandResult},
     firmware::{STATUS_VARIABLE_NAME, read_variable},
@@ -77,21 +77,48 @@ pub struct SaveDeploymentConfigReceipt {
 }
 
 #[tauri::command]
-pub fn preview_manual_deployment_step(
+pub async fn preview_manual_deployment_step(
     app: AppHandle,
     profile_id: String,
 ) -> CommandResult<ManualDeploymentStepPreview> {
-    let exact = load_exact_deployment(&app, &profile_id, "manual deployment step preview")
-        .map_err(ApiError::from)?;
-    build_manual_step_preview(&exact.profile, &exact.plan).map_err(ApiError::from)
+    tauri::async_runtime::spawn_blocking(move || {
+        preview_manual_deployment_step_command(&app, &profile_id)
+    })
+    .await
+    .map_err(|error| {
+        ApiError::from(BackendError::Deployment(format!(
+            "manual deployment preview worker failed: {error}"
+        )))
+    })?
+    .map_err(ApiError::from)
+}
+
+fn preview_manual_deployment_step_command(
+    app: &AppHandle,
+    profile_id: &str,
+) -> BackendResult<ManualDeploymentStepPreview> {
+    let exact = load_exact_deployment(app, profile_id, "manual deployment step preview")?;
+    if exact.plan.active_step().map(|step| step.id) == Some(StepId::FlashWithVendorRoute) {
+        validate_persisted_patched_artifact(&exact.store, &exact.profile, &exact.plan)?;
+    }
+    build_manual_step_preview(&exact.profile, &exact.plan)
 }
 
 #[tauri::command]
-pub fn confirm_manual_deployment_step(
+pub async fn confirm_manual_deployment_step(
     app: AppHandle,
     request: ConfirmManualDeploymentStepRequest,
 ) -> CommandResult<ManualDeploymentStepReceipt> {
-    confirm_manual_deployment_step_command(&app, request).map_err(ApiError::from)
+    tauri::async_runtime::spawn_blocking(move || {
+        confirm_manual_deployment_step_command(&app, request)
+    })
+    .await
+    .map_err(|error| {
+        ApiError::from(BackendError::Deployment(format!(
+            "manual deployment confirmation worker failed: {error}"
+        )))
+    })?
+    .map_err(ApiError::from)
 }
 
 #[tauri::command]
@@ -189,6 +216,9 @@ fn confirm_manual_deployment_step_command(
     request: ConfirmManualDeploymentStepRequest,
 ) -> BackendResult<ManualDeploymentStepReceipt> {
     let exact = load_exact_deployment(app, &request.profile_id, "manual deployment confirmation")?;
+    if exact.plan.active_step().map(|step| step.id) == Some(StepId::FlashWithVendorRoute) {
+        validate_persisted_patched_artifact(&exact.store, &exact.profile, &exact.plan)?;
+    }
     let preview = build_manual_step_preview(&exact.profile, &exact.plan)?;
     if !request.confirmed {
         return Err(BackendError::Deployment(

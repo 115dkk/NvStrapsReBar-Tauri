@@ -1,8 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { SystemSnapshot } from "../types";
+import type { MessageDescriptor } from "../i18n-catalog";
+import type {
+        ApiError,
+        FirmwareInjectionDiagnostic,
+        SystemSnapshot,
+} from "../types";
 import type { DeploymentAdapter } from "./adapter";
 import type { DeploymentPlan, MachineProfile, StepId } from "./contract";
-import { createDeploymentWorkspaceSession } from "./session";
+import {
+        createDeploymentWorkspaceSession,
+        formatDeploymentError,
+} from "./session";
 
 const snapshot: SystemSnapshot = {
         schemaVersion: 1,
@@ -54,7 +62,7 @@ const snapshot: SystemSnapshot = {
         notices: [],
 };
 const profile = (id: string): MachineProfile => ({
-        schemaVersion: 3,
+        schemaVersion: 4,
         profileId: id,
         displayName: id,
         boardPath: "nativeResizableBar",
@@ -78,6 +86,7 @@ const profile = (id: string): MachineProfile => ({
                 testedOrDocumented: true,
                 note: "test",
         },
+        firmwareTargetPolicy: "requireUnique",
         firmwareInstall: null,
 });
 const order: StepId[] = [
@@ -120,11 +129,51 @@ const plan = (
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 const deferred = <T>() => {
         let resolve!: (value: T) => void;
-        const promise = new Promise<T>((done) => {
+        let reject!: (reason: unknown) => void;
+        const promise = new Promise<T>((done, fail) => {
                 resolve = done;
+                reject = fail;
         });
-        return { promise, resolve };
+        return { promise, resolve, reject };
 };
+const firmwareInjectionError = (
+        diagnostic: FirmwareInjectionDiagnostic,
+): ApiError => ({
+        code: "firmware_injection_failed",
+        message: `firmware injection failed: ${diagnostic.kind}`,
+        recoverable: true,
+        firmwareInjection: diagnostic,
+});
+const preparationPlan = (owner: MachineProfile): DeploymentPlan => ({
+        schemaVersion: 1,
+        profileId: owner.profileId,
+        originalFirmwareSha256: owner.originalFirmware.sha256,
+        recoveryMethod: owner.recovery.method,
+        revision: 2,
+        steps: [
+                {
+                        id: "verifyProfile",
+                        kind: "automated",
+                        title: "verify",
+                        state: "completed",
+                        evidence: { kind: "verifyProfile", value: "evidence" },
+                },
+                {
+                        id: "prepareRustDriver",
+                        kind: "automated",
+                        title: "prepare",
+                        state: "ready",
+                        evidence: null,
+                },
+                {
+                        id: "verifyPatchedArtifact",
+                        kind: "automated",
+                        title: "verify artifact",
+                        state: "pending",
+                        evidence: null,
+                },
+        ],
+});
 const adapter = (overrides: Partial<DeploymentAdapter>): DeploymentAdapter =>
         new Proxy(overrides as DeploymentAdapter, {
                 get(target, property) {
@@ -138,6 +187,362 @@ const adapter = (overrides: Partial<DeploymentAdapter>): DeploymentAdapter =>
 
 describe("DeploymentWorkspaceSession", () => {
         beforeEach(() => vi.restoreAllMocks());
+
+        it("defaults to a unique DXE target and preserves an explicit all-domain policy intent", async () => {
+                const session = createDeploymentWorkspaceSession(
+                        snapshot,
+                        adapter({
+                                listMachineProfiles: async () => [],
+                                getNvidiaProfileInspectorInstallation:
+                                        async () => null,
+                        }),
+                );
+                await tick();
+
+                expect(session.view().firmwareTargetPolicy).toBe(
+                        "requireUnique",
+                );
+                await session.dispatch({
+                        type: "setFirmwareTargetPolicy",
+                        value: "patchEveryDxeDomain",
+                });
+                expect(session.view().firmwareTargetPolicy).toBe(
+                        "patchEveryDxeDomain",
+                );
+        });
+
+        it("submits the all-domain policy only with a confirmed boot-independent recovery route", async () => {
+                const createMachineProfile = vi.fn(
+                        async (
+                                _request: Parameters<
+                                        DeploymentAdapter["createMachineProfile"]
+                                >[0],
+                        ) => {
+                                throw new Error("fixture stop");
+                        },
+                );
+                const session = createDeploymentWorkspaceSession(
+                        snapshot,
+                        adapter({
+                                listMachineProfiles: async () => [],
+                                getNvidiaProfileInspectorInstallation:
+                                        async () => null,
+                                selectFirmwareImage: async () =>
+                                        "C:\\firmware\\vendor.bin",
+                                inspectFirmwareImage: async () => ({
+                                        fileName: "vendor.bin",
+                                        byteLength: 1_048_576,
+                                        sha256: "a".repeat(64),
+                                }),
+                                createMachineProfile,
+                        }),
+                );
+                await tick();
+                await session.dispatch({ type: "chooseFirmware" });
+                for (const intent of [
+                        { type: "setDisplayName", value: "test profile" },
+                        {
+                                type: "setInstructionsUrl",
+                                value: "https://example.test/manual",
+                        },
+                        { type: "setInstallNote", value: "install note" },
+                        { type: "setRecoveryNote", value: "recovery note" },
+                        { type: "setRouteConfirmed", value: true },
+                        {
+                                type: "setFirmwareTargetPolicy",
+                                value: "patchEveryDxeDomain",
+                        },
+                ] as const)
+                        await session.dispatch(intent);
+
+                await session.dispatch({ type: "createProfile" });
+                expect(createMachineProfile).not.toHaveBeenCalled();
+
+                await session.dispatch({
+                        type: "setRecoveryMethod",
+                        value: "usbFlashback",
+                });
+                await session.dispatch({ type: "createProfile" });
+                expect(createMachineProfile).toHaveBeenCalledOnce();
+                expect(createMachineProfile.mock.calls[0]?.[0]).toMatchObject({
+                        firmwareTargetPolicy: "patchEveryDxeDomain",
+                        recovery: {
+                                method: "usbFlashback",
+                                testedOrDocumented: true,
+                        },
+                });
+        });
+
+        it("maps every firmware injection diagnostic to localized copy", () => {
+                const cases: readonly [
+                        FirmwareInjectionDiagnostic,
+                        MessageDescriptor["id"],
+                ][] = [
+                        [
+                                { kind: "invalidDriverFfs", detail: "bad FFS" },
+                                "ui.firmwareInjectionInvalidDriverFfs",
+                        ],
+                        [
+                                {
+                                        kind: "invalidFirmware",
+                                        detail: "bad image",
+                                },
+                                "ui.firmwareInjectionInvalidFirmware",
+                        ],
+                        [
+                                { kind: "driverAlreadyPresent" },
+                                "ui.firmwareInjectionDriverAlreadyPresent",
+                        ],
+                        [
+                                {
+                                        kind: "compressionFailure",
+                                        detail: "rebuild failed",
+                                },
+                                "ui.firmwareInjectionCompressionFailure",
+                        ],
+                        [
+                                {
+                                        kind: "unsupportedCapsule",
+                                        capsuleKind: "aptioSigned",
+                                        headerSize: 32,
+                                        bodyOffset: 64,
+                                        flags: 0,
+                                },
+                                "ui.firmwareInjectionUnsupportedCapsule",
+                        ],
+                        [
+                                {
+                                        kind: "malformedCapsule",
+                                        capsuleKind: "standard",
+                                        detail: "body offset",
+                                },
+                                "ui.firmwareInjectionMalformedCapsule",
+                        ],
+                        [
+                                {
+                                        kind: "ambiguousDxeTargets",
+                                        targets: [
+                                                {
+                                                        containerFileOffsets: [],
+                                                        firmwareVolumeOffset: 64,
+                                                },
+                                                {
+                                                        containerFileOffsets: [
+                                                                288,
+                                                        ],
+                                                        firmwareVolumeOffset: 96,
+                                                },
+                                        ],
+                                },
+                                "ui.firmwareInjectionAmbiguousDxeTargets",
+                        ],
+                        [
+                                {
+                                        kind: "incompleteDxeTargetCensus",
+                                        uninspectedContainers: [
+                                                {
+                                                        containerFileOffsets: [
+                                                                288,
+                                                        ],
+                                                        firmwareVolumeOffset: 64,
+                                                        fileOffset: 512,
+                                                },
+                                        ],
+                                },
+                                "ui.firmwareInjectionIncompleteDxeTargetCensus",
+                        ],
+                        [
+                                {
+                                        kind: "unsupportedDxeTarget",
+                                        target: {
+                                                containerFileOffsets: [288],
+                                                firmwareVolumeOffset: 64,
+                                        },
+                                },
+                                "ui.firmwareInjectionUnsupportedDxeTarget",
+                        ],
+                        [
+                                { kind: "noDxeVolume" },
+                                "ui.firmwareInjectionNoDxeVolume",
+                        ],
+                        [
+                                {
+                                        kind: "insufficientDxeSpace",
+                                        target: {
+                                                containerFileOffsets: [288],
+                                                firmwareVolumeOffset: 64,
+                                        },
+                                        availableBytes: 3_016,
+                                        requiredBytes: 34_904,
+                                },
+                                "ui.firmwareInjectionInsufficientDxeSpace",
+                        ],
+                        [
+                                {
+                                        kind: "recompressedContainerTooLarge",
+                                        containerFileOffsets: [288],
+                                        firmwareVolumeOffset: 64,
+                                        fileOffset: 512,
+                                        availableBytes: 90_112,
+                                        requiredBytes: 91_744,
+                                },
+                                "ui.firmwareInjectionRecompressedContainerTooLarge",
+                        ],
+                ];
+
+                for (const [diagnostic, expectedId] of cases)
+                        expect(
+                                formatDeploymentError(
+                                        firmwareInjectionError(diagnostic),
+                                ).id,
+                        ).toBe(expectedId);
+        });
+
+        it("preserves exact capacity values and keeps a generic fallback", () => {
+                expect(
+                        formatDeploymentError(
+                                firmwareInjectionError({
+                                        kind: "insufficientDxeSpace",
+                                        target: {
+                                                containerFileOffsets: [288],
+                                                firmwareVolumeOffset: 64,
+                                        },
+                                        availableBytes: 3_016,
+                                        requiredBytes: 34_904,
+                                }),
+                        ),
+                ).toEqual({
+                        id: "ui.firmwareInjectionInsufficientDxeSpace",
+                        values: {
+                                availableBytes: 3_016,
+                                requiredBytes: 34_904,
+                        },
+                });
+                expect(
+                        formatDeploymentError({
+                                code: "firmware_injection_failed",
+                                message: "future diagnostic detail",
+                                recoverable: true,
+                                firmwareInjection: { kind: "futureKind" },
+                        }),
+                ).toEqual({
+                        id: "ui.deploymentOperationFailed",
+                        values: { detail: "future diagnostic detail" },
+                });
+                expect(
+                        formatDeploymentError({
+                                code: "firmware_injection_failed",
+                                message: "malformed capacity detail",
+                                recoverable: true,
+                                firmwareInjection: {
+                                        kind: "insufficientDxeSpace",
+                                        availableBytes: "3016",
+                                        requiredBytes: 34_904,
+                                },
+                        }),
+                ).toEqual({
+                        id: "ui.deploymentOperationFailed",
+                        values: { detail: "malformed capacity detail" },
+                });
+        });
+
+        it("keeps the inspected source when profile feasibility fails", async () => {
+                const failure = firmwareInjectionError({
+                        kind: "noDxeVolume",
+                });
+                const session = createDeploymentWorkspaceSession(
+                        snapshot,
+                        adapter({
+                                listMachineProfiles: async () => [],
+                                getNvidiaProfileInspectorInstallation:
+                                        async () => null,
+                                selectFirmwareImage: async () =>
+                                        "C:\\firmware\\vendor.bin",
+                                inspectFirmwareImage: async () => ({
+                                        fileName: "vendor.bin",
+                                        byteLength: 1_048_576,
+                                        sha256: "a".repeat(64),
+                                }),
+                                createMachineProfile: async () => {
+                                        throw failure;
+                                },
+                        }),
+                );
+                await tick();
+                await session.dispatch({ type: "chooseFirmware" });
+                await session.dispatch({ type: "createProfile" });
+
+                expect(session.view()).toMatchObject({
+                        firmwarePath: "C:\\firmware\\vendor.bin",
+                        firmware: { sha256: "a".repeat(64) },
+                        profiles: [],
+                        selectedProfileId: "",
+                        plan: null,
+                        preparation: null,
+                        busyAction: "",
+                        activity: {
+                                tone: "error",
+                                message: {
+                                        id: "ui.firmwareInjectionNoDxeVolume",
+                                },
+                        },
+                });
+        });
+
+        it("keeps the plan and suppresses duplicate preparation after a feasibility error", async () => {
+                const owner = profile("p1");
+                const before = preparationPlan(owner);
+                const pending =
+                        deferred<
+                                Awaited<
+                                        ReturnType<
+                                                DeploymentAdapter["prepareFirmwareArtifact"]
+                                        >
+                                >
+                        >();
+                const prepareFirmwareArtifact = vi.fn(() => pending.promise);
+                const session = createDeploymentWorkspaceSession(
+                        snapshot,
+                        adapter({
+                                listMachineProfiles: async () => [owner],
+                                getNvidiaProfileInspectorInstallation:
+                                        async () => null,
+                                getDeploymentPlan: async () => before,
+                                prepareFirmwareArtifact,
+                        }),
+                );
+                await tick();
+                const first = session.dispatch({ type: "prepare" });
+                const duplicate = session.dispatch({ type: "prepare" });
+                expect(prepareFirmwareArtifact).toHaveBeenCalledTimes(1);
+                pending.reject(
+                        firmwareInjectionError({
+                                kind: "recompressedContainerTooLarge",
+                                containerFileOffsets: [288],
+                                firmwareVolumeOffset: 64,
+                                fileOffset: 512,
+                                availableBytes: 90_112,
+                                requiredBytes: 91_744,
+                        }),
+                );
+                await Promise.all([first, duplicate]);
+
+                expect(session.view()).toMatchObject({
+                        plan: before,
+                        preparation: null,
+                        busyAction: "",
+                        activity: {
+                                tone: "error",
+                                message: {
+                                        id: "ui.firmwareInjectionRecompressedContainerTooLarge",
+                                        values: {
+                                                availableBytes: 90_112,
+                                                requiredBytes: 91_744,
+                                        },
+                                },
+                        },
+                });
+        });
 
         it("uses the Rust catalog ID for MSI route defaults", () => {
                 const catalogSnapshot = structuredClone(snapshot);
@@ -389,6 +794,7 @@ describe("DeploymentWorkspaceSession", () => {
                                 byteLength: 1,
                                 sha256: "b".repeat(64),
                         },
+                        firmwareInjectionReceipt: null,
                         injection: null,
                 });
                 await preparing;

@@ -36,7 +36,64 @@ export type GpuDevice = {
         recommendedBarSizeSelector: number | null;
         effectiveBarSizeSelector: number | null;
 };
-export type ApiError = { code: string; message: string; recoverable: boolean };
+export type FirmwareVolumePathDiagnostic = {
+        containerFileOffsets: number[];
+        firmwareVolumeOffset: number;
+};
+export type FirmwareFilePathDiagnostic = FirmwareVolumePathDiagnostic & {
+        fileOffset: number;
+};
+export type FirmwareInjectionDiagnostic =
+        | { kind: "invalidDriverFfs"; detail: string }
+        | { kind: "invalidFirmware"; detail: string }
+        | { kind: "driverAlreadyPresent" }
+        | { kind: "compressionFailure"; detail: string }
+        | {
+                  kind: "unsupportedCapsule";
+                  capsuleKind: string;
+                  headerSize: number;
+                  bodyOffset: number;
+                  flags: number;
+          }
+        | {
+                  kind: "malformedCapsule";
+                  capsuleKind: string;
+                  detail: string;
+          }
+        | {
+                  kind: "ambiguousDxeTargets";
+                  targets: FirmwareVolumePathDiagnostic[];
+          }
+        | {
+                  kind: "incompleteDxeTargetCensus";
+                  uninspectedContainers: FirmwareFilePathDiagnostic[];
+          }
+        | {
+                  kind: "unsupportedDxeTarget";
+                  target: FirmwareVolumePathDiagnostic;
+          }
+        | { kind: "noDxeVolume" }
+        | {
+                  kind: "insufficientDxeSpace";
+                  target: FirmwareVolumePathDiagnostic;
+                  availableBytes: number;
+                  requiredBytes: number;
+          }
+        | {
+                  kind: "recompressedContainerTooLarge";
+                  containerFileOffsets: number[];
+                  firmwareVolumeOffset: number;
+                  fileOffset: number;
+                  availableBytes: number;
+                  requiredBytes: number;
+          };
+export type ApiError = {
+        code: string;
+        message: string;
+        recoverable: boolean;
+        windowsError?: number;
+        firmwareInjection?: FirmwareInjectionDiagnostic;
+};
 
 export type SettingsSnapshotExportReceipt = {
         path: string;

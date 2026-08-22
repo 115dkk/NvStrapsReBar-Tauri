@@ -1,11 +1,13 @@
-use alloc::boxed::Box;
-use alloc::vec::Vec;
-use core::ptr;
+use core::mem::{self, size_of};
+use core::ptr::{self, NonNull};
+use core::slice;
 use core::sync::atomic::{AtomicPtr, Ordering};
 
 use nvstraps_core::pci::PciAddress;
 use nvstraps_core::status::EfiErrorLocation;
-use uefi::boot::{self, OpenProtocolAttributes, OpenProtocolParams, ScopedProtocol};
+use uefi::boot::{
+    self, MemoryType, OpenProtocolAttributes, OpenProtocolParams, ScopedProtocol, SearchType,
+};
 use uefi::proto::pci::PciIoAddress;
 use uefi::proto::unsafe_protocol;
 use uefi::{Handle, Status};
@@ -54,7 +56,85 @@ struct HookedProtocol {
 
 struct HookContext {
     engine: FirmwareEngine,
-    protocols: Vec<HookedProtocol>,
+    protocols: NonNull<HookedProtocol>,
+    protocol_count: usize,
+}
+
+impl HookContext {
+    fn protocols(&self) -> &[HookedProtocol] {
+        // SAFETY: install publishes an initialized allocation for the entire DXE lifetime.
+        unsafe { slice::from_raw_parts(self.protocols.as_ptr(), self.protocol_count) }
+    }
+
+    fn protocols_mut(&mut self) -> &mut [HookedProtocol] {
+        // SAFETY: install has exclusive access before publishing the callback hooks.
+        unsafe { slice::from_raw_parts_mut(self.protocols.as_ptr(), self.protocol_count) }
+    }
+}
+
+struct ProtocolBuffer {
+    pointer: NonNull<HookedProtocol>,
+    initialized: usize,
+    capacity: usize,
+}
+
+impl ProtocolBuffer {
+    fn allocate(capacity: usize) -> Result<Self, Status> {
+        let size = capacity
+            .checked_mul(size_of::<HookedProtocol>())
+            .filter(|size| *size != 0)
+            .ok_or(Status::OUT_OF_RESOURCES)?;
+        let pointer = boot::allocate_pool(MemoryType::BOOT_SERVICES_DATA, size)
+            .map_err(|error| error.status())?
+            .cast::<HookedProtocol>();
+        Ok(Self {
+            pointer,
+            initialized: 0,
+            capacity,
+        })
+    }
+
+    fn push(
+        &mut self,
+        interface: ScopedProtocol<PciHostBridgeResourceAllocation>,
+    ) -> Result<(), Status> {
+        if self.initialized >= self.capacity {
+            return Err(Status::OUT_OF_RESOURCES);
+        }
+        let original = interface.preprocess_controller;
+        // SAFETY: allocate reserved space for every located handle and this slot is uninitialized.
+        unsafe {
+            self.pointer
+                .as_ptr()
+                .add(self.initialized)
+                .write(HookedProtocol {
+                    interface,
+                    original,
+                });
+        }
+        self.initialized += 1;
+        Ok(())
+    }
+
+    fn leak(self) -> (NonNull<HookedProtocol>, usize) {
+        let result = (self.pointer, self.initialized);
+        mem::forget(self);
+        result
+    }
+}
+
+impl Drop for ProtocolBuffer {
+    fn drop(&mut self) {
+        while self.initialized != 0 {
+            self.initialized -= 1;
+            // SAFETY: Slots below initialized were written exactly once by push.
+            unsafe {
+                self.pointer.as_ptr().add(self.initialized).drop_in_place();
+            }
+        }
+        // SAFETY: This buffer uniquely owns the matching pool allocation.
+        let _ = unsafe { boot::free_pool(self.pointer.cast::<u8>()) };
+    }
 }
 
 static CONTEXT: AtomicPtr<HookContext> = AtomicPtr::new(ptr::null_mut());
@@ -66,16 +146,23 @@ pub fn install(engine: FirmwareEngine) -> Result<(), HookInstallError> {
             status: Status::ALREADY_STARTED,
         });
     }
-    let handles = boot::find_handles::<PciHostBridgeResourceAllocation>().map_err(|error| {
-        HookInstallError {
-            location: EfiErrorLocation::LocateBridgeProtocol,
-            status: error.status(),
-        }
-    })?;
-    let mut protocols = Vec::with_capacity(handles.len());
-    for handle in handles {
-        // SAFETY: The protocol type uses the PI GUID and exact eight-pointer
-        // layout. Interfaces remain open because the context is DXE-lifetime.
+    let handles =
+        boot::locate_handle_buffer(SearchType::from_proto::<PciHostBridgeResourceAllocation>())
+            .map_err(|error| HookInstallError {
+                location: EfiErrorLocation::LocateBridgeProtocol,
+                status: error.status(),
+            })?;
+    let mut protocols =
+        ProtocolBuffer::allocate(handles.len()).map_err(|status| HookInstallError {
+            location: EfiErrorLocation::LoadBridgeProtocol,
+            status,
+        })?;
+    for &handle in handles.iter() {
+        // SAFETY: The protocol type uses the PI GUID and exact eight-pointer layout. The PI host
+        // bridge provider owns this interface throughout PCI resource enumeration; callbacks can
+        // only arrive through that live interface. Installation runs before enumeration, so the
+        // pointer replacement is not concurrent. The context is intentionally retained only for
+        // those boot-service callbacks.
         let interface = unsafe {
             boot::open_protocol::<PciHostBridgeResourceAllocation>(
                 OpenProtocolParams {
@@ -90,15 +177,31 @@ pub fn install(engine: FirmwareEngine) -> Result<(), HookInstallError> {
             location: EfiErrorLocation::LoadBridgeProtocol,
             status: error.status(),
         })?;
-        let original = interface.preprocess_controller;
-        protocols.push(HookedProtocol {
-            interface,
-            original,
-        });
+        protocols
+            .push(interface)
+            .map_err(|status| HookInstallError {
+                location: EfiErrorLocation::LoadBridgeProtocol,
+                status,
+            })?;
     }
 
-    let context = Box::new(HookContext { engine, protocols });
-    let context = Box::into_raw(context);
+    let context_allocation =
+        boot::allocate_pool(MemoryType::BOOT_SERVICES_DATA, size_of::<HookContext>()).map_err(
+            |error| HookInstallError {
+                location: EfiErrorLocation::LoadBridgeProtocol,
+                status: error.status(),
+            },
+        )?;
+    let (protocols, protocol_count) = protocols.leak();
+    let context = context_allocation.cast::<HookContext>().as_ptr();
+    // SAFETY: context_allocation is correctly aligned writable storage of the exact type size.
+    unsafe {
+        context.write(HookContext {
+            engine,
+            protocols,
+            protocol_count,
+        });
+    }
     if CONTEXT
         .compare_exchange(
             ptr::null_mut(),
@@ -108,8 +211,21 @@ pub fn install(engine: FirmwareEngine) -> Result<(), HookInstallError> {
         )
         .is_err()
     {
-        // SAFETY: The pointer came from Box::into_raw above and was not stored.
-        unsafe { drop(Box::from_raw(context)) };
+        // SAFETY: Publication failed, so no callback can observe or alias these allocations.
+        unsafe {
+            let HookContext {
+                engine,
+                protocols,
+                protocol_count,
+            } = context.read();
+            drop(engine);
+            drop(ProtocolBuffer {
+                pointer: protocols,
+                initialized: protocol_count,
+                capacity: protocol_count,
+            });
+            let _ = boot::free_pool(context_allocation);
+        }
         return Err(HookInstallError {
             location: EfiErrorLocation::LoadBridgeProtocol,
             status: Status::ALREADY_STARTED,
@@ -118,7 +234,7 @@ pub fn install(engine: FirmwareEngine) -> Result<(), HookInstallError> {
 
     // SAFETY: The context has DXE lifetime after publication. PCI enumeration
     // is not running yet, so no callback can race these pointer replacements.
-    for hooked in unsafe { &mut *context }.protocols.iter_mut() {
+    for hooked in unsafe { &mut *context }.protocols_mut() {
         hooked.interface.preprocess_controller = preprocess_controller_override;
     }
     Ok(())
@@ -137,7 +253,7 @@ unsafe extern "efiapi" fn preprocess_controller_override(
     // SAFETY: `install` intentionally leaks this context for the DXE lifetime;
     // PI enumeration invokes PreprocessController serially.
     let context = unsafe { &mut *context };
-    let Some(original) = context.protocols.iter().find_map(|hooked| {
+    let Some(original) = context.protocols().iter().find_map(|hooked| {
         let interface = &*hooked.interface as *const PciHostBridgeResourceAllocation;
         ptr::eq(interface, this.cast_const()).then_some(hooked.original)
     }) else {

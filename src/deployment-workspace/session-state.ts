@@ -28,6 +28,7 @@ export const createInitialDeploymentState = (
                 firmwarePath: "",
                 firmware: null,
                 recoveryMethod: msi ? "usbFlashback" : "vendorRecovery",
+                firmwareTargetPolicy: "requireUnique",
                 installMethod: "firmwareSetupUtility",
                 instructionsUrl: msi ? MSI_MANUAL : "",
                 recoveryNote: msi
@@ -118,6 +119,8 @@ export const reduceLocalDeploymentIntent = (
                         };
                 case "setRecoveryMethod":
                         return { recoveryMethod: intent.value };
+                case "setFirmwareTargetPolicy":
+                        return { firmwareTargetPolicy: intent.value };
                 case "setInstallMethod":
                         return { installMethod: intent.value };
                 case "setInstructionsUrl":

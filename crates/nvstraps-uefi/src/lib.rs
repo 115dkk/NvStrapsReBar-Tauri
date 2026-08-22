@@ -1,7 +1,5 @@
 #![cfg_attr(target_os = "uefi", no_std)]
 
-extern crate alloc;
-
 pub mod execution;
 pub mod mmio;
 

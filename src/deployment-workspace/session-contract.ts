@@ -9,6 +9,7 @@ import type {
         FirmwareFingerprint,
         FirmwareInstallMethod,
         FirmwarePreparation,
+        FirmwareTargetPolicy,
         FirmwareSetupRebootPreview,
         LegacyFirmwareAnalysis,
         LegacyPatchRisk,
@@ -45,6 +46,7 @@ export interface DeploymentWorkspaceView {
         firmwarePath: string;
         firmware: FirmwareFingerprint | null;
         recoveryMethod: RecoveryMethod;
+        firmwareTargetPolicy: FirmwareTargetPolicy;
         installMethod: FirmwareInstallMethod;
         instructionsUrl: string;
         recoveryNote: string;
@@ -112,6 +114,7 @@ type FieldIntent =
         | { type: "setBoardPath"; value: BoardPath }
         | { type: "setFirmwarePath"; value: string }
         | { type: "setRecoveryMethod"; value: RecoveryMethod }
+        | { type: "setFirmwareTargetPolicy"; value: FirmwareTargetPolicy }
         | { type: "setInstallMethod"; value: FirmwareInstallMethod }
         | { type: "setInstructionsUrl"; value: string }
         | { type: "setRecoveryNote"; value: string }

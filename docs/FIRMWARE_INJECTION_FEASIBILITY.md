@@ -1,27 +1,74 @@
-<!-- Measured research for feature plan item 5, produced 2026-08-22 by Claude
-     against retail BIOS images downloaded from vendor CDNs, then audited by a
-     Daybreak Blue worker that re-derived every figure with its own harness and
-     parser. Its corrections are folded in. Nothing here is implemented. This
-     document supersedes the framing of FLASHER_COMPATIBILITY.md: before asking
-     whether a vendor flasher accepts our image, ask whether we can produce one
-     at all.
+<!-- The baseline measurement was produced on 2026-08-22 against retail BIOS
+     images downloaded from vendor CDNs and independently re-derived with a
+     second harness. The implementation/evidence section was updated after the
+     resulting injector, encoder, driver, profile-policy, and receipt changes.
 
-     Caveat that applies throughout: producing an image is a byte-transformation
-     result. Nothing measured here speaks to vendor signature policy, flash
-     region policy, bank selection, recovery behaviour, or bootability. -->
+     This document supersedes the framing of FLASHER_COMPATIBILITY.md: producing
+     a structurally valid artifact comes before predicting whether a private
+     vendor flasher will accept it. Producing an image is still not a physical
+     flash or boot claim. -->
 
 # Can we produce a patched image at all? A measured answer
 
-**Bottom line:** on every retail BIOS image tested, `inject_ffs` refuses, and the
-error it reports is not the reason it failed. The DXE volume is found; it is
-simply full. Our driver needs 34,900 bytes and the volume holding the DXE core
-carries 2.5–4 KiB of slack. Three of the five images will not accept even a
-596-byte file, for a second and unrelated reason: our LZMA encoder cannot
-reproduce the vendor's compression ratio at any level, so recompressing the
-volume inflates the containing file past its fixed extent before a single driver
-byte is added. The reference tool upstream tells users to run avoids both
-problems — it grows the nested volume, which we never do, and it does not
-degrade the compression it found.
+**Bottom line:** the current injector produces same-length artifacts for all five
+measured raw ROM images. The earlier all-refusal result below is the baseline
+that exposed the defects; it is no longer the shipping behavior. The remaining
+boundary is vendor authentication and physical flashing, not “this machine must
+live without ReBAR.” The application does not pretend it can re-sign a vendor
+capsule or that a `.CAP` body is a full-chip programmer image. External SPI use
+requires a separately read and pinned full-chip dump, or an exact BIOS-region
+dump backed by a proven region map; that dump becomes the source and recovery
+artifact.
+
+## Implemented result and evidence
+
+- The Rust DXE FFS is 20,564 bytes (SHA-256
+  `bfcdaea690ebf71e930fe2c259cd14aa44babb70998dc9949822474a84fbbb41`),
+  down from 34,900 bytes without removing execution, restore, S3, status, or
+  configuration behavior. A compact panic path and dynamically sized UEFI pool
+  buffers replace code pulled in by the generic allocator/formatter.
+- `lzma-sdk-rs 0.2301.1` emits a 7-Zip-SDK-compatible known-size LZMA stream.
+  Recompression preserves the source lc/lp/pb and dictionary bytes, uses the
+  measured `fb=128, mc=80` search, and is round-tripped by both the repository
+  decoder and CPython/liblzma. Authenticated or vendor-metadata guided sections
+  are read for census but are not rewritten with stale metadata.
+- Terminal nested FVs grow by UEFITool 0.28's block-map rule. `FvLength`,
+  `NumBlocks`, FV/section sizes, used size, checksums, alignment, and a
+  nonterminal containing FFS extent are rebuilt and re-parsed.
+- Multiple independent DXE domains are never selected by offset. The user must
+  bind `patchEveryDxeDomain` into the immutable profile, backed by tested USB
+  Flashback or an external SPI programmer; Dual BIOS alone is not accepted as
+  recovery authority. Mutation is all-or-none and the post-census requires the
+  exact input FFS once in every pinned target.
+- Source, driver, patched artifact, canonical census, target paths, growth, and
+  recompression facts are stored in a content-addressed injection receipt. Resume
+  and export regenerate the artifact and receipt and require exact equality.
+
+### Final retail regression
+
+All outputs retain the source ROM byte length. Every guided stream below decoded
+with CPython/liblzma, each grown FV reproduced its block map and checksum, every
+target contained exactly one 20,564-byte driver, all changed bytes stayed inside
+the declared containing FFS extents, and reinjection was rejected as already
+present.
+
+The three ASUS “raw” rows are capsule bodies extracted for parser/compression
+research only. They are not presented as full-chip programmer images; a real SPI
+workflow must start from its own pinned readback or proven BIOS-region dump.
+
+| Raw image | Targets | FV growth | Patched SHA-256 |
+|---|---:|---|---|
+| ASUS B450M-PRO 4401 | 1 | 20,480 bytes | `1de2a8d21d6fcf354a61ed58c54d288ffef67d26cd8e1cc3c43a529570d344dd` |
+| ASUS Z490-A 2701 | 1 | 20,480 bytes | `e57db1696137f32948880b120886f7ff0cb52994497ecb4806ad0a84356d48ff` |
+| ASUS X570-PLUS 4408 | 2 | 20,480 / 20,480 bytes | `cf0cf58bc1a59c9c204c4d67dfa579bf4573ae1a961e2608d81843b17e970b50` |
+| MSI B450 TOMAHAWK | 2 | 20,480 / 20,480 bytes | `d72cf9baf92401f0bf426c7d95ae19096186235d05019b6a1ebcad2f85fa5952` |
+| GIGABYTE Z490 ELITE F22 | 1 | 20,480 bytes | `626efd01fc78e0944ad6de44c383f9e647531882f2ad3a77252478b7a714ac5b` |
+
+This remains host-side artifact evidence, not a claim that a private vendor
+flasher accepts the bytes or that a physical board booted them. The local QEMU
+run could not start because this machine's WSL distribution is mounted
+read-only and lacks `/bin/bash`; the repository QEMU job remains a required CI
+gate rather than being reported as a pass here.
 
 ## 1. The corpus
 
@@ -41,7 +88,7 @@ Sources are the vendor CDNs: `dlcdnets.asus.com/pub/ASUS/mb/BIOS/<MODEL>-ASUS-<V
 `download.msi.com/bos_exe/mb/7C02vHD.zip`,
 `download.gigabyte.com/FileList/BIOS/mb_bios_z490-aorus-elite_f22.zip`.
 
-## 2. Result: six refusals out of six
+## 2. Baseline result before this patch: six refusals out of six
 
 Running `nvstraps_ffs::inject_ffs(image, NvStrapsReBar.ffs)` on each image, plus
 on the ASUS B450 file with its capsule header stripped, gives the same outcome
@@ -174,13 +221,16 @@ hypothetical.
 |---|---:|---|
 | `ReBarDxe.ffs` | 2,578 | xCuri0/ReBarUEFI release |
 | `NvStrapsReBar.ffs` | 13,628 | terminatorul/NvStrapsReBar v0.4-rc1 release |
-| ours | 34,900 | this repository, release profile |
+| ours before this patch | 34,900 | this repository, former release profile |
+| ours now | 20,564 | compact panic path and dynamic no-alloc UEFI buffers |
 
-Our PE is 34,816 bytes: `.text` 28,160, `.rdata` 5,120, `.reloc` 512, headers
-1,024. The workspace release profile is already tuned (`opt-level = "s"`,
-`lto = true`, `panic = "abort"`, `strip = true`, `codegen-units = 1`), so this is
-what a `no_std` Rust DXE driver on the `uefi` crate with `alloc` and a panic
-handler currently costs. It is 2.6× upstream's C driver and 13.5× ReBarDxe.
+Before this patch, the PE was 34,816 bytes: `.text` 28,160, `.rdata` 5,120,
+`.reloc` 512, headers 1,024. The release profile was already tuned, but the
+generic panic formatter and allocator pulled in code the driver did not need.
+The current PE is 20,480 bytes and the packed FFS is 20,564 bytes. Configuration
+limits are unchanged; no-std storage uses the existing wire maxima, while UEFI
+protocol, variable-name, and variable-data buffers grow dynamically from Boot
+Services pool allocations.
 
 This ordering explains a long-standing asymmetry in the upstream issue trackers:
 ReBarDxe fits the existing slack on four of the five images with no structural
@@ -244,7 +294,7 @@ lets a replacement exceed its original extent when everything from the old file
 end to the volume end is erase-filled. In these images the compressed FvMain file
 is followed by further live files, so that condition never holds either.
 
-## 8. Our LZMA encoder, not our LZMA level, is the problem
+## 8. The baseline LZMA encoder, not its level, was the problem
 
 We recompress with `oxiarc-lzma 0.3.6` at `GUIDED_LZMA_LEVEL = 3`. Recompressing
 the *unmodified* ASUS B450 FvMain (16,269,328 bytes) against the vendor's own
@@ -265,9 +315,9 @@ vendor's own payload — so the input is not the obstacle. Two conclusions follo
 and the first one corrects an assumption worth stating plainly: raising the level
 does not fix this.
 
-First, no level of our encoder comes within 650 KiB of what the vendor achieved.
+First, no level of the former encoder comes within 650 KiB of what the vendor achieved.
 Recompressing a vendor FvMain back into its original extent is therefore not
-achievable with the current encoder, whatever the level.
+achievable with that encoder, whatever the level.
 
 Second, `oxiarc-lzma` regresses sharply at levels 7 and above: level 7 produces
 2.1 MB more output than level 6 while enlarging the dictionary from 4 to 16 MiB.
@@ -318,7 +368,7 @@ equality. That is precisely the constraint our in-place injector already enforce
 
 Read across the rows: with nested-volume growth and maximum recompression, the
 upstream 13,628-byte driver would fit all five boards in place, with margins of
-1.6–27 KiB. Our 34,900-byte driver fits two of five, and one of those by 579
+1.6–27 KiB. The baseline 34,900-byte driver fits two of five, and one of those by 579
 bytes. Driver size is the whole margin.
 
 ## 10. Two further defects found along the way
@@ -360,10 +410,10 @@ needs an explicit policy before anything else here ships.
 ## 11. What this means for the item 5 plan
 
 `FLASHER_COMPATIBILITY.md` scoped a set of pre-export checks for predicting
-vendor-flasher acceptance. That work is downstream of a question this document
-answers: for these five retail images we cannot produce an artifact to check.
-Any implementation order that starts with acceptance prediction would build
-verification for images we never generate.
+vendor-flasher acceptance. At baseline that work was downstream of the fact that
+none of the five images produced an artifact. The final regression at the top of
+this document removes that prerequisite failure; flasher-policy analysis can now
+operate on real generated artifacts.
 
 The measured facts point at a different first tranche, in this order:
 
@@ -388,11 +438,12 @@ The measured facts point at a different first tranche, in this order:
 7. Shrink the driver. Every byte here is margin that items 5 and 6 do not have to
    find; upstream's C driver does the same job in 13,628 bytes.
 
-Items 5 through 7 change what we write to firmware and must not be taken on the
-strength of this document alone. Item 10's dual-copy finding has to be resolved
-before any of them ships, because unblocking injection without it converts a
-clean refusal into a silent half-patch — and section 5 shows we already produce
-such a half-patch today whenever the driver is small enough.
+Items 1–3 and 5–7 are now implemented. Item 4's proposed oxiarc level change was
+superseded rather than shipped: the encoder itself was replaced, source decoder
+properties are preserved, and the tuned SDK search was independently decoded.
+The dual-copy finding is resolved by an explicit, profile-bound all-domain policy
+with independent recovery authority, atomic mutation, per-target post-census,
+and a durable receipt. It is not resolved by guessing an active bank.
 
 ## Appendix: reproducing these measurements
 

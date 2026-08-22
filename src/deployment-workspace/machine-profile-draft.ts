@@ -1,7 +1,13 @@
-import type { CreateProfileRequest } from "./contract";
+import type {
+        CreateProfileRequest,
+        RecoveryMethod,
+} from "./contract";
 import type { DeploymentWorkspaceView } from "./session-contract";
 
 const fileName = (path: string) => path.split(/[\\/]/).at(-1) || "firmware.bin";
+
+export const isBootIndependentRecoveryMethod = (method: RecoveryMethod) =>
+        method === "usbFlashback" || method === "externalSpiProgrammer";
 
 export const buildMachineProfileRequest = (
         view: DeploymentWorkspaceView,
@@ -9,6 +15,15 @@ export const buildMachineProfileRequest = (
         if (!view.firmware) {
                 throw new Error(
                         "A firmware fingerprint is required to create a profile.",
+                );
+        }
+        if (
+                view.firmwareTargetPolicy === "patchEveryDxeDomain" &&
+                (!view.routeConfirmed ||
+                        !isBootIndependentRecoveryMethod(view.recoveryMethod))
+        ) {
+                throw new Error(
+                        "Patching every DXE firmware domain requires a tested or documented USB Flashback or external SPI recovery route.",
                 );
         }
 
@@ -22,6 +37,7 @@ export const buildMachineProfileRequest = (
                         testedOrDocumented: view.routeConfirmed,
                         note: view.recoveryNote,
                 },
+                firmwareTargetPolicy: view.firmwareTargetPolicy,
                 firmwareInstall: {
                         method: view.installMethod,
                         artifactFileName: fileName(view.firmwarePath),

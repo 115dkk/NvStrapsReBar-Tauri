@@ -795,6 +795,19 @@ aside hr {
         color: var(--muted);
         line-height: 1.45;
 }
+.multi-domain-policy[data-active="true"] {
+        border-color: #7d6548;
+        background: #27231d;
+}
+.policy-prerequisite {
+        margin: 0;
+        padding: 10px 16px;
+        border-left: 3px solid var(--warn);
+        color: #d8c39e;
+        background: #29251d;
+        font-size: 12px;
+        line-height: 1.45;
+}
 .panel-actions {
         display: flex;
         justify-content: flex-end;
@@ -1665,7 +1678,7 @@ dd {
 }
 .license-attribution-list {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
         gap: 8px;
 }
 .license-attribution {
@@ -1688,7 +1701,7 @@ dd {
 }
 .license-picker {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
         gap: 8px;
         margin-bottom: 8px;
 }

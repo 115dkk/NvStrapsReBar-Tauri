@@ -1,7 +1,25 @@
 # Third-party notices
 
-Repository-owned source code is licensed under the repository's [MIT license](LICENSE). The font
-software below is a separately licensed work and is not relicensed under MIT.
+Repository-owned source code is licensed under the repository's [MIT license](LICENSE). The
+third-party works below retain their own licenses and are not relicensed under MIT.
+
+## lzma-sdk-rs
+
+- Component: `lzma-sdk-rs`
+- Version: 0.2301.1
+- Copyright: Copyright (c) 2026, Dani Sarfati
+- License: BSD 3-Clause
+- Upstream: <https://github.com/danifunker/lzma-sdk-rs>
+- Full license: [`public/licenses/lzma-sdk-rs/LICENSE`](public/licenses/lzma-sdk-rs/LICENSE)
+
+This pure-Rust 7-Zip LZMA SDK port is used to rebuild firmware GUID-defined
+LZMA sections. The original LZMA SDK was placed in the public domain by Igor
+Pavlov. The application includes the complete BSD notice in its offline
+**Licenses** dialog.
+
+| File | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `LICENSE` | 1,726 | `6557e553354f1ab90110a7828fb644a69daf0a9d7309c5cab6be4ab80983dd8c` |
 
 ## Pretendard
 
