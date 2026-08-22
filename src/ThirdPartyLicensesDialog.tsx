@@ -9,8 +9,12 @@ const jetendardLicenseUrl = new URL(
         "licenses/Jetendard/LICENSE",
         document.baseURI,
 ).toString();
+const lzmaSdkRsLicenseUrl = new URL(
+        "licenses/lzma-sdk-rs/LICENSE",
+        document.baseURI,
+).toString();
 
-type LicenseId = "pretendard" | "jetendard";
+type LicenseId = "pretendard" | "jetendard" | "lzmaSdkRs";
 
 export function ThirdPartyLicensesDialog({
         onClose,
@@ -26,6 +30,7 @@ export function ThirdPartyLicensesDialog({
         const [licenseText, setLicenseText] = useState<Record<LicenseId, string>>({
                 pretendard: "",
                 jetendard: "",
+                lzmaSdkRs: "",
         });
         const [loadFailed, setLoadFailed] = useState(false);
 
@@ -35,6 +40,7 @@ export function ThirdPartyLicensesDialog({
                         [
                                 ["pretendard", pretendardLicenseUrl],
                                 ["jetendard", jetendardLicenseUrl],
+                                ["lzmaSdkRs", lzmaSdkRsLicenseUrl],
                         ].map(async ([id, url]) => {
                                 const response = await fetch(url, {
                                         cache: "force-cache",
@@ -138,6 +144,11 @@ export function ThirdPartyLicensesDialog({
                                                 "ui.jetendardV010IsBundledForTechnicalInformationUnderTheSilOpenFontLicense11",
                                         )}
                                 </p>
+                                <p>
+                                        {t(
+                                                "ui.lzmaSdkRsV023011IsBundledUnderTheBsd3ClauseLicense",
+                                        )}
+                                </p>
                                 <div className="license-attribution-list">
                                         <div className="license-attribution">
                                                 <strong>Pretendard v1.3.9</strong>
@@ -159,6 +170,20 @@ export function ThirdPartyLicensesDialog({
                                                 <span>
                                                         Reserved Font Name
                                                         &apos;Jetendard&apos;
+                                                </span>
+                                        </div>
+                                        <div className="license-attribution">
+                                                <strong>
+                                                        lzma-sdk-rs 0.2301.1
+                                                </strong>
+                                                <span>
+                                                        Copyright (c) 2026 Dani
+                                                        Sarfati
+                                                </span>
+                                                <span>
+                                                        {t(
+                                                                "ui.basedOnTheSevenZipSdkPublicDomain",
+                                                        )}
                                                 </span>
                                         </div>
                                 </div>
@@ -195,6 +220,20 @@ export function ThirdPartyLicensesDialog({
                                                 }
                                         >
                                                 {t("ui.jetendardLicense")}
+                                        </button>
+                                        <button
+                                                type="button"
+                                                aria-pressed={
+                                                        selectedLicense ===
+                                                        "lzmaSdkRs"
+                                                }
+                                                onClick={() =>
+                                                        setSelectedLicense(
+                                                                "lzmaSdkRs",
+                                                        )
+                                                }
+                                        >
+                                                {t("ui.lzmaSdkRsLicense")}
                                         </button>
                                 </div>
                                 {loadFailed ? (

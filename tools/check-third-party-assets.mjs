@@ -3,6 +3,12 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 
 const expected = {
+  lzmaSdkRs: {
+    license: {
+      bytes: 1_726,
+      sha256: "6557e553354f1ab90110a7828fb644a69daf0a9d7309c5cab6be4ab80983dd8c",
+    },
+  },
   pretendard: {
     font: {
       bytes: 2_057_688,
@@ -39,6 +45,21 @@ const expected = {
     },
   },
 };
+
+const lzmaSdkRsLicense = await verify(
+  "public/licenses/lzma-sdk-rs/LICENSE",
+  expected.lzmaSdkRs.license,
+  "lzma-sdk-rs 0.2301.1",
+);
+for (const required of [
+  "BSD 3-Clause License",
+  "Copyright (c) 2026, Dani Sarfati",
+  "7-zip LZMA SDK",
+]) {
+  if (!lzmaSdkRsLicense.includes(required)) {
+    throw new Error(`Bundled lzma-sdk-rs license is missing: ${required}`);
+  }
+}
 
 async function verify(path, expectation, component) {
   const bytes = await readFile(path);
@@ -140,9 +161,17 @@ await verify(
   expected.jetendard.license,
   "Jetendard v0.1.0",
 );
+await verify(
+  "dist/licenses/lzma-sdk-rs/LICENSE",
+  expected.lzmaSdkRs.license,
+  "lzma-sdk-rs 0.2301.1",
+);
 
 const notices = await readFile("THIRD_PARTY_NOTICES.md", "utf8");
 for (const required of [
+  "lzma-sdk-rs",
+  "BSD 3-Clause",
+  expected.lzmaSdkRs.license.sha256,
   "Pretendard Variable",
   "Jetendard",
   "SIL Open Font License, Version 1.1",
