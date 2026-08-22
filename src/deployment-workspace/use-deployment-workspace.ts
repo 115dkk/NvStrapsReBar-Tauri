@@ -4,6 +4,7 @@ import type { SystemSnapshot } from "../types";
 import type {
         BoardPath,
         FirmwareInstallMethod,
+        FirmwareTargetPolicy,
         LegacyPatchRisk,
         RecoveryMethod,
 } from "./contract";
@@ -92,6 +93,8 @@ export const useDeploymentWorkspace = (snapshot: SystemSnapshot) => {
                         send({ type: "setFirmwarePath", value }),
                 setRecoveryMethod: (value: RecoveryMethod) =>
                         send({ type: "setRecoveryMethod", value }),
+                setFirmwareTargetPolicy: (value: FirmwareTargetPolicy) =>
+                        send({ type: "setFirmwareTargetPolicy", value }),
                 setInstallMethod: (value: FirmwareInstallMethod) =>
                         send({ type: "setInstallMethod", value }),
                 setInstructionsUrl: (value: string) =>

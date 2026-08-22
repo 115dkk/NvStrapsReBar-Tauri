@@ -17,6 +17,9 @@ export type RecoveryMethod =
         | "vendorRecovery"
         | "externalSpiProgrammer"
         | "none";
+export type FirmwareTargetPolicy =
+        | "requireUnique"
+        | "patchEveryDxeDomain";
 export type FirmwareInstallMethod =
         | "firmwareSetupUtility"
         | "usbFlashback"
@@ -95,6 +98,7 @@ export type CreateProfileRequest = {
         firmwarePath: string;
         expectedFirmware: FirmwareFingerprint;
         recovery: RecoveryCapability;
+        firmwareTargetPolicy: FirmwareTargetPolicy;
         firmwareInstall: FirmwareInstallRoute;
         legacyPatches?: LegacyPatchProfile;
 };
@@ -107,6 +111,7 @@ export type MachineProfile = {
         identity: MachineIdentity;
         originalFirmware: FirmwareFingerprint;
         recovery: RecoveryCapability;
+        firmwareTargetPolicy: FirmwareTargetPolicy;
         firmwareInstall: FirmwareInstallRoute | null;
 };
 export type StepId =
@@ -209,6 +214,31 @@ export type StoredArtifact = {
         byteLength: number;
         sha256: string;
 };
+export type FirmwareInjectionTargetReceipt = {
+        targetContainerFileOffsets: number[];
+        targetFirmwareVolumeOffset: number;
+        driverFileOffset: number;
+        containerFirmwareVolumeOffset: number;
+        containerFileOffset: number;
+        replacedPadFile: boolean;
+        erasePolarity: boolean;
+        encapsulatedVolumeImage: boolean;
+        recompressedGuidedSection: boolean;
+        grewFirmwareVolume: boolean;
+        firmwareVolumeGrowthBytes: number;
+};
+export type FirmwareInjectionReceipt = {
+        firmwareTargetPolicy: FirmwareTargetPolicy;
+        policyVersion: number;
+        sourceSha256: string;
+        driverSha256: string;
+        patchedFirmwareSha256: string;
+        censusSha256: string;
+        patchedTargetCount: number;
+        grewFirmwareVolume: boolean;
+        firmwareVolumeGrowthBytes: number;
+        targets: FirmwareInjectionTargetReceipt[];
+};
 export type FirmwarePreparation = {
         plan: DeploymentPlan;
         driver: StoredArtifact;
@@ -216,14 +246,8 @@ export type FirmwarePreparation = {
         legacyPatchReceipt: StoredArtifact | null;
         legacyPatch: unknown | null;
         patchedFirmware: StoredArtifact | null;
-        injection: {
-                firmwareVolumeOffset: number;
-                fileOffset: number;
-                replacedPadFile: boolean;
-                erasePolarity: boolean;
-                encapsulatedVolumeImage: boolean;
-                recompressedGuidedSection: boolean;
-        } | null;
+        firmwareInjectionReceipt: StoredArtifact | null;
+        injection: FirmwareInjectionReceipt | null;
 };
 export type DeploymentPackageReceipt = {
         packagePath: string;

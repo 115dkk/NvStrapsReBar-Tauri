@@ -17,7 +17,10 @@ class MemoryStorage {
         }
 }
 
-const createProfile = async () => {
+const createProfile = async (
+        firmwareTargetPolicy: "requireUnique" | "patchEveryDxeDomain" =
+                "requireUnique",
+) => {
         const expectedFirmware =
                 await previewDeploymentAdapter.inspectFirmwareImage(
                         "C:\\Firmware\\E7D25IMS.1N0",
@@ -32,6 +35,7 @@ const createProfile = async () => {
                         testedOrDocumented: true,
                         note: "fixture",
                 },
+                firmwareTargetPolicy,
                 firmwareInstall: {
                         method: "firmwareSetupUtility",
                         artifactFileName: "E7D25IMS.1N0",
@@ -49,9 +53,26 @@ describe("browser preview deployment fixture ledger", () => {
 
         it("restores the canned receipt cursor after a client reload", async () => {
                 const bundle = await createProfile();
-                await previewDeploymentAdapter.prepareFirmwareArtifact(
-                        bundle.profile.profileId,
-                );
+                const preparation =
+                        await previewDeploymentAdapter.prepareFirmwareArtifact(
+                                bundle.profile.profileId,
+                        );
+                expect(preparation.injection).toMatchObject({
+                        firmwareTargetPolicy: "requireUnique",
+                        patchedTargetCount: 1,
+                        grewFirmwareVolume: false,
+                        firmwareVolumeGrowthBytes: 0,
+                        targets: [
+                                expect.objectContaining({
+                                        targetContainerFileOffsets: [],
+                                        grewFirmwareVolume: false,
+                                }),
+                        ],
+                });
+                expect(preparation.firmwareInjectionReceipt).toMatchObject({
+                        kind: "firmwareInjectionReceipt",
+                        sha256: "85".repeat(32),
+                });
                 const restored =
                         await previewDeploymentAdapter.getDeploymentPlan(
                                 bundle.profile.profileId,
@@ -61,6 +82,47 @@ describe("browser preview deployment fixture ledger", () => {
                         restored.steps.find((step) => step.state === "ready")
                                 ?.id,
                 ).toBe("flashWithVendorRoute");
+        });
+
+        it("preserves the all-domain policy in the profile and durable injection receipt", async () => {
+                const unique = await createProfile();
+                const bundle = await createProfile("patchEveryDxeDomain");
+                const preparation =
+                        await previewDeploymentAdapter.prepareFirmwareArtifact(
+                                bundle.profile.profileId,
+                        );
+
+                expect(bundle.profile.firmwareTargetPolicy).toBe(
+                        "patchEveryDxeDomain",
+                );
+                expect(bundle.profile.profileId).not.toBe(
+                        unique.profile.profileId,
+                );
+                expect(preparation.injection).toMatchObject({
+                        firmwareTargetPolicy: "patchEveryDxeDomain",
+                        policyVersion: 1,
+                        sourceSha256: bundle.profile.originalFirmware.sha256,
+                        driverSha256: "72".repeat(32),
+                        patchedFirmwareSha256: "83".repeat(32),
+                        censusSha256: "84".repeat(32),
+                        patchedTargetCount: 1,
+                });
+        });
+
+        it("loads older preview profiles with the require-unique default", async () => {
+                await createProfile();
+                const stored = JSON.parse(
+                        sessionStorage.getItem("nvstraps-preview-profiles")!,
+                ) as Record<string, unknown>[];
+                delete stored[0]!.firmwareTargetPolicy;
+                sessionStorage.setItem(
+                        "nvstraps-preview-profiles",
+                        JSON.stringify(stored),
+                );
+
+                const [restored] =
+                        await previewDeploymentAdapter.listMachineProfiles();
+                expect(restored?.firmwareTargetPolicy).toBe("requireUnique");
         });
 
         it("injects malformed receipt faults without persisting the bad cursor", async () => {

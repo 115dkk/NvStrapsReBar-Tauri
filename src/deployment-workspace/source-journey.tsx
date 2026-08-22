@@ -11,6 +11,7 @@ import {
         riskLabelIds,
 } from "./messages";
 import { useDeploymentWorkspaceController } from "./context";
+import { isBootIndependentRecoveryMethod } from "./machine-profile-draft";
 import { JourneyHeading, legacyRuleKey, shortHash } from "./presentation";
 export const SourceJourney = () => {
         const { locale, t, n, exactMatches, absentRules } = useI18n();
@@ -22,6 +23,7 @@ export const SourceJourney = () => {
                 firmwarePath,
                 firmware,
                 recoveryMethod,
+                firmwareTargetPolicy,
                 installMethod,
                 instructionsUrl,
                 recoveryNote,
@@ -47,6 +49,7 @@ export const SourceJourney = () => {
                 setBoardPath,
                 setFirmwarePath,
                 setRecoveryMethod,
+                setFirmwareTargetPolicy,
                 setInstallMethod,
                 setInstructionsUrl,
                 setRecoveryNote,
@@ -59,6 +62,12 @@ export const SourceJourney = () => {
                 analyzeLegacy,
                 createProfile,
         } = commands;
+        const patchesEveryDxeDomain =
+                firmwareTargetPolicy === "patchEveryDxeDomain";
+        const multiDomainPolicyReady =
+                !patchesEveryDxeDomain ||
+                (routeConfirmed &&
+                        isBootIndependentRecoveryMethod(recoveryMethod));
         return (
                                 <section className="journey-panel" aria-labelledby="source-title">
                                         <JourneyHeading
@@ -426,6 +435,38 @@ export const SourceJourney = () => {
                                                         <small>{t("ui.thisRecordsTheSelectedInstallationAndRecoveryInstructions")}</small>
                                                 </span>
                                         </label>
+                                        <label
+                                                className="consequence-check multi-domain-policy"
+                                                data-active={patchesEveryDxeDomain}
+                                        >
+                                                <input
+                                                        type="checkbox"
+                                                        checked={patchesEveryDxeDomain}
+                                                        aria-describedby="patch-every-dxe-description"
+                                                        onChange={(event) =>
+                                                                setFirmwareTargetPolicy(
+                                                                        event.target.checked
+                                                                                ? "patchEveryDxeDomain"
+                                                                                : "requireUnique",
+                                                                )
+                                                        }
+                                                />
+                                                <span>
+                                                        <strong>{t("ui.patchEveryDetectedDxeFirmwareDomain")}</strong>
+                                                        <small id="patch-every-dxe-description">
+                                                                {t("ui.patchEveryDxeDomainExplanation")}
+                                                        </small>
+                                                </span>
+                                        </label>
+                                        {patchesEveryDxeDomain &&
+                                                !multiDomainPolicyReady && (
+                                                        <p
+                                                                className="policy-prerequisite"
+                                                                role="status"
+                                                        >
+                                                                {t("ui.patchEveryDxeDomainRequiresBootIndependentRecovery")}
+                                                        </p>
+                                                )}
                                         <div className="panel-actions">
                                                 <button
                                                         className="primary"
@@ -439,6 +480,7 @@ export const SourceJourney = () => {
                                                                 !installNote.trim() ||
                                                                 !recoveryNote.trim() ||
                                                                 !routeConfirmed ||
+                                                                !multiDomainPolicyReady ||
                                                                 !legacyReady
                                                         }
                                                         onClick={createProfile}

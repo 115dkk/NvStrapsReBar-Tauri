@@ -8,9 +8,12 @@ export const messages = {
         "ui.close": { en: "Close", ko: "닫기" },
         "ui.pretendardV139IsBundledWithThisApplicationUnderTheSilOpenFontLicense11": { en: "Pretendard v1.3.9 is bundled with this application under the SIL Open Font License 1.1.", ko: "Pretendard v1.3.9는 이 앱에 포함되어 있으며 SIL 오픈 폰트 라이선스 1.1에 따라 배포됩니다." },
         "ui.jetendardV010IsBundledForTechnicalInformationUnderTheSilOpenFontLicense11": { en: "Jetendard v0.1.0 is bundled for technical information under the SIL Open Font License 1.1.", ko: "Jetendard v0.1.0은 이 앱의 기술 정보에 쓰이며 SIL 오픈 폰트 라이선스 1.1에 따라 배포됩니다." },
+        "ui.lzmaSdkRsV023011IsBundledUnderTheBsd3ClauseLicense": { en: "lzma-sdk-rs 0.2301.1 is bundled under the BSD 3-Clause License. It includes code based on the upstream 7-Zip SDK, which is in the public domain.", ko: "lzma-sdk-rs 0.2301.1은 BSD 3-Clause 라이선스로 앱에 포함됩니다. 일부 코드는 퍼블릭 도메인인 7-Zip SDK를 바탕으로 합니다." },
+        "ui.basedOnTheSevenZipSdkPublicDomain": { en: "Based on the 7-Zip SDK · public domain", ko: "7-Zip SDK 기반 · 퍼블릭 도메인" },
         "ui.fullLicenseText": { en: "Full license text", ko: "라이선스 전문" },
         "ui.pretendardLicense": { en: "Pretendard license", ko: "Pretendard 라이선스" },
         "ui.jetendardLicense": { en: "Jetendard license", ko: "Jetendard 라이선스" },
+        "ui.lzmaSdkRsLicense": { en: "lzma-sdk-rs license", ko: "lzma-sdk-rs 라이선스" },
         "ui.loadingTheBundledLicenseText": { en: "Loading the bundled license text…", ko: "내장된 라이선스 전문을 불러오는 중…" },
         "ui.theBundledLicenseTextCouldNotBeLoaded": { en: "The bundled license text could not be loaded.", ko: "내장된 라이선스 전문을 불러오지 못했습니다." },
         "ui.inspectingUefiAccessAndNvidiaAdapters": { en: "Inspecting UEFI access and NVIDIA adapters…", ko: "UEFI 접근 권한과 NVIDIA 어댑터를 확인하고 있습니다…" },
@@ -201,6 +204,9 @@ export const messages = {
         "ui.iReviewedThisRiskForTheAnalyzedFirmware": { en: "I checked this change against the analyzed image.", ko: "분석한 이미지에서 이 변경의 영향을 확인했습니다." },
         "ui.iCheckedTheVendorInstallAndRecoveryInstructionsForThisBoard": { en: "I checked the vendor install and recovery instructions for this board.", ko: "이 보드의 제조사 설치 및 복구 지침을 확인했습니다." },
         "ui.thisRecordsTheSelectedInstallationAndRecoveryInstructions": { en: "This records the selected installation and recovery instructions.", ko: "선택한 설치 및 복구 지침을 기록합니다." },
+        "ui.patchEveryDetectedDxeFirmwareDomain": { en: "Patch every detected DXE firmware domain", ko: "감지된 모든 DXE 펌웨어 영역 수정" },
+        "ui.patchEveryDxeDomainExplanation": { en: "This modifies every detected boot and recovery DXE domain in the artifact. It requires a tested or documented USB Flashback or external SPI recovery route that works without booting the board.", ko: "이 옵션은 이미지에서 감지된 부팅·복구용 DXE 영역을 모두 수정합니다. 보드가 부팅되지 않아도 쓸 수 있는 USB Flashback 또는 외부 SPI 복구 방법을 미리 확인해야 합니다." },
+        "ui.patchEveryDxeDomainRequiresBootIndependentRecovery": { en: "To use this policy, select USB Flashback or External SPI programmer as the recovery route, then confirm that you checked its instructions.", ko: "이 정책을 쓰려면 복구 경로를 USB Flashback 또는 외부 SPI 프로그래머로 선택한 뒤, 복구 지침을 확인했다는 항목도 체크하세요." },
         "ui.createProfileForThisComputer": { en: "Create profile for this computer", ko: "이 컴퓨터의 프로필 만들기" },
         "ui.machineProfile": { en: "Machine profile", ko: "컴퓨터 프로필" },
         "ui.noStoredProfiles": { en: "No stored profiles", ko: "저장된 프로필 없음" },
@@ -363,6 +369,18 @@ export const messages = {
         "ui.hardwareCheckDifferences": { en: "Hardware check found {differenceCount} difference(s); deployment remains blocked until the selected profile matches.", ko: "하드웨어 확인 결과 {differenceCount}개 항목이 다릅니다. 선택한 프로필과 일치해야 배포를 계속할 수 있습니다." },
         "ui.analysisFailedRetryImage": { en: "Analysis failed: {detail} Retry this image.", ko: "분석 실패: {detail} 이 이미지를 다시 시도하세요." },
         "ui.deploymentOperationFailed": { en: "Deployment operation failed · {detail}", ko: "배포 작업 실패 · {detail}" },
+        "ui.firmwareInjectionInvalidDriverFfs": { en: "The bundled DXE driver is invalid. Reinstall or update NvStrapsReBar, then try again.", ko: "앱에 포함된 DXE 드라이버를 읽을 수 없습니다. NvStrapsReBar를 다시 설치하거나 최신 버전으로 업데이트한 뒤 다시 시도하세요." },
+        "ui.firmwareInjectionInvalidFirmware": { en: "The selected file is not a supported firmware image. Download a fresh BIOS image for this motherboard from the manufacturer, then select it again.", ko: "선택한 파일을 지원되는 펌웨어 이미지로 읽을 수 없습니다. 이 메인보드용 BIOS 이미지를 제조사에서 다시 내려받아 선택하세요." },
+        "ui.firmwareInjectionDriverAlreadyPresent": { en: "The selected firmware already contains the NvStrapsReBar DXE driver. Select an unmodified vendor image.", ko: "선택한 펌웨어에 NvStrapsReBar DXE 드라이버가 이미 들어 있습니다. 수정하지 않은 제조사 원본 이미지를 선택하세요." },
+        "ui.firmwareInjectionCompressionFailure": { en: "A compressed firmware region could not be rebuilt. Select another official BIOS version for this motherboard.", ko: "압축된 펌웨어 영역을 다시 만들지 못했습니다. 이 메인보드용 다른 공식 BIOS 버전을 선택하세요." },
+        "ui.firmwareInjectionUnsupportedCapsule": { en: "This capsule cannot be safely modified or treated as a whole-chip image. Use a separately read and pinned full-chip dump, or an exact BIOS-region dump backed by a proven region map. Do not strip and reuse the capsule body.", ko: "이 캡슐은 안전하게 수정할 수도, 전체 칩 이미지로 간주할 수도 없습니다. 프로그래머로 직접 읽어 보존한 전체 칩 덤프를 사용하거나, 영역 구성이 확인된 정확한 BIOS 영역 덤프를 선택하세요. 캡슐 본문만 떼어내 사용하면 안 됩니다." },
+        "ui.firmwareInjectionMalformedCapsule": { en: "The selected firmware capsule is damaged or malformed. Download a fresh copy from the manufacturer, then select it again.", ko: "선택한 펌웨어 캡슐이 손상되었거나 형식이 잘못되었습니다. 제조사에서 파일을 다시 내려받아 선택하세요." },
+        "ui.firmwareInjectionAmbiguousDxeTargets": { en: "This image contains more than one DXE firmware domain. To modify all of them, return to the source step, select a tested or documented USB Flashback or external SPI recovery route, acknowledge “Patch every detected DXE firmware domain,” and create the profile again.", ko: "이 이미지에는 DXE 펌웨어 영역이 둘 이상 있습니다. 모두 수정하려면 원본 단계에서 USB Flashback 또는 외부 SPI 복구 경로를 선택하고 복구 지침을 확인한 뒤, ‘감지된 모든 DXE 펌웨어 영역 수정’을 체크해 프로필을 다시 만드세요." },
+        "ui.firmwareInjectionIncompleteDxeTargetCensus": { en: "Some firmware containers could not be fully inspected, so NvStrapsReBar cannot prove a unique DXE target and will not modify this image. Select another official BIOS version for this motherboard.", ko: "펌웨어 컨테이너 일부를 끝까지 검사하지 못해 수정할 DXE 대상을 하나로 확인할 수 없습니다. NvStrapsReBar는 이 이미지를 수정하지 않습니다. 이 메인보드용 다른 공식 BIOS 버전을 선택하세요." },
+        "ui.firmwareInjectionUnsupportedDxeTarget": { en: "NvStrapsReBar found the DXE target, but this firmware layout cannot currently be rebuilt, so the image was not modified. Select another official BIOS version for this motherboard.", ko: "NvStrapsReBar가 DXE 대상은 찾았지만 현재 이 펌웨어 구조를 다시 만들 수 없어 이미지를 수정하지 않았습니다. 이 메인보드용 다른 공식 BIOS 버전을 선택하세요." },
+        "ui.firmwareInjectionNoDxeVolume": { en: "No supported DXE volume was found. Select another official BIOS image or format for this motherboard.", ko: "지원되는 DXE 볼륨을 찾지 못했습니다. 이 메인보드용 다른 공식 BIOS 이미지나 제조사가 제공한 다른 형식을 선택하세요." },
+        "ui.firmwareInjectionInsufficientDxeSpace": { en: "The target DXE volume has {availableBytes} bytes available, but the driver requires {requiredBytes} bytes. Select another official BIOS version for this motherboard.", ko: "DXE 볼륨의 여유 공간은 {availableBytes}바이트지만 드라이버를 넣으려면 {requiredBytes}바이트가 필요합니다. 이 메인보드용 다른 공식 BIOS 버전을 선택하세요." },
+        "ui.firmwareInjectionRecompressedContainerTooLarge": { en: "The rebuilt container requires {requiredBytes} bytes, but only {availableBytes} bytes fit in its original space. Select another official BIOS version for this motherboard.", ko: "다시 만든 컨테이너는 {requiredBytes}바이트지만 원래 공간에는 {availableBytes}바이트까지만 들어갑니다. 이 메인보드용 다른 공식 BIOS 버전을 선택하세요." },
         "ui.configureOperationFailed": { en: "Configuration operation failed · {detail}", ko: "구성 작업 실패 · {detail}" },
         "ui.barSettingsErrorStaleTopology": { en: "The GPU or PCI topology changed. Refresh the system, review the draft, and save again.", ko: "GPU 또는 PCI 구성이 바뀌었습니다. 시스템을 새로 고친 뒤 초안을 다시 확인하고 저장하세요." },
         "ui.barSettingsErrorStaleConfiguration": { en: "The saved BAR configuration changed. Refresh the system before applying this draft.", ko: "저장된 BAR 구성이 바뀌었습니다. 시스템을 새로 고친 뒤 이 초안을 다시 적용하세요." },
@@ -458,6 +476,14 @@ export type MessageParameters = {
         "ui.hardwareCheckDifferences": { differenceCount: number };
         "ui.analysisFailedRetryImage": { detail: string };
         "ui.deploymentOperationFailed": { detail: string };
+        "ui.firmwareInjectionInsufficientDxeSpace": {
+                availableBytes: number;
+                requiredBytes: number;
+        };
+        "ui.firmwareInjectionRecompressedContainerTooLarge": {
+                availableBytes: number;
+                requiredBytes: number;
+        };
         "ui.configureOperationFailed": { detail: string };
         "ui.saveReceiptSummary": { bytes: number; state: string };
 };

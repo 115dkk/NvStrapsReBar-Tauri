@@ -129,10 +129,18 @@ const legacyStep: StepFixture = [
         "automated",
         "Apply the profile's legacy-board patch bundle",
 ];
+type StoredPreviewProfile = Omit<MachineProfile, "firmwareTargetPolicy"> &
+        Partial<Pick<MachineProfile, "firmwareTargetPolicy">>;
 const loadProfiles = (): MachineProfile[] =>
-        JSON.parse(
-                sessionStorage.getItem(profileKey) ?? "[]",
-        ) as MachineProfile[];
+        (
+                JSON.parse(
+                        sessionStorage.getItem(profileKey) ?? "[]",
+                ) as StoredPreviewProfile[]
+        ).map((profile) => ({
+                ...profile,
+                firmwareTargetPolicy:
+                        profile.firmwareTargetPolicy ?? "requireUnique",
+        }));
 const saveProfiles = (profiles: MachineProfile[]) =>
         sessionStorage.setItem(profileKey, JSON.stringify(profiles));
 const fixturesFor = (profile: MachineProfile): readonly StepFixture[] =>
@@ -666,12 +674,29 @@ export const previewDeploymentAdapter: DeploymentAdapter = {
                         throw new Error(
                                 "The source firmware changed after inspection; inspect this image again.",
                         );
-                const profileId = `nvstraps-${actual.sha256.slice(0, 16)}`;
+                if (
+                        request.firmwareTargetPolicy ===
+                                "patchEveryDxeDomain" &&
+                        (!request.recovery.testedOrDocumented ||
+                                ![
+                                        "usbFlashback",
+                                        "externalSpiProgrammer",
+                                ].includes(request.recovery.method))
+                )
+                        throw new Error(
+                                "Patching every DXE firmware domain requires a tested or documented USB Flashback or external SPI recovery route.",
+                        );
+                const policyKey =
+                        request.firmwareTargetPolicy ===
+                        "patchEveryDxeDomain"
+                                ? "all-dxe"
+                                : "unique";
+                const profileId = `nvstraps-${actual.sha256.slice(0, 12)}-${policyKey}`;
                 const profileIdentity = clone(identity);
                 if (actual.fileName === "changed-fingerprint.bin")
                         profileIdentity.gpus[0]!.deviceId = 0x1f81;
                 const profile: MachineProfile = {
-                        schemaVersion: 3,
+                        schemaVersion: 4,
                         profileId,
                         displayName: request.displayName,
                         boardPath: request.boardPath,
@@ -679,6 +704,7 @@ export const previewDeploymentAdapter: DeploymentAdapter = {
                         identity: profileIdentity,
                         originalFirmware: clone(actual),
                         recovery: clone(request.recovery),
+                        firmwareTargetPolicy: request.firmwareTargetPolicy,
                         firmwareInstall: clone(request.firmwareInstall),
                 };
                 const profiles = [
@@ -745,13 +771,38 @@ export const previewDeploymentAdapter: DeploymentAdapter = {
                                 byteLength: firmware.byteLength,
                                 sha256: "83".repeat(32),
                         },
+                        firmwareInjectionReceipt: {
+                                kind: "firmwareInjectionReceipt",
+                                path: "C:\\ProgramData\\NvStrapsReBar\\artifacts\\firmware-injection-receipt.json",
+                                byteLength: 1320,
+                                sha256: "85".repeat(32),
+                        },
                         injection: {
-                                firmwareVolumeOffset: 16908288,
-                                fileOffset: 17104896,
-                                replacedPadFile: true,
-                                erasePolarity: true,
-                                encapsulatedVolumeImage: false,
-                                recompressedGuidedSection: false,
+                                firmwareTargetPolicy:
+                                        profile.firmwareTargetPolicy,
+                                policyVersion: 1,
+                                sourceSha256: profile.originalFirmware.sha256,
+                                driverSha256: "72".repeat(32),
+                                patchedFirmwareSha256: "83".repeat(32),
+                                censusSha256: "84".repeat(32),
+                                patchedTargetCount: 1,
+                                grewFirmwareVolume: false,
+                                firmwareVolumeGrowthBytes: 0,
+                                targets: [
+                                        {
+                                                targetContainerFileOffsets: [],
+                                                targetFirmwareVolumeOffset: 16908288,
+                                                driverFileOffset: 17104896,
+                                                containerFirmwareVolumeOffset: 16908288,
+                                                containerFileOffset: 17104896,
+                                                replacedPadFile: true,
+                                                erasePolarity: true,
+                                                encapsulatedVolumeImage: false,
+                                                recompressedGuidedSection: false,
+                                                grewFirmwareVolume: false,
+                                                firmwareVolumeGrowthBytes: 0,
+                                        },
+                                ],
                         },
                 };
         },

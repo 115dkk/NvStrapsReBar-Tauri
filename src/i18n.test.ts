@@ -63,12 +63,101 @@ describe("i18n locale policy", () => {
                 ).toContain("1개 항목");
         });
 
+        it("localizes firmware injection recovery without losing capacity values", () => {
+                expect(
+                        translate(
+                                "en",
+                                "ui.firmwareInjectionInsufficientDxeSpace",
+                                {
+                                        availableBytes: 3_016,
+                                        requiredBytes: 34_904,
+                                },
+                        ),
+                ).toBe(
+                        "The target DXE volume has 3016 bytes available, but the driver requires 34904 bytes. Select another official BIOS version for this motherboard.",
+                );
+                expect(
+                        translate(
+                                "ko",
+                                "ui.firmwareInjectionRecompressedContainerTooLarge",
+                                {
+                                        availableBytes: 90_112,
+                                        requiredBytes: 91_744,
+                                },
+                        ),
+                ).toBe(
+                        "다시 만든 컨테이너는 91744바이트지만 원래 공간에는 90112바이트까지만 들어갑니다. 이 메인보드용 다른 공식 BIOS 버전을 선택하세요.",
+                );
+                expect(
+                        translate(
+                                "ko",
+                                "ui.firmwareInjectionIncompleteDxeTargetCensus",
+                        ),
+                ).toContain("NvStrapsReBar는 이 이미지를 수정하지 않습니다.");
+                expect(
+                        translate(
+                                "ko",
+                                "ui.firmwareInjectionUnsupportedDxeTarget",
+                        ),
+                ).toContain("이미지를 수정하지 않았습니다.");
+                expect(
+                        translate(
+                                "en",
+                                "ui.firmwareInjectionAmbiguousDxeTargets",
+                        ),
+                ).toContain("Patch every detected DXE firmware domain");
+                expect(
+                        translate(
+                                "ko",
+                                "ui.firmwareInjectionAmbiguousDxeTargets",
+                        ),
+                ).toContain("프로필을 다시 만드세요");
+                expect(
+                        translate(
+                                "ko",
+                                "ui.patchEveryDetectedDxeFirmwareDomain",
+                        ),
+                ).toBe("감지된 모든 DXE 펌웨어 영역 수정");
+                expect(
+                        translate(
+                                "ko",
+                                "ui.patchEveryDxeDomainExplanation",
+                        ),
+                ).toContain("보드가 부팅되지 않아도 쓸 수 있는");
+        });
+
         it("has complete non-empty English and Korean catalogs", () => {
                 expect(messageIds.length).toBeGreaterThan(350);
                 for (const id of messageIds) {
                         expect(messages[id].en.trim()).not.toBe("");
                         expect(messages[id].ko.trim()).not.toBe("");
                 }
+        });
+
+        it("localizes the bundled lzma-sdk-rs attribution and upstream credit", () => {
+                expect(
+                        translate(
+                                "en",
+                                "ui.lzmaSdkRsV023011IsBundledUnderTheBsd3ClauseLicense",
+                        ),
+                ).toContain("BSD 3-Clause License");
+                expect(
+                        translate(
+                                "ko",
+                                "ui.lzmaSdkRsV023011IsBundledUnderTheBsd3ClauseLicense",
+                        ),
+                ).toBe(
+                        "lzma-sdk-rs 0.2301.1은 BSD 3-Clause 라이선스로 앱에 포함됩니다. 일부 코드는 퍼블릭 도메인인 7-Zip SDK를 바탕으로 합니다.",
+                );
+                expect(
+                        translate(
+                                "ko",
+                                "ui.basedOnTheSevenZipSdkPublicDomain",
+                        ),
+                ).toBe("7-Zip SDK 기반 · 퍼블릭 도메인");
+                expect(translate("ko", "ui.lzmaSdkRsLicense")).toBe(
+                        "lzma-sdk-rs 라이선스",
+                );
         });
 
         it("uses factual copy instead of accuracy or safety claims", () => {
