@@ -23,7 +23,7 @@ pub use store::{
 };
 pub use workflow::DeploymentWorkflow;
 
-pub const PROFILE_SCHEMA_VERSION: u8 = 3;
+pub const PROFILE_SCHEMA_VERSION: u8 = 4;
 pub const PLAN_SCHEMA_VERSION: u8 = 1;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
@@ -424,6 +424,14 @@ pub struct RecoveryCapability {
     pub note: String,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum FirmwareTargetPolicy {
+    #[default]
+    RequireUnique,
+    PatchEveryDxeDomain,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum FirmwareInstallMethod {
@@ -485,7 +493,14 @@ pub struct MachineProfile {
     pub original_firmware: FirmwareFingerprint,
     pub recovery: RecoveryCapability,
     #[serde(default)]
+    pub firmware_target_policy: FirmwareTargetPolicy,
+    #[serde(default)]
     pub firmware_install: Option<FirmwareInstallRoute>,
+}
+
+struct MachineProfileCreationOptions {
+    legacy_patches: Option<LegacyPatchProfile>,
+    firmware_target_policy: FirmwareTargetPolicy,
 }
 
 impl MachineProfile {
@@ -497,14 +512,37 @@ impl MachineProfile {
         recovery: RecoveryCapability,
         firmware_install: FirmwareInstallRoute,
     ) -> Result<Self, ProfileError> {
-        Self::create_with_legacy(
+        Self::create_with_target_policy(
             display_name,
             board_path,
             identity,
             original_firmware,
             recovery,
             firmware_install,
-            None,
+            FirmwareTargetPolicy::RequireUnique,
+        )
+    }
+
+    pub fn create_with_target_policy(
+        display_name: impl Into<String>,
+        board_path: BoardPath,
+        identity: MachineIdentity,
+        original_firmware: FirmwareFingerprint,
+        recovery: RecoveryCapability,
+        firmware_install: FirmwareInstallRoute,
+        firmware_target_policy: FirmwareTargetPolicy,
+    ) -> Result<Self, ProfileError> {
+        Self::create_with_options(
+            display_name,
+            board_path,
+            identity,
+            original_firmware,
+            recovery,
+            firmware_install,
+            MachineProfileCreationOptions {
+                legacy_patches: None,
+                firmware_target_policy,
+            },
         )
     }
 
@@ -512,11 +550,61 @@ impl MachineProfile {
         display_name: impl Into<String>,
         board_path: BoardPath,
         identity: MachineIdentity,
-        mut original_firmware: FirmwareFingerprint,
-        mut recovery: RecoveryCapability,
+        original_firmware: FirmwareFingerprint,
+        recovery: RecoveryCapability,
         firmware_install: FirmwareInstallRoute,
         legacy_patches: Option<LegacyPatchProfile>,
     ) -> Result<Self, ProfileError> {
+        Self::create_with_options(
+            display_name,
+            board_path,
+            identity,
+            original_firmware,
+            recovery,
+            firmware_install,
+            MachineProfileCreationOptions {
+                legacy_patches,
+                firmware_target_policy: FirmwareTargetPolicy::RequireUnique,
+            },
+        )
+    }
+
+    pub fn create_legacy_with_target_policy(
+        display_name: impl Into<String>,
+        identity: MachineIdentity,
+        original_firmware: FirmwareFingerprint,
+        recovery: RecoveryCapability,
+        firmware_install: FirmwareInstallRoute,
+        legacy_patches: LegacyPatchProfile,
+        firmware_target_policy: FirmwareTargetPolicy,
+    ) -> Result<Self, ProfileError> {
+        Self::create_with_options(
+            display_name,
+            BoardPath::LegacyAbove4g,
+            identity,
+            original_firmware,
+            recovery,
+            firmware_install,
+            MachineProfileCreationOptions {
+                legacy_patches: Some(legacy_patches),
+                firmware_target_policy,
+            },
+        )
+    }
+
+    fn create_with_options(
+        display_name: impl Into<String>,
+        board_path: BoardPath,
+        identity: MachineIdentity,
+        mut original_firmware: FirmwareFingerprint,
+        mut recovery: RecoveryCapability,
+        firmware_install: FirmwareInstallRoute,
+        options: MachineProfileCreationOptions,
+    ) -> Result<Self, ProfileError> {
+        let MachineProfileCreationOptions {
+            legacy_patches,
+            firmware_target_policy,
+        } = options;
         let display_name = required_text("profile display name", display_name.into())?;
         let identity = identity.normalized()?;
         original_firmware.file_name =
@@ -528,6 +616,7 @@ impl MachineProfile {
             return Err(ProfileError::RecoveryNotEstablished);
         }
         recovery.note = required_text("recovery note", recovery.note)?;
+        validate_firmware_target_policy(firmware_target_policy, &recovery)?;
         let firmware_install = firmware_install.normalized()?;
         match (board_path, &legacy_patches) {
             (BoardPath::LegacyAbove4g, None) => {
@@ -545,8 +634,9 @@ impl MachineProfile {
             &identity,
             &original_firmware,
             legacy_patches.as_ref(),
-            Some(recovery.method),
+            Some(ProfileIdRecovery::Full(&recovery)),
             Some(&firmware_install),
+            Some(firmware_target_policy),
         );
         let profile = Self {
             schema_version: PROFILE_SCHEMA_VERSION,
@@ -557,6 +647,7 @@ impl MachineProfile {
             identity,
             original_firmware,
             recovery,
+            firmware_target_policy,
             firmware_install: Some(firmware_install),
         };
         profile.validate()?;
@@ -564,7 +655,7 @@ impl MachineProfile {
     }
 
     pub fn validate(&self) -> Result<(), ProfileError> {
-        if !matches!(self.schema_version, 1 | 2 | PROFILE_SCHEMA_VERSION) {
+        if !matches!(self.schema_version, 1 | 2 | 3 | PROFILE_SCHEMA_VERSION) {
             return Err(ProfileError::UnsupportedSchema(self.schema_version));
         }
         required_text("profile display name", self.display_name.clone())?;
@@ -582,14 +673,25 @@ impl MachineProfile {
         if self.recovery.method == RecoveryMethod::None || !self.recovery.tested_or_documented {
             return Err(ProfileError::RecoveryNotEstablished);
         }
-        required_text("recovery note", self.recovery.note.clone())?;
+        let normalized_recovery_note = required_text("recovery note", self.recovery.note.clone())?;
+        if self.schema_version == PROFILE_SCHEMA_VERSION
+            && normalized_recovery_note != self.recovery.note
+        {
+            return Err(ProfileError::RecoveryCapabilityNotCanonical);
+        }
+        if self.schema_version != PROFILE_SCHEMA_VERSION
+            && self.firmware_target_policy != FirmwareTargetPolicy::RequireUnique
+        {
+            return Err(ProfileError::FirmwareTargetPolicyRequiresCurrentSchema);
+        }
+        validate_firmware_target_policy(self.firmware_target_policy, &self.recovery)?;
         match (self.schema_version, &self.firmware_install) {
-            (PROFILE_SCHEMA_VERSION, Some(route)) => {
+            (3 | PROFILE_SCHEMA_VERSION, Some(route)) => {
                 if route.clone().normalized()? != *route {
                     return Err(ProfileError::FirmwareInstallRouteNotCanonical);
                 }
             }
-            (PROFILE_SCHEMA_VERSION, None) => {
+            (3 | PROFILE_SCHEMA_VERSION, None) => {
                 return Err(ProfileError::FirmwareInstallRouteRequired);
             }
             (1 | 2, None) => {}
@@ -609,13 +711,28 @@ impl MachineProfile {
         if self.schema_version == 1 && self.legacy_patches.is_some() {
             return Err(ProfileError::UnsupportedSchema(self.schema_version));
         }
+        let (recovery, firmware_install, firmware_target_policy) = match self.schema_version {
+            1 | 2 => (None, None, None),
+            3 => (
+                Some(ProfileIdRecovery::MethodOnly(self.recovery.method)),
+                self.firmware_install.as_ref(),
+                None,
+            ),
+            PROFILE_SCHEMA_VERSION => (
+                Some(ProfileIdRecovery::Full(&self.recovery)),
+                self.firmware_install.as_ref(),
+                Some(self.firmware_target_policy),
+            ),
+            _ => return Err(ProfileError::UnsupportedSchema(self.schema_version)),
+        };
         let expected = profile_id(
             self.board_path,
             &self.identity,
             &self.original_firmware,
             self.legacy_patches.as_ref(),
-            (self.schema_version == PROFILE_SCHEMA_VERSION).then_some(self.recovery.method),
-            self.firmware_install.as_ref(),
+            recovery,
+            firmware_install,
+            firmware_target_policy,
         );
         if self.profile_id != expected {
             return Err(ProfileError::ProfileIdMismatch);
@@ -1125,6 +1242,14 @@ pub enum ProfileError {
     ReadFirmware(#[source] io::Error),
     #[error("a tested or documented recovery route is required before deployment")]
     RecoveryNotEstablished,
+    #[error("the recovery capability note must be trimmed and canonical")]
+    RecoveryCapabilityNotCanonical,
+    #[error(
+        "patching every DXE domain requires USB Flashback or an external SPI programmer as a tested or documented boot-independent recovery route"
+    )]
+    FirmwareTargetPolicyRequiresBootIndependentRecovery,
+    #[error("non-default firmware target policies require the current profile schema")]
+    FirmwareTargetPolicyRequiresCurrentSchema,
     #[error("a tested or documented firmware install route is required before deployment")]
     FirmwareInstallRouteNotEstablished,
     #[error("new machine profiles require a pinned firmware install route")]
@@ -1381,13 +1506,36 @@ fn compare_machine_identity(
     ProfileMatch { differences }
 }
 
+fn validate_firmware_target_policy(
+    policy: FirmwareTargetPolicy,
+    recovery: &RecoveryCapability,
+) -> Result<(), ProfileError> {
+    if policy == FirmwareTargetPolicy::PatchEveryDxeDomain
+        && !(recovery.tested_or_documented
+            && matches!(
+                recovery.method,
+                RecoveryMethod::UsbFlashback | RecoveryMethod::ExternalSpiProgrammer
+            ))
+    {
+        return Err(ProfileError::FirmwareTargetPolicyRequiresBootIndependentRecovery);
+    }
+    Ok(())
+}
+
+#[derive(Clone, Copy)]
+enum ProfileIdRecovery<'a> {
+    MethodOnly(RecoveryMethod),
+    Full(&'a RecoveryCapability),
+}
+
 fn profile_id(
     board_path: BoardPath,
     identity: &MachineIdentity,
     firmware: &FirmwareFingerprint,
     legacy_patches: Option<&LegacyPatchProfile>,
-    recovery_method: Option<RecoveryMethod>,
+    recovery: Option<ProfileIdRecovery<'_>>,
     firmware_install: Option<&FirmwareInstallRoute>,
+    firmware_target_policy: Option<FirmwareTargetPolicy>,
 ) -> String {
     let mut hasher = Sha256::new();
     hash_field(
@@ -1441,8 +1589,18 @@ fn profile_id(
             hash_field(&mut hasher, &[legacy_risk_code(acknowledgement.risk)]);
         }
     }
-    if let Some(method) = recovery_method {
-        hash_field(&mut hasher, &[recovery_method_code(method)]);
+    match recovery {
+        Some(ProfileIdRecovery::MethodOnly(method)) => {
+            // Schema 3 bound only the recovery method. Keep that byte stream exact.
+            hash_field(&mut hasher, &[recovery_method_code(method)]);
+        }
+        Some(ProfileIdRecovery::Full(recovery)) => {
+            hash_field(&mut hasher, b"recovery-capability-v1");
+            hash_field(&mut hasher, &[recovery_method_code(recovery.method)]);
+            hash_field(&mut hasher, &[u8::from(recovery.tested_or_documented)]);
+            hash_field(&mut hasher, recovery.note.as_bytes());
+        }
+        None => {}
     }
     if let Some(route) = firmware_install {
         hash_field(&mut hasher, &[firmware_install_method_code(route.method)]);
@@ -1450,8 +1608,22 @@ fn profile_id(
         hash_field(&mut hasher, route.official_instructions_url.as_bytes());
         hash_field(&mut hasher, route.note.as_bytes());
     }
+    if let Some(firmware_target_policy) = firmware_target_policy {
+        hash_field(&mut hasher, b"firmware-target-policy");
+        hash_field(
+            &mut hasher,
+            &[firmware_target_policy_code(firmware_target_policy)],
+        );
+    }
     let digest = hasher.finalize();
     format!("nvstraps-{}", hex(&digest[..12]))
+}
+
+const fn firmware_target_policy_code(policy: FirmwareTargetPolicy) -> u8 {
+    match policy {
+        FirmwareTargetPolicy::RequireUnique => 1,
+        FirmwareTargetPolicy::PatchEveryDxeDomain => 2,
+    }
 }
 
 const fn recovery_method_code(method: RecoveryMethod) -> u8 {
@@ -1632,7 +1804,7 @@ mod tests {
             RecoveryCapability {
                 method: RecoveryMethod::DualBios,
                 tested_or_documented: true,
-                note: "different human note".into(),
+                note: "hardware selector tested".into(),
             },
             firmware_install(),
         )
@@ -1658,6 +1830,177 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(error, ProfileError::RecoveryNotEstablished));
+    }
+
+    #[test]
+    fn existing_profile_constructors_require_a_unique_dxe_target() {
+        let modern = MachineProfile::create(
+            "modern machine",
+            BoardPath::NativeResizableBar,
+            identity(vec![gpu(0x1e81, 1)]),
+            firmware(),
+            RecoveryCapability {
+                method: RecoveryMethod::UsbFlashback,
+                tested_or_documented: true,
+                note: "rear-panel flashback tested".into(),
+            },
+            firmware_install(),
+        )
+        .unwrap();
+        let legacy = profile(BoardPath::LegacyAbove4g);
+
+        assert_eq!(
+            modern.firmware_target_policy,
+            FirmwareTargetPolicy::RequireUnique
+        );
+        assert_eq!(
+            legacy.firmware_target_policy,
+            FirmwareTargetPolicy::RequireUnique
+        );
+    }
+
+    #[test]
+    fn missing_serialized_target_policy_defaults_without_changing_the_profile_id() {
+        let profile = profile(BoardPath::NativeResizableBar);
+        let mut serialized = serde_json::to_value(&profile).unwrap();
+        serialized
+            .as_object_mut()
+            .unwrap()
+            .remove("firmwareTargetPolicy");
+
+        let loaded: MachineProfile = serde_json::from_value(serialized).unwrap();
+
+        assert_eq!(
+            loaded.firmware_target_policy,
+            FirmwareTargetPolicy::RequireUnique
+        );
+        assert_eq!(loaded.profile_id, profile.profile_id);
+        loaded.validate().unwrap();
+    }
+
+    #[test]
+    fn patch_every_dxe_domain_is_profile_bound_and_requires_boot_independent_recovery() {
+        for method in [
+            RecoveryMethod::UsbFlashback,
+            RecoveryMethod::ExternalSpiProgrammer,
+        ] {
+            MachineProfile::create_with_target_policy(
+                "multi-domain machine",
+                BoardPath::NativeResizableBar,
+                identity(vec![gpu(0x1e81, 1)]),
+                firmware(),
+                RecoveryCapability {
+                    method,
+                    tested_or_documented: true,
+                    note: "boot-independent recovery established".into(),
+                },
+                firmware_install(),
+                FirmwareTargetPolicy::PatchEveryDxeDomain,
+            )
+            .unwrap();
+        }
+        MachineProfile::create_legacy_with_target_policy(
+            "legacy multi-domain machine",
+            identity(vec![gpu(0x1e81, 1)]),
+            firmware(),
+            RecoveryCapability {
+                method: RecoveryMethod::ExternalSpiProgrammer,
+                tested_or_documented: true,
+                note: "verified external restore".into(),
+            },
+            firmware_install(),
+            legacy_patch_profile(),
+            FirmwareTargetPolicy::PatchEveryDxeDomain,
+        )
+        .unwrap();
+
+        for method in [RecoveryMethod::DualBios, RecoveryMethod::VendorRecovery] {
+            let error = MachineProfile::create_with_target_policy(
+                "unsafe multi-domain machine",
+                BoardPath::NativeResizableBar,
+                identity(vec![gpu(0x1e81, 1)]),
+                firmware(),
+                RecoveryCapability {
+                    method,
+                    tested_or_documented: true,
+                    note: "recovery route established".into(),
+                },
+                firmware_install(),
+                FirmwareTargetPolicy::PatchEveryDxeDomain,
+            )
+            .unwrap_err();
+            assert!(matches!(
+                error,
+                ProfileError::FirmwareTargetPolicyRequiresBootIndependentRecovery
+            ));
+        }
+
+        let untested_flashback = MachineProfile::create_with_target_policy(
+            "untested flashback machine",
+            BoardPath::NativeResizableBar,
+            identity(vec![gpu(0x1e81, 1)]),
+            firmware(),
+            RecoveryCapability {
+                method: RecoveryMethod::UsbFlashback,
+                tested_or_documented: false,
+                note: "not yet verified".into(),
+            },
+            firmware_install(),
+            FirmwareTargetPolicy::PatchEveryDxeDomain,
+        )
+        .unwrap_err();
+        assert!(matches!(
+            untested_flashback,
+            ProfileError::RecoveryNotEstablished
+        ));
+
+        let recovery = RecoveryCapability {
+            method: RecoveryMethod::ExternalSpiProgrammer,
+            tested_or_documented: true,
+            note: "verified external restore".into(),
+        };
+        let unique = MachineProfile::create_with_target_policy(
+            "same machine",
+            BoardPath::NativeResizableBar,
+            identity(vec![gpu(0x1e81, 1)]),
+            firmware(),
+            recovery.clone(),
+            firmware_install(),
+            FirmwareTargetPolicy::RequireUnique,
+        )
+        .unwrap();
+        let every = MachineProfile::create_with_target_policy(
+            "same machine",
+            BoardPath::NativeResizableBar,
+            identity(vec![gpu(0x1e81, 1)]),
+            firmware(),
+            recovery,
+            firmware_install(),
+            FirmwareTargetPolicy::PatchEveryDxeDomain,
+        )
+        .unwrap();
+        assert_ne!(unique.profile_id, every.profile_id);
+
+        let mut tampered = every.clone();
+        tampered.firmware_target_policy = FirmwareTargetPolicy::RequireUnique;
+        assert!(matches!(
+            tampered.validate(),
+            Err(ProfileError::ProfileIdMismatch)
+        ));
+
+        let mut changed_note = every.clone();
+        changed_note.recovery.note = "different verified external restore".into();
+        assert!(matches!(
+            changed_note.validate(),
+            Err(ProfileError::ProfileIdMismatch)
+        ));
+
+        let mut changed_authority = every;
+        changed_authority.recovery.method = RecoveryMethod::UsbFlashback;
+        assert!(matches!(
+            changed_authority.validate(),
+            Err(ProfileError::ProfileIdMismatch)
+        ));
     }
 
     #[test]
@@ -1710,7 +2053,7 @@ mod tests {
     }
 
     #[test]
-    fn earlier_profile_schemas_remain_loadable_without_an_install_route() {
+    fn earlier_profile_schemas_remain_loadable_with_their_historical_id_rules() {
         for (schema_version, path) in [
             (1, BoardPath::NativeResizableBar),
             (2, BoardPath::LegacyAbove4g),
@@ -1725,10 +2068,48 @@ mod tests {
                 legacy_schema.legacy_patches.as_ref(),
                 None,
                 None,
+                None,
             );
 
             legacy_schema.validate().unwrap();
             DeploymentPlan::for_profile(&legacy_schema).unwrap();
+        }
+
+        for path in [BoardPath::NativeResizableBar, BoardPath::LegacyAbove4g] {
+            let mut schema_three = profile(path);
+            schema_three.schema_version = 3;
+            schema_three.profile_id = profile_id(
+                schema_three.board_path,
+                &schema_three.identity,
+                &schema_three.original_firmware,
+                schema_three.legacy_patches.as_ref(),
+                Some(ProfileIdRecovery::MethodOnly(schema_three.recovery.method)),
+                schema_three.firmware_install.as_ref(),
+                None,
+            );
+            let historical_profile_id = match path {
+                BoardPath::NativeResizableBar => "nvstraps-62725843391e03ffc99cbbec",
+                BoardPath::LegacyAbove4g => "nvstraps-a1e7b0aa82608f4ce6f7e4f8",
+            };
+            assert_eq!(schema_three.profile_id, historical_profile_id);
+
+            schema_three.validate().unwrap();
+            DeploymentPlan::for_profile(&schema_three).unwrap();
+
+            let mut serialized = serde_json::to_value(&schema_three).unwrap();
+            serialized
+                .as_object_mut()
+                .unwrap()
+                .remove("firmwareTargetPolicy");
+            let loaded: MachineProfile = serde_json::from_value(serialized).unwrap();
+            loaded.validate().unwrap();
+
+            let mut forbidden_policy = schema_three;
+            forbidden_policy.firmware_target_policy = FirmwareTargetPolicy::PatchEveryDxeDomain;
+            assert!(matches!(
+                forbidden_policy.validate(),
+                Err(ProfileError::FirmwareTargetPolicyRequiresCurrentSchema)
+            ));
         }
     }
 
