@@ -9,10 +9,11 @@
 > **Read [FIRMWARE_INJECTION_FEASIBILITY.md](FIRMWARE_INJECTION_FEASIBILITY.md) first.**
 > This document reasons from vendor documentation and public parser sources; it was
 > written without running the injector against a single retail BIOS image. When that
-> measurement was taken on 2026-08-22, `inject_ffs` refused all five retail images
-> tested, so the acceptance-prediction checks scoped below apply to artifacts we do
-> not currently produce. The per-vendor route table and sources here remain useful;
-> the priority ordering does not.
+> baseline measurement was taken on 2026-08-22, `inject_ffs` refused all five retail
+> images tested. The current implementation now produces independently decoded
+> artifacts for all five raw ROMs, including both domains in the two dual-copy images.
+> The acceptance checks below are therefore downstream work again; the per-vendor
+> route limits remain unchanged.
 
 **Bottom line:** the image can support strong structural and protection-risk checks, but it cannot produce a reliable universal “this vendor flasher will accept/reject/partially write this image” verdict. The backend should report deterministic invariants, recognized protection envelopes, and conditional risks—not promise flasher behavior.
 
