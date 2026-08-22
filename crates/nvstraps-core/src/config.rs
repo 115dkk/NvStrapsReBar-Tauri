@@ -1,5 +1,9 @@
-use alloc::vec::Vec;
 use core::fmt;
+#[cfg(not(feature = "std"))]
+use core::ops::{Deref, DerefMut};
+
+#[cfg(feature = "std")]
+use alloc::vec::Vec;
 
 use crate::registry::{BAR_SIZE_NONE, is_turing, registry_bar_size};
 
@@ -16,6 +20,117 @@ pub const MAX_ENCODED_SIZE: usize = HEADER_SIZE
     + MAX_GPU_COUNT * GPU_CONFIG_SIZE
     + 1
     + MAX_BRIDGE_COUNT * BRIDGE_CONFIG_SIZE;
+
+#[cfg(feature = "std")]
+type SelectorList = Vec<GpuSelector>;
+#[cfg(not(feature = "std"))]
+type SelectorList = FixedVec<GpuSelector, MAX_GPU_COUNT>;
+#[cfg(feature = "std")]
+type GpuConfigList = Vec<GpuConfig>;
+#[cfg(not(feature = "std"))]
+type GpuConfigList = FixedVec<GpuConfig, MAX_GPU_COUNT>;
+#[cfg(feature = "std")]
+type BridgeConfigList = Vec<BridgeConfig>;
+#[cfg(not(feature = "std"))]
+type BridgeConfigList = FixedVec<BridgeConfig, MAX_BRIDGE_COUNT>;
+
+#[cfg(feature = "std")]
+pub type EncodedConfig = Vec<u8>;
+#[cfg(not(feature = "std"))]
+pub type EncodedConfig = FixedVec<u8, MAX_ENCODED_SIZE>;
+
+#[cfg(not(feature = "std"))]
+#[derive(Clone, Copy, Debug)]
+pub struct FixedVec<T: Copy + Default, const N: usize> {
+    data: [T; N],
+    len: usize,
+}
+
+#[cfg(not(feature = "std"))]
+impl<T: Copy + Default, const N: usize> FixedVec<T, N> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_capacity(capacity: usize) -> Self {
+        debug_assert!(capacity <= N);
+        Self::new()
+    }
+
+    pub fn push(&mut self, value: T) {
+        debug_assert!(self.len < N);
+        self.data[self.len] = value;
+        self.len += 1;
+    }
+
+    pub fn extend_from_slice(&mut self, values: &[T]) {
+        debug_assert!(self.len + values.len() <= N);
+        let end = self.len + values.len();
+        self.data[self.len..end].copy_from_slice(values);
+        self.len = end;
+    }
+
+    pub fn clear(&mut self) {
+        self.len = 0;
+    }
+}
+
+#[cfg(not(feature = "std"))]
+impl<T: Copy + Default, const N: usize> Default for FixedVec<T, N> {
+    fn default() -> Self {
+        Self {
+            data: [T::default(); N],
+            len: 0,
+        }
+    }
+}
+
+#[cfg(not(feature = "std"))]
+impl<T: Copy + Default + PartialEq, const N: usize> PartialEq for FixedVec<T, N> {
+    fn eq(&self, other: &Self) -> bool {
+        **self == **other
+    }
+}
+
+#[cfg(not(feature = "std"))]
+impl<T: Copy + Default + Eq, const N: usize> Eq for FixedVec<T, N> {}
+
+#[cfg(not(feature = "std"))]
+impl<T: Copy + Default, const N: usize> Deref for FixedVec<T, N> {
+    type Target = [T];
+
+    fn deref(&self) -> &Self::Target {
+        &self.data[..self.len]
+    }
+}
+
+#[cfg(not(feature = "std"))]
+impl<T: Copy + Default, const N: usize> DerefMut for FixedVec<T, N> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.data[..self.len]
+    }
+}
+
+#[cfg(not(feature = "std"))]
+impl<'a, T: Copy + Default, const N: usize> IntoIterator for &'a FixedVec<T, N> {
+    type Item = &'a T;
+    type IntoIter = core::slice::Iter<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+#[cfg(not(feature = "std"))]
+impl<T: Copy + Default, const N: usize> FromIterator<T> for FixedVec<T, N> {
+    fn from_iter<I: IntoIterator<Item = T>>(values: I) -> Self {
+        let mut result = Self::new();
+        for value in values {
+            result.push(value);
+        }
+        result
+    }
+}
 
 pub const OPTION_GLOBAL_MASK: u16 = 0x0003;
 pub const OPTION_SKIP_S3: u16 = 0x0004;
@@ -34,12 +149,12 @@ pub struct Config {
     pub target_pci_bar_size: u8,
     pub option_flags: u16,
     pub setup_var_crc: u64,
-    pub selectors: Vec<GpuSelector>,
-    pub gpu_configs: Vec<GpuConfig>,
-    pub bridge_configs: Vec<BridgeConfig>,
+    pub selectors: SelectorList,
+    pub gpu_configs: GpuConfigList,
+    pub bridge_configs: BridgeConfigList,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct GpuSelector {
     pub device_id: u16,
     pub subsystem_vendor_id: u16,
@@ -51,7 +166,7 @@ pub struct GpuSelector {
     pub override_bar_size_mask: u8,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct GpuConfig {
     pub device_id: u16,
     pub subsystem_vendor_id: u16,
@@ -63,7 +178,7 @@ pub struct GpuConfig {
     pub bar0_top: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct BridgeConfig {
     pub vendor_id: u16,
     pub device_id: u16,
@@ -149,7 +264,7 @@ impl Config {
         if selector_count > MAX_GPU_COUNT {
             return Err(ConfigError::TooManySelectors);
         }
-        let mut selectors = Vec::with_capacity(selector_count);
+        let mut selectors = SelectorList::with_capacity(selector_count);
         for _ in 0..selector_count {
             let device_id = cursor.word()?;
             let subsystem_vendor_id = cursor.word()?;
@@ -173,7 +288,7 @@ impl Config {
         if gpu_count > MAX_GPU_COUNT {
             return Err(ConfigError::TooManyGpuConfigs);
         }
-        let mut gpu_configs = Vec::with_capacity(gpu_count);
+        let mut gpu_configs = GpuConfigList::with_capacity(gpu_count);
         for _ in 0..gpu_count {
             let device_id = cursor.word()?;
             let subsystem_vendor_id = cursor.word()?;
@@ -197,7 +312,7 @@ impl Config {
         if bridge_count > MAX_BRIDGE_COUNT {
             return Err(ConfigError::TooManyBridgeConfigs);
         }
-        let mut bridge_configs = Vec::with_capacity(bridge_count);
+        let mut bridge_configs = BridgeConfigList::with_capacity(bridge_count);
         for _ in 0..bridge_count {
             let vendor_id = cursor.word()?;
             let device_id = cursor.word()?;
@@ -224,10 +339,10 @@ impl Config {
         })
     }
 
-    pub fn encode(&self) -> Result<Vec<u8>, ConfigError> {
+    pub fn encode(&self) -> Result<EncodedConfig, ConfigError> {
         self.validate_counts()?;
         if !self.is_driver_configured() {
-            return Ok(Vec::new());
+            return Ok(EncodedConfig::new());
         }
 
         let capacity = HEADER_SIZE
@@ -237,7 +352,7 @@ impl Config {
             + self.gpu_configs.len() * GPU_CONFIG_SIZE
             + 1
             + self.bridge_configs.len() * BRIDGE_CONFIG_SIZE;
-        let mut bytes = Vec::with_capacity(capacity);
+        let mut bytes = EncodedConfig::with_capacity(capacity);
         bytes.push(self.target_pci_bar_size);
         bytes.extend_from_slice(&self.option_flags.to_le_bytes());
         bytes.extend_from_slice(&self.setup_var_crc.to_le_bytes());
@@ -576,7 +691,9 @@ mod tests {
                 function: u8::MAX,
                 bar_size_selector: 7,
                 override_bar_size_mask: 0,
-            }],
+            }]
+            .into_iter()
+            .collect(),
             gpu_configs: vec![GpuConfig {
                 device_id: 0x1E84,
                 subsystem_vendor_id: 0x1462,
@@ -586,7 +703,9 @@ mod tests {
                 function: 0,
                 bar0_base: 0xFA00_0000,
                 bar0_top: 0xFAFF_FFFF,
-            }],
+            }]
+            .into_iter()
+            .collect(),
             bridge_configs: vec![BridgeConfig {
                 vendor_id: 0x8086,
                 device_id: 0x1901,
@@ -594,7 +713,9 @@ mod tests {
                 device: 1,
                 function: 0,
                 secondary_bus: 1,
-            }],
+            }]
+            .into_iter()
+            .collect(),
         }
     }
 
@@ -618,7 +739,7 @@ mod tests {
             0x37, 0x01, 0x00, 0x00, 0x00, 0x00, 0xFA, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF,
             0xFA, 0x00, 0x00, 0x00, 0x00, 0x01, 0x86, 0x80, 0x01, 0x19, 0x00, 0x08, 0x01,
         ];
-        assert_eq!(encoded, expected);
+        assert_eq!(&*encoded, expected);
         assert_eq!(Config::decode(&encoded).unwrap(), sample_config());
     }
 
@@ -650,20 +771,20 @@ mod tests {
     #[test]
     fn discovered_hardware_is_upserted_by_pci_location() {
         let mut config = sample_config();
-        let same_gpu = config.gpu_configs[0].clone();
-        assert!(!config.upsert_gpu_config(same_gpu.clone()).unwrap());
+        let same_gpu = config.gpu_configs[0];
+        assert!(!config.upsert_gpu_config(same_gpu).unwrap());
 
         let mut changed_gpu = same_gpu;
         changed_gpu.bar0_top += 0x1000;
-        assert!(config.upsert_gpu_config(changed_gpu.clone()).unwrap());
+        assert!(config.upsert_gpu_config(changed_gpu).unwrap());
         assert_eq!(config.gpu_configs.len(), 1);
         assert_eq!(config.gpu_configs[0], changed_gpu);
 
-        let same_bridge = config.bridge_configs[0].clone();
-        assert!(!config.upsert_bridge_config(same_bridge.clone()).unwrap());
+        let same_bridge = config.bridge_configs[0];
+        assert!(!config.upsert_bridge_config(same_bridge).unwrap());
         let mut changed_bridge = same_bridge;
         changed_bridge.secondary_bus = 2;
-        assert!(config.upsert_bridge_config(changed_bridge.clone()).unwrap());
+        assert!(config.upsert_bridge_config(changed_bridge).unwrap());
         assert_eq!(config.bridge_configs[0], changed_bridge);
     }
 
@@ -680,9 +801,9 @@ mod tests {
     #[test]
     fn discovered_hardware_never_exceeds_the_wire_capacity() {
         let mut config = sample_config();
-        let template = config.gpu_configs[0].clone();
+        let template = config.gpu_configs[0];
         for bus in 2..=MAX_GPU_COUNT as u8 {
-            let mut gpu = template.clone();
+            let mut gpu = template;
             gpu.bus = bus;
             assert!(config.upsert_gpu_config(gpu).unwrap());
         }

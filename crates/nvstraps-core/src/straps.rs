@@ -209,13 +209,13 @@ mod tests {
         };
         assert_eq!(validate_gpu_window(&valid), Ok(()));
 
-        let mut invalid = valid.clone();
+        let mut invalid = valid;
         invalid.bar0_top = invalid.bar0_base - 1;
         assert_eq!(
             validate_gpu_window(&invalid),
             Err(GpuWindowError::ReversedRange)
         );
-        invalid = valid.clone();
+        invalid = valid;
         invalid.bar0_base += 0x10;
         assert_eq!(
             validate_gpu_window(&invalid),

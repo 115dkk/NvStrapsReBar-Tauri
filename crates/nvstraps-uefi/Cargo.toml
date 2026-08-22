@@ -16,4 +16,4 @@ bench = false
 nvstraps-core = { path = "../nvstraps-core", default-features = false }
 
 [target.'cfg(target_os = "uefi")'.dependencies]
-uefi = { version = "0.39.0", features = ["alloc", "global_allocator", "panic_handler"] }
+uefi = { version = "0.39.0" }

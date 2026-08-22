@@ -1,6 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![forbid(unsafe_code)]
 
+#[cfg(any(feature = "std", test))]
 extern crate alloc;
 
 pub mod boot_policy;
