@@ -1,10 +1,15 @@
 #![cfg_attr(target_os = "uefi", no_main)]
 #![cfg_attr(target_os = "uefi", no_std)]
+#![deny(unsafe_code)]
 
 #[cfg(target_os = "uefi")]
 use uefi::prelude::*;
 
 #[cfg(target_os = "uefi")]
+#[allow(
+    unsafe_code,
+    reason = "panic recovery uses raw UEFI tables without allocation"
+)]
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo<'_>) -> ! {
     if let Some(system_table) = uefi::table::system_table_raw() {

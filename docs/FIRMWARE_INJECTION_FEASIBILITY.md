@@ -22,11 +22,12 @@ artifact.
 
 ## Implemented result and evidence
 
-- The Rust DXE FFS is 20,564 bytes (SHA-256
-  `bfcdaea690ebf71e930fe2c259cd14aa44babb70998dc9949822474a84fbbb41`),
+- The Rust DXE FFS is 21,588 bytes (SHA-256
+  `3cad314363d2d12e04c133a7730b05e717025460283446dc0812becebb127942`),
   down from 34,900 bytes without removing execution, restore, S3, status, or
-  configuration behavior. A compact panic path and dynamically sized UEFI pool
-  buffers replace code pulled in by the generic allocator/formatter.
+  configuration behavior. A compact panic path, owned UEFI pool values, a
+  serialized callback cell, and a mapped-BAR0 proof replace scattered raw
+  pointer assumptions without restoring the generic allocator/formatter.
 - `lzma-sdk-rs 0.2301.1` emits a 7-Zip-SDK-compatible known-size LZMA stream.
   Recompression preserves the source lc/lp/pb and dictionary bytes, uses the
   measured `fb=128, mc=80` search, and is round-tripped by both the repository
@@ -48,7 +49,7 @@ artifact.
 
 All outputs retain the source ROM byte length. Every guided stream below decoded
 with CPython/liblzma, each grown FV reproduced its block map and checksum, every
-target contained exactly one 20,564-byte driver, all changed bytes stayed inside
+target contained exactly one 21,588-byte driver, all changed bytes stayed inside
 the declared containing FFS extents, and reinjection was rejected as already
 present.
 
@@ -58,11 +59,11 @@ workflow must start from its own pinned readback or proven BIOS-region dump.
 
 | Raw image | Targets | FV growth | Patched SHA-256 |
 |---|---:|---|---|
-| ASUS B450M-PRO 4401 | 1 | 20,480 bytes | `1de2a8d21d6fcf354a61ed58c54d288ffef67d26cd8e1cc3c43a529570d344dd` |
-| ASUS Z490-A 2701 | 1 | 20,480 bytes | `e57db1696137f32948880b120886f7ff0cb52994497ecb4806ad0a84356d48ff` |
-| ASUS X570-PLUS 4408 | 2 | 20,480 / 20,480 bytes | `cf0cf58bc1a59c9c204c4d67dfa579bf4573ae1a961e2608d81843b17e970b50` |
-| MSI B450 TOMAHAWK | 2 | 20,480 / 20,480 bytes | `d72cf9baf92401f0bf426c7d95ae19096186235d05019b6a1ebcad2f85fa5952` |
-| GIGABYTE Z490 ELITE F22 | 1 | 20,480 bytes | `626efd01fc78e0944ad6de44c383f9e647531882f2ad3a77252478b7a714ac5b` |
+| ASUS B450M-PRO 4401 | 1 | 20,480 bytes | `addd2668c4feba7865ab93803402c906f1e6d0bdcd3f9a26a0a169275900937a` |
+| ASUS Z490-A 2701 | 1 | 20,480 bytes | `df7ebc930344aa6e74a4925f4bda0bbe40a3ad746021d31db85c0a8b7561fdc9` |
+| ASUS X570-PLUS 4408 | 2 | 20,480 / 20,480 bytes | `1631ea25940fe9d6f79368f78802444845034193bc414946c9073549ce940396` |
+| MSI B450 TOMAHAWK | 2 | 20,480 / 20,480 bytes | `a6bfd60ab2101678f2fdbfa0d87843517e11b488ba022635470d0035d9e8bc92` |
+| GIGABYTE Z490 ELITE F22 | 1 | 20,480 bytes | `cbe30366128f6cc9603df32fbbaf620e75902b79557c7d146bb253b0c9720375` |
 
 This remains host-side artifact evidence, not a claim that a private vendor
 flasher accepts the bytes or that a physical board booted them. The local QEMU
@@ -222,12 +223,12 @@ hypothetical.
 | `ReBarDxe.ffs` | 2,578 | xCuri0/ReBarUEFI release |
 | `NvStrapsReBar.ffs` | 13,628 | terminatorul/NvStrapsReBar v0.4-rc1 release |
 | ours before this patch | 34,900 | this repository, former release profile |
-| ours now | 20,564 | compact panic path and dynamic no-alloc UEFI buffers |
+| ours now | 21,588 | compact panic path, owned pool values, serialized callbacks, mapped MMIO proof |
 
 Before this patch, the PE was 34,816 bytes: `.text` 28,160, `.rdata` 5,120,
 `.reloc` 512, headers 1,024. The release profile was already tuned, but the
 generic panic formatter and allocator pulled in code the driver did not need.
-The current PE is 20,480 bytes and the packed FFS is 20,564 bytes. Configuration
+The current PE is 21,504 bytes and the packed FFS is 21,588 bytes. Configuration
 limits are unchanged; no-std storage uses the existing wire maxima, while UEFI
 protocol, variable-name, and variable-data buffers grow dynamically from Boot
 Services pool allocations.

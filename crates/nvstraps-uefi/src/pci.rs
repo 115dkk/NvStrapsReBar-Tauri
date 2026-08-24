@@ -1,13 +1,17 @@
+use core::mem::size_of;
+
 use nvstraps_core::pci::{
     self, BridgeSavedConfig, DeviceHeader, DeviceSavedConfig, PciAddress, REBAR_CAPABILITY_OFFSET,
     REBAR_CONTROL_OFFSET, RemapError,
 };
 use nvstraps_core::status::EfiErrorLocation;
+use nvstraps_core::straps::{StrapError, ValidatedGpuWindow};
 use uefi::boot::{self, OpenProtocolAttributes, OpenProtocolParams, ScopedProtocol};
 use uefi::proto::pci::PciIoAddress;
 use uefi::proto::pci::root_bridge::PciRootBridgeIo;
 use uefi::{Handle, Status};
 
+use crate::mmio::MappedBar0;
 use crate::s3::S3Script;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -20,6 +24,7 @@ pub struct PciFailure {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MappingFailure {
     InvalidConfiguration(RemapError),
+    InvalidMmio(StrapError),
     Firmware(PciFailure),
 }
 
@@ -49,6 +54,7 @@ impl<'root> PciAccess<'root> {
     }
 
     pub fn read_u8(&mut self, address: PciAddress, offset: u16) -> Result<u8, Status> {
+        validate_register_offset(offset, size_of::<u8>())?;
         self.root
             .pci()
             .read_one(register_address(address, offset))
@@ -56,6 +62,7 @@ impl<'root> PciAccess<'root> {
     }
 
     pub fn read_u16(&mut self, address: PciAddress, offset: u16) -> Result<u16, Status> {
+        validate_register_offset(offset, size_of::<u16>())?;
         self.root
             .pci()
             .read_one(register_address(address, offset))
@@ -63,6 +70,7 @@ impl<'root> PciAccess<'root> {
     }
 
     pub fn read_u32(&mut self, address: PciAddress, offset: u16) -> Result<u32, Status> {
+        validate_register_offset(offset, size_of::<u32>())?;
         self.root
             .pci()
             .read_one(register_address(address, offset))
@@ -70,6 +78,7 @@ impl<'root> PciAccess<'root> {
     }
 
     pub fn write_u8(&mut self, address: PciAddress, offset: u16, value: u8) -> Result<(), Status> {
+        validate_register_offset(offset, size_of::<u8>())?;
         self.root
             .pci()
             .write_one(register_address(address, offset), value)
@@ -82,6 +91,7 @@ impl<'root> PciAccess<'root> {
         offset: u16,
         value: u16,
     ) -> Result<(), Status> {
+        validate_register_offset(offset, size_of::<u16>())?;
         self.root
             .pci()
             .write_one(register_address(address, offset), value)
@@ -94,6 +104,7 @@ impl<'root> PciAccess<'root> {
         offset: u16,
         value: u32,
     ) -> Result<(), Status> {
+        validate_register_offset(offset, size_of::<u32>())?;
         self.root
             .pci()
             .write_one(register_address(address, offset), value)
@@ -206,9 +217,8 @@ impl<'root> PciAccess<'root> {
     pub fn save_and_remap_bridge(
         &mut self,
         address: PciAddress,
-        base_address: u64,
-        inclusive_top_address: u64,
-        target_io_base_limit: u64,
+        bar0: ValidatedGpuWindow,
+        target_io_base_limit: u32,
         resume: &mut S3Script,
     ) -> Result<BridgeSavedConfig, MappingFailure> {
         let saved = BridgeSavedConfig {
@@ -232,9 +242,9 @@ impl<'root> PciAccess<'root> {
         let remap = pci::bridge_remap(
             saved.command,
             saved.io_base_limit,
-            base_address,
-            inclusive_top_address,
-            target_io_base_limit,
+            bar0.base(),
+            bar0.top(),
+            u64::from(target_io_base_limit),
         )
         .map_err(MappingFailure::InvalidConfiguration)?;
 
@@ -317,12 +327,12 @@ impl<'root> PciAccess<'root> {
         })
     }
 
-    pub fn save_and_remap_device_bar0(
+    pub(crate) fn save_and_remap_device_bar0(
         &mut self,
         address: PciAddress,
-        base_address: u64,
+        bar0: ValidatedGpuWindow,
         resume: &mut S3Script,
-    ) -> Result<DeviceSavedConfig, MappingFailure> {
+    ) -> Result<(DeviceSavedConfig, MappedBar0), MappingFailure> {
         let saved = DeviceSavedConfig {
             command: self
                 .read_u32(address, pci::COMMAND_OFFSET)
@@ -333,7 +343,7 @@ impl<'root> PciAccess<'root> {
                 MappingFailure::Firmware(device_config_failure(address, status))
             })?,
         };
-        let remap = pci::device_remap(saved.command, base_address)
+        let remap = pci::device_remap(saved.command, bar0.base())
             .map_err(MappingFailure::InvalidConfiguration)?;
 
         let apply_result = (|| {
@@ -361,7 +371,18 @@ impl<'root> PciAccess<'root> {
             }
             return Err(MappingFailure::Firmware(failure));
         }
-        Ok(saved)
+        // SAFETY: The PCI writes above successfully exposed this exact validated
+        // aperture, and the returned proof is consumed before restoration.
+        let mapped = match unsafe { MappedBar0::assume_mapped(bar0) } {
+            Ok(mapped) => mapped,
+            Err(error) => {
+                if let Err(restore_failure) = self.restore_device_bar0(address, saved) {
+                    return Err(MappingFailure::Firmware(restore_failure));
+                }
+                return Err(MappingFailure::InvalidMmio(error));
+            }
+        };
+        Ok((saved, mapped))
     }
 
     pub fn restore_device_bar0(
@@ -437,4 +458,17 @@ fn register_address(address: PciAddress, offset: u16) -> PciIoAddress {
     } else {
         base.with_extended_register(offset as u32)
     }
+}
+
+fn validate_register_offset(offset: u16, width: usize) -> Result<(), Status> {
+    let offset = usize::from(offset);
+    if width == 0
+        || !offset.is_multiple_of(width)
+        || offset
+            .checked_add(width)
+            .is_none_or(|end| end > usize::from(pci::EXTENDED_CONFIG_SPACE_SIZE))
+    {
+        return Err(Status::INVALID_PARAMETER);
+    }
+    Ok(())
 }

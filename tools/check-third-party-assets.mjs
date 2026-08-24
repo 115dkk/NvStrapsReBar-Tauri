@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readdir, readFile, stat } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 const expected = {
@@ -7,6 +7,7 @@ const expected = {
     license: {
       bytes: 1_726,
       sha256: "6557e553354f1ab90110a7828fb644a69daf0a9d7309c5cab6be4ab80983dd8c",
+      normalizeCrLf: true,
     },
   },
   pretendard: {
@@ -63,8 +64,11 @@ for (const required of [
 
 async function verify(path, expectation, component) {
   const bytes = await readFile(path);
-  const size = (await stat(path)).size;
-  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  const verifiedBytes = expectation.normalizeCrLf
+    ? Buffer.from(bytes.toString("utf8").replaceAll("\r\n", "\n"), "utf8")
+    : bytes;
+  const size = verifiedBytes.length;
+  const sha256 = createHash("sha256").update(verifiedBytes).digest("hex");
   if (size !== expectation.bytes || sha256 !== expectation.sha256) {
     throw new Error(
       `${path} does not match the pinned ${component} asset: ` +

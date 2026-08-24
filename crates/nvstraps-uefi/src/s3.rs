@@ -20,7 +20,7 @@ type S3Write = unsafe extern "efiapi" fn(*const S3SaveState, usize, ...) -> Stat
 #[unsafe_protocol("e857caf6-c046-45dc-be3f-ee0765fba887")]
 #[repr(C)]
 struct S3SaveState {
-    write: S3Write,
+    write: Option<S3Write>,
     insert: usize,
     label: usize,
     compare: usize,
@@ -69,6 +69,16 @@ impl S3Script {
             location: EfiErrorLocation::LoadS3SaveStateProtocol,
             status: error.status(),
         })?;
+        if protocol
+            .get()
+            .and_then(|interface| interface.write)
+            .is_none()
+        {
+            return Err(S3InitError {
+                location: EfiErrorLocation::LoadS3SaveStateProtocol,
+                status: Status::UNSUPPORTED,
+            });
+        }
         Ok(Self {
             protocol: Some(protocol),
         })
@@ -87,12 +97,14 @@ impl S3Script {
         let Some(protocol) = &mut self.protocol else {
             return Ok(());
         };
-        let this = &**protocol as *const S3SaveState;
+        let protocol = protocol.get().ok_or(Status::UNSUPPORTED)?;
+        let write = protocol.write.ok_or(Status::UNSUPPORTED)?;
+        let this = core::ptr::from_ref(protocol);
         let data_pointer = core::ptr::from_ref(&data).cast::<c_void>();
         // SAFETY: The arguments exactly match the PI boot-script opcode
         // contract and all pointed-to values outlive the synchronous call.
         unsafe {
-            (protocol.write)(
+            write(
                 this,
                 PCI_CONFIG_WRITE_OPCODE,
                 BOOT_SCRIPT_WIDTH_UINT32,
@@ -115,13 +127,15 @@ impl S3Script {
         let Some(protocol) = &mut self.protocol else {
             return Ok(());
         };
-        let this = &**protocol as *const S3SaveState;
+        let protocol = protocol.get().ok_or(Status::UNSUPPORTED)?;
+        let write = protocol.write.ok_or(Status::UNSUPPORTED)?;
+        let this = core::ptr::from_ref(protocol);
         let data_pointer = core::ptr::from_ref(&data).cast::<c_void>();
         let mask_pointer = core::ptr::from_ref(&data_mask).cast::<c_void>();
         // SAFETY: The arguments exactly match the PI boot-script opcode
         // contract and all pointed-to values outlive the synchronous call.
         unsafe {
-            (protocol.write)(
+            write(
                 this,
                 PCI_CONFIG_READ_WRITE_OPCODE,
                 BOOT_SCRIPT_WIDTH_UINT32,
@@ -145,13 +159,15 @@ impl S3Recorder for S3Script {
         let Some(protocol) = &mut self.protocol else {
             return Ok(());
         };
-        let this = &**protocol as *const S3SaveState;
+        let protocol = protocol.get().ok_or(Status::UNSUPPORTED)?;
+        let write = protocol.write.ok_or(Status::UNSUPPORTED)?;
+        let this = core::ptr::from_ref(protocol);
         let data_pointer = core::ptr::from_ref(&data).cast::<c_void>();
         let mask_pointer = core::ptr::from_ref(&data_mask).cast::<c_void>();
         // SAFETY: The arguments exactly match the PI boot-script opcode
         // contract and all pointed-to values outlive the synchronous call.
         unsafe {
-            (protocol.write)(
+            write(
                 this,
                 MEM_READ_WRITE_OPCODE,
                 BOOT_SCRIPT_WIDTH_UINT32,
