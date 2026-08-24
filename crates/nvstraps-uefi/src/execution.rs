@@ -1,17 +1,70 @@
 use nvstraps_core::pci::PciAddress;
+use nvstraps_core::registry::MAX_BAR_SIZE_SELECTOR;
 use nvstraps_core::status::EfiErrorLocation;
+use nvstraps_core::straps::ValidatedGpuWindow;
 
 /// Everything required to temporarily expose one GPU's BAR0 and update its
 /// BAR1 straps. The transaction Module owns the dangerous operation order;
 /// adapters only perform the individual firmware or simulated operations.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DeviceTransaction {
-    pub device: PciAddress,
-    pub bridge: PciAddress,
-    pub bar0_base: u64,
-    pub bar0_top: u64,
-    pub bridge_io_base_limit: u64,
-    pub bar_size_selector: u8,
+    device: PciAddress,
+    bridge: PciAddress,
+    bar0: ValidatedGpuWindow,
+    bridge_io_base_limit: u32,
+    bar_size_selector: u8,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DeviceTransactionInputError {
+    InvalidPciAddress,
+    InvalidBarSizeSelector,
+}
+
+impl DeviceTransaction {
+    pub const fn new(
+        device: PciAddress,
+        bridge: PciAddress,
+        bar0: ValidatedGpuWindow,
+        bridge_io_base_limit: u32,
+        bar_size_selector: u8,
+    ) -> Result<Self, DeviceTransactionInputError> {
+        if PciAddress::new(device.bus, device.device, device.function).is_none()
+            || PciAddress::new(bridge.bus, bridge.device, bridge.function).is_none()
+        {
+            return Err(DeviceTransactionInputError::InvalidPciAddress);
+        }
+        if bar_size_selector > MAX_BAR_SIZE_SELECTOR {
+            return Err(DeviceTransactionInputError::InvalidBarSizeSelector);
+        }
+        Ok(Self {
+            device,
+            bridge,
+            bar0,
+            bridge_io_base_limit,
+            bar_size_selector,
+        })
+    }
+
+    pub const fn device(&self) -> PciAddress {
+        self.device
+    }
+
+    pub const fn bridge(&self) -> PciAddress {
+        self.bridge
+    }
+
+    pub const fn bar0(&self) -> ValidatedGpuWindow {
+        self.bar0
+    }
+
+    pub const fn bridge_io_base_limit(&self) -> u32 {
+        self.bridge_io_base_limit
+    }
+
+    pub const fn bar_size_selector(&self) -> u8 {
+        self.bar_size_selector
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -135,14 +188,35 @@ mod tests {
         device: 1,
         function: 0,
     };
-    const REQUEST: DeviceTransaction = DeviceTransaction {
-        device: DEVICE,
-        bridge: BRIDGE,
-        bar0_base: 0xc000_0000,
-        bar0_top: 0xc0ff_ffff,
-        bridge_io_base_limit: 0xf1f1,
-        bar_size_selector: 5,
-    };
+    fn request() -> DeviceTransaction {
+        let bar0 = ValidatedGpuWindow::new(0xc000_0000, 0xc0ff_ffff).unwrap();
+        DeviceTransaction::new(DEVICE, BRIDGE, bar0, 0xf1f1, 5).unwrap()
+    }
+
+    #[test]
+    fn transaction_rejects_an_invalid_selector_before_any_adapter_call() {
+        let bar0 = ValidatedGpuWindow::new(0xc000_0000, 0xc0ff_ffff).unwrap();
+
+        assert_eq!(
+            DeviceTransaction::new(DEVICE, BRIDGE, bar0, 0xf1f1, 11),
+            Err(DeviceTransactionInputError::InvalidBarSizeSelector)
+        );
+    }
+
+    #[test]
+    fn transaction_rejects_an_invalid_pci_location() {
+        let bar0 = ValidatedGpuWindow::new(0xc000_0000, 0xc0ff_ffff).unwrap();
+        let invalid = PciAddress {
+            bus: 1,
+            device: 32,
+            function: 0,
+        };
+
+        assert_eq!(
+            DeviceTransaction::new(invalid, BRIDGE, bar0, 0xf1f1, 5),
+            Err(DeviceTransactionInputError::InvalidPciAddress)
+        );
+    }
 
     fn fault(location: EfiErrorLocation, status: u8) -> ExecutionFault {
         ExecutionFault::Firmware {
@@ -156,7 +230,7 @@ mod tests {
     fn successful_transaction_restores_in_reverse_order() {
         let mut adapter = SimulationAdapter::default();
 
-        let receipt = execute_device_transaction(&mut adapter, &REQUEST);
+        let receipt = execute_device_transaction(&mut adapter, &request());
 
         assert_eq!(
             receipt,
@@ -182,7 +256,7 @@ mod tests {
         let primary = ExecutionFault::InvalidConfiguration;
         let mut adapter = SimulationAdapter::default().fail(ExecutionAction::RemapBridge, primary);
 
-        let receipt = execute_device_transaction(&mut adapter, &REQUEST);
+        let receipt = execute_device_transaction(&mut adapter, &request());
 
         assert_eq!(
             receipt,
@@ -199,7 +273,7 @@ mod tests {
             .fail(ExecutionAction::RemapDeviceBar0, primary)
             .fail(ExecutionAction::RestoreBridge, restore);
 
-        let receipt = execute_device_transaction(&mut adapter, &REQUEST);
+        let receipt = execute_device_transaction(&mut adapter, &request());
 
         assert_eq!(
             receipt,
@@ -224,7 +298,7 @@ mod tests {
         let mut adapter =
             SimulationAdapter::default().fail(ExecutionAction::ProgramBar1Straps, primary);
 
-        let receipt = execute_device_transaction(&mut adapter, &REQUEST);
+        let receipt = execute_device_transaction(&mut adapter, &request());
 
         assert_eq!(
             receipt,
@@ -250,7 +324,7 @@ mod tests {
             .fail(ExecutionAction::RestoreDeviceBar0, device)
             .fail(ExecutionAction::RestoreBridge, bridge);
 
-        let receipt = execute_device_transaction(&mut adapter, &REQUEST);
+        let receipt = execute_device_transaction(&mut adapter, &request());
 
         assert_eq!(
             receipt,
@@ -270,7 +344,7 @@ mod tests {
         let resume = fault(EfiErrorLocation::WriteS3SaveStateProtocol, 11);
         let mut adapter = SimulationAdapter::default().with_resume_fault(resume);
 
-        let receipt = execute_device_transaction(&mut adapter, &REQUEST);
+        let receipt = execute_device_transaction(&mut adapter, &request());
 
         assert_eq!(
             receipt,

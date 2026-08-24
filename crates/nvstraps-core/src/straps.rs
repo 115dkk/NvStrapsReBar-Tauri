@@ -1,3 +1,5 @@
+use core::mem::size_of;
+
 use crate::config::{Config, ConfigPriority, DeviceIdentity, GpuConfig};
 use crate::registry::{BAR_SIZE_EXCLUDED, BAR_SIZE_NONE, MAX_BAR_SIZE_SELECTOR};
 
@@ -40,10 +42,68 @@ pub enum StrapError {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum GpuWindowError {
+    ZeroBase,
     AddressAboveFourGiB,
     ReversedRange,
     UnalignedBase,
+    NonPowerOfTwoWindow,
     BaseNotAlignedToWindow,
+    StrapRegistersOutsideWindow,
+}
+
+/// A BAR0 aperture that is safe to hand to the firmware device transaction.
+///
+/// Construction proves that the range is representable by the 32-bit PCI BAR,
+/// follows PCI power-of-two alignment, and contains both NVIDIA strap
+/// registers used by the DXE driver.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ValidatedGpuWindow {
+    base: u64,
+    top: u64,
+}
+
+impl ValidatedGpuWindow {
+    pub fn new(base: u64, top: u64) -> Result<Self, GpuWindowError> {
+        if base == 0 {
+            return Err(GpuWindowError::ZeroBase);
+        }
+        if base >= u32::MAX as u64 || top >= u32::MAX as u64 {
+            return Err(GpuWindowError::AddressAboveFourGiB);
+        }
+        if top < base {
+            return Err(GpuWindowError::ReversedRange);
+        }
+        if base & 0x0f != 0 {
+            return Err(GpuWindowError::UnalignedBase);
+        }
+        let window_size = top - base + 1;
+        if !window_size.is_power_of_two() {
+            return Err(GpuWindowError::NonPowerOfTwoWindow);
+        }
+        if !base.is_multiple_of(window_size) {
+            return Err(GpuWindowError::BaseNotAlignedToWindow);
+        }
+        let final_register_byte = NVIDIA_STRAPS_SET1_ADDRESS_OFFSET + size_of::<u32>() as u64 - 1;
+        if final_register_byte >= window_size {
+            return Err(GpuWindowError::StrapRegistersOutsideWindow);
+        }
+        Ok(Self { base, top })
+    }
+
+    pub const fn base(self) -> u64 {
+        self.base
+    }
+
+    pub const fn top(self) -> u64 {
+        self.top
+    }
+
+    pub fn register_address(self, offset: u64) -> Option<u64> {
+        let address = self.base.checked_add(offset)?;
+        let final_byte = address.checked_add(size_of::<u32>() as u64 - 1)?;
+        (final_byte <= self.top && address.is_multiple_of(size_of::<u32>() as u64))
+            .then_some(address)
+    }
 }
 
 pub fn plan_bar1_straps(
@@ -133,20 +193,7 @@ pub fn selected_bar_size(config: &Config, device: DeviceIdentity) -> Option<u8> 
 }
 
 pub fn validate_gpu_window(config: &GpuConfig) -> Result<(), GpuWindowError> {
-    if config.bar0_base >= u32::MAX as u64 || config.bar0_top >= u32::MAX as u64 {
-        return Err(GpuWindowError::AddressAboveFourGiB);
-    }
-    if config.bar0_top < config.bar0_base {
-        return Err(GpuWindowError::ReversedRange);
-    }
-    if config.bar0_base & 0x0f != 0 {
-        return Err(GpuWindowError::UnalignedBase);
-    }
-    let window_size = config.bar0_top - config.bar0_base + 1;
-    if !config.bar0_base.is_multiple_of(window_size) {
-        return Err(GpuWindowError::BaseNotAlignedToWindow);
-    }
-    Ok(())
+    ValidatedGpuWindow::new(config.bar0_base, config.bar0_top).map(|_| ())
 }
 
 #[cfg(test)]
@@ -217,9 +264,40 @@ mod tests {
         );
         invalid = valid;
         invalid.bar0_base += 0x10;
+        invalid.bar0_top += 0x10;
         assert_eq!(
             validate_gpu_window(&invalid),
             Err(GpuWindowError::BaseNotAlignedToWindow)
         );
+    }
+
+    #[test]
+    fn validated_gpu_window_rejects_ranges_that_cannot_safely_host_straps() {
+        assert_eq!(
+            ValidatedGpuWindow::new(0, 0x1f_ffff),
+            Err(GpuWindowError::ZeroBase)
+        );
+        assert_eq!(
+            ValidatedGpuWindow::new(0x400000, 0x6f_ffff),
+            Err(GpuWindowError::NonPowerOfTwoWindow)
+        );
+        assert_eq!(
+            ValidatedGpuWindow::new(0x100000, 0x1f_ffff),
+            Err(GpuWindowError::StrapRegistersOutsideWindow)
+        );
+    }
+
+    #[test]
+    fn validated_gpu_window_proves_register_bounds_and_alignment() {
+        let window = ValidatedGpuWindow::new(0xc000_0000, 0xc0ff_ffff).unwrap();
+
+        assert_eq!(window.base(), 0xc000_0000);
+        assert_eq!(window.top(), 0xc0ff_ffff);
+        assert_eq!(
+            window.register_address(NVIDIA_STRAPS_SET1_ADDRESS_OFFSET),
+            Some(0xc010_100c)
+        );
+        assert_eq!(window.register_address(1), None);
+        assert_eq!(window.register_address(0x0100_0000), None);
     }
 }

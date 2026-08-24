@@ -12,8 +12,8 @@ use nvstraps_core::registry::{
 };
 use nvstraps_core::status::{EfiErrorLocation, StatusCode};
 use nvstraps_core::straps::{
-    BAR1_INDEX, add_bar1_size_to_mask, bar1_rebar_size_bit, bar1_size_is_advertised,
-    validate_gpu_window,
+    BAR1_INDEX, ValidatedGpuWindow, add_bar1_size_to_mask, bar1_rebar_size_bit,
+    bar1_size_is_advertised,
 };
 use uefi::{Handle, Status, boot};
 
@@ -25,7 +25,7 @@ use crate::s3::S3Script;
 use crate::status_writer::StatusWriter;
 use crate::uefi_adapter::UefiExecutionAdapter;
 
-const TARGET_BRIDGE_IO_BASE_LIMIT: u64 = 0xf1f1;
+const TARGET_BRIDGE_IO_BASE_LIMIT: u32 = 0xf1f1;
 const PCI_BAR_COUNT: u8 = 6;
 
 pub struct FirmwareEngine {
@@ -189,10 +189,13 @@ impl FirmwareEngine {
             self.record_status(StatusCode::NoGpuConfig, Some(address));
             return;
         };
-        if validate_gpu_window(&gpu_config).is_err() {
-            self.record_status(StatusCode::BadGpuConfig, Some(address));
-            return;
-        }
+        let bar0 = match ValidatedGpuWindow::new(gpu_config.bar0_base, gpu_config.bar0_top) {
+            Ok(window) => window,
+            Err(_) => {
+                self.record_status(StatusCode::BadGpuConfig, Some(address));
+                return;
+            }
+        };
         let Some(bridge_config) = self.config.lookup_bridge_config(address.bus).cloned() else {
             self.record_status(StatusCode::NoBridgeConfig, Some(address));
             return;
@@ -225,13 +228,18 @@ impl FirmwareEngine {
             }
         }
 
-        let request = DeviceTransaction {
-            device: address,
-            bridge: bridge_address,
-            bar0_base: gpu_config.bar0_base,
-            bar0_top: gpu_config.bar0_top,
-            bridge_io_base_limit: TARGET_BRIDGE_IO_BASE_LIMIT,
-            bar_size_selector: selector,
+        let request = match DeviceTransaction::new(
+            address,
+            bridge_address,
+            bar0,
+            TARGET_BRIDGE_IO_BASE_LIMIT,
+            selector,
+        ) {
+            Ok(request) => request,
+            Err(_) => {
+                self.record_status(StatusCode::BadGpuConfig, Some(address));
+                return;
+            }
         };
         let receipt = {
             let mut adapter = UefiExecutionAdapter::new(pci, &mut self.resume);
