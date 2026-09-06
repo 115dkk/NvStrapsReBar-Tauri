@@ -52,19 +52,19 @@ test("an installed driver opens BAR Settings, saves through its own path, and re
 
         await page.getByLabel("Target PCI BAR size").selectOption("10");
         await expect(
-                page.getByRole("heading", { name: "Draft is ready for review" }),
+                page.getByRole("heading", { name: "Changes ready to save" }),
         ).toBeVisible();
         await page.getByRole("button", { name: "Review & save" }).click();
         const dialog = page.getByRole("dialog");
-        await expect(dialog).toContainText("Save these BAR Settings to UEFI?");
+        await expect(dialog).toContainText("Save these BAR Settings?");
         await dialog.getByRole("button", { name: "Save BAR Settings" }).click();
         await expect(
-                page.getByText("BAR Settings saved and read back", {
+                page.getByText("BAR Settings saved", {
                         exact: true,
                 }),
         ).toBeVisible();
-        await expect(page.getByText(/UEFI variable Present/)).toBeVisible();
-        await page.getByText("BAR Settings saved and read back", { exact: true }).scrollIntoViewIfNeeded();
+        await expect(page.getByText(/UEFI variable/)).toHaveCount(0);
+        await page.getByText("BAR Settings saved", { exact: true }).scrollIntoViewIfNeeded();
         expect(await noHorizontalOverflow(page)).toBe(true);
         await page.screenshot({
                 path: `${evidence}/english-settings-save-receipt-1180x760.png`,
@@ -97,20 +97,20 @@ test("mixed apertures open BAR Settings and stay usable at the minimum window in
         );
         await page.getByLabel("대상 PCI BAR 크기").selectOption("10");
         await expect(
-                page.getByRole("heading", { name: "초안을 검토할 수 있음" }),
+                page.getByRole("heading", { name: "변경 사항 저장 가능" }),
         ).toBeVisible();
         await page.getByRole("button", { name: "검토 후 저장" }).click();
         await expect(page.getByRole("dialog")).toContainText(
-                "이 BAR 설정을 UEFI에 저장할까요?",
+                "이 BAR 설정을 저장할까요?",
         );
         await page.getByRole("button", { name: "BAR 설정 저장" }).click();
         await expect(
-                page.getByText("BAR 설정 저장 및 다시 읽기 완료", {
+                page.getByText("BAR 설정 저장됨", {
                         exact: true,
                 }),
         ).toBeVisible();
         await page
-                .getByText("BAR 설정 저장 및 다시 읽기 완료", { exact: true })
+                .getByText("BAR 설정 저장됨", { exact: true })
                 .scrollIntoViewIfNeeded();
         expect(await noHorizontalOverflow(page)).toBe(true);
         expect(await page.evaluate(() => window.__NVSTRAPS_I18N_MISSING__ ?? [])).toEqual([]);
@@ -157,7 +157,7 @@ test("a DXE driver not observed this boot opens Install firmware and keeps confi
         await expect(page.getByTestId("bar-settings-workspace")).toHaveCount(0);
         await expect(
                 page.getByRole("heading", {
-                        name: "다음 부팅 때 적용할 펌웨어 설정",
+                        name: "다시 시작한 뒤 사용할 설정",
                 }),
         ).toBeVisible();
         expect(await noHorizontalOverflow(page)).toBe(true);
@@ -228,11 +228,11 @@ test("settings round-trip through a file: export confirms, import fills a review
                 page.getByText("Settings loaded from file", { exact: true }),
         ).toBeVisible();
         await expect(
-                page.getByText("Review the loaded draft, then save."),
+                page.getByText("Review the loaded settings, then save."),
         ).toBeVisible();
         await expect(page.getByLabel("Target PCI BAR size")).toHaveValue("10");
         await expect(
-                page.getByRole("heading", { name: "Draft is ready for review" }),
+                page.getByRole("heading", { name: "Changes ready to save" }),
         ).toBeVisible();
         await expect(
                 page.getByRole("button", { name: "Review & save" }),
@@ -295,7 +295,7 @@ test("Settings presents a typed stale-configuration failure without false succes
                 "The saved BAR configuration changed. Refresh the system before applying this draft.",
         );
         await expect(
-                page.getByText("BAR Settings saved and read back", {
+                page.getByText("BAR Settings saved", {
                         exact: true,
                 }),
         ).toHaveCount(0);

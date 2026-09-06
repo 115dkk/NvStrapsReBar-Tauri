@@ -39,7 +39,7 @@ test("manual handoff reveals only the task owned by the active plan step", async
         await expect(manualHandoff(page)).toHaveCount(0);
 
         await page
-                .getByRole("button", { name: "Prepare and inspect firmware artifact" })
+                .getByRole("button", { name: "Prepare BIOS image" })
                 .click();
 
         const flashTask = manualHandoff(page);

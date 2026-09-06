@@ -72,7 +72,7 @@ export const FirmwareBehaviorPanel = () => {
                                                 </small>
                                         </span>
                                 </label>
-                                <label className="danger-check">
+                                <label>
                                         <input
                                                 type="checkbox"
                                                 checked={draft.skipS3Resume}

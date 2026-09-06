@@ -34,9 +34,9 @@ export function formatAbsentRules(locale: Locale, value: number): string {
                 ? `이 이미지에 없는 규칙 ${count}개는 선택할 수 없습니다.`
                 : `${count} rule${value === 1 ? " is" : "s are"} absent from this image and cannot be selected.`;
 }
-export function formatValidationSummary(locale: Locale, gpuCount: number, bytes: number): string {
-        if (locale === "ko") return `감지된 GPU ${formatNumber(locale, gpuCount)}개에 영향 · ${formatNumber(locale, bytes)}바이트 인코딩`;
-        return `${formatNumber(locale, gpuCount)} detected GPU(s) affected · ${formatNumber(locale, bytes)} bytes encoded`;
+export function formatValidationSummary(locale: Locale, gpuCount: number): string {
+        if (locale === "ko") return `감지된 GPU ${formatNumber(locale, gpuCount)}개에 적용`;
+        return `${formatNumber(locale, gpuCount)} detected GPU(s) affected`;
 }
 export function formatGpuCountLabel(locale: Locale, value: number): string {
         if (locale === "ko") return "감지된 NVIDIA GPU";
@@ -83,7 +83,7 @@ type TranslateFunction = {
         <Id extends keyof MessageParameters>(id: Id, values: MessageParameters[Id]): string;
         <Id extends Exclude<MessageId, keyof MessageParameters>>(id: Id): string;
 };
-type I18nValue = { locale: Locale; setLocale(locale: Locale): void; t: TranslateFunction; n(value: number): string; exactMatches(value: number): string; absentRules(value: number): string; validationSummary(gpuCount: number, bytes: number): string; gpuCountLabel(value: number): string };
+type I18nValue = { locale: Locale; setLocale(locale: Locale): void; t: TranslateFunction; n(value: number): string; exactMatches(value: number): string; absentRules(value: number): string; validationSummary(gpuCount: number): string; gpuCountLabel(value: number): string };
 const I18nContext = createContext<I18nValue | null>(null);
 export function I18nProvider({ children }: { children: ReactNode }) {
         const [locale, updateLocale] = useState<Locale>(() => resolveLocale(localStorage.getItem(LANGUAGE_STORAGE_KEY), navigator.languages?.length ? navigator.languages : [navigator.language]));
@@ -100,7 +100,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
                                 ? String(values[key])
                                 : token,
                 );
-        }) as TranslateFunction, n: (value) => formatNumber(locale, value), exactMatches: (value) => formatExactMatches(locale, value), absentRules: (value) => formatAbsentRules(locale, value), validationSummary: (gpuCount, bytes) => formatValidationSummary(locale, gpuCount, bytes), gpuCountLabel: (value) => formatGpuCountLabel(locale, value) }), [locale, setLocale]);
+        }) as TranslateFunction, n: (value) => formatNumber(locale, value), exactMatches: (value) => formatExactMatches(locale, value), absentRules: (value) => formatAbsentRules(locale, value), validationSummary: (gpuCount) => formatValidationSummary(locale, gpuCount), gpuCountLabel: (value) => formatGpuCountLabel(locale, value) }), [locale, setLocale]);
         return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 export function useI18n(): I18nValue { const value = useContext(I18nContext); if (!value) throw new Error("useI18n must be used inside I18nProvider"); return value; }

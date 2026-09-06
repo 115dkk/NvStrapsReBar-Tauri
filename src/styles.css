@@ -382,6 +382,7 @@ h1 {
         color: var(--muted);
         font-size: 12px;
         text-wrap: pretty;
+        word-break: keep-all;
 }
 .title-row {
         display: flex;
@@ -400,14 +401,19 @@ h1 {
 }
 .header-actions {
         display: flex;
+        flex-shrink: 0;
         align-items: center;
         gap: 14px;
+}
+.header-actions > button {
+        white-space: nowrap;
 }
 .dirty,
 .saved {
         font:
                 700 10px var(--font-technical);
         letter-spacing: 0.1em;
+        white-space: nowrap;
 }
 .dirty {
         color: var(--warn);
@@ -535,14 +541,11 @@ aside hr {
         grid-template-columns: 190px 1fr;
         gap: 18px;
         margin-bottom: 20px;
-        padding: 14px 16px;
-        border-left: 3px solid var(--ok);
-        background: #17251f;
         font-size: 13px;
         line-height: 1.5;
 }
 .detected-route span {
-        color: #aab5ae;
+        color: var(--muted);
 }
 .form-grid {
         display: grid;
@@ -570,7 +573,7 @@ aside hr {
 .verified-line {
         display: block;
         margin-top: 8px;
-        color: var(--ok) !important;
+        color: var(--muted) !important;
 }
 .compact-notice {
         margin: 18px 0 0;
@@ -617,9 +620,9 @@ aside hr {
         line-height: 1.45;
 }
 .legacy-next-action.ready {
-        border-left-color: var(--ok);
-        color: #a9d5bc;
-        background: #17251f;
+        border: 0;
+        color: var(--muted);
+        background: transparent;
 }
 .legacy-results {
         display: grid;
@@ -630,14 +633,11 @@ aside hr {
 .legacy-fingerprint {
         display: grid;
         gap: 4px;
-        padding: 11px 13px;
-        border-left: 3px solid var(--ok);
-        background: #17251f;
         font-size: 12px;
 }
 .legacy-fingerprint span,
 .legacy-fingerprint small {
-        color: #92a99d;
+        color: var(--muted);
 }
 .legacy-catalog {
         min-width: 0;
@@ -885,24 +885,6 @@ aside hr {
         font-size: 11px;
         line-height: 1.5;
 }
-.recommendation-facts {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 1px;
-        margin: 10px 0;
-        background: var(--line);
-}
-.recommendation-facts > div {
-        padding: 10px;
-        background: #20252a;
-}
-.recommendation-facts dt {
-        margin: 0;
-}
-.recommendation-facts dd {
-        color: var(--ok);
-        font: 700 16px var(--font-technical);
-}
 .recommendation-rules {
         display: grid;
         gap: 5px;
@@ -928,13 +910,11 @@ aside hr {
         display: grid;
         gap: 4px;
         padding: 12px 18px;
-        border-top: 1px solid #3d7257;
-        background: #17251f;
         font-size: 12px;
 }
 .workflow-receipt span,
 .workflow-complete span {
-        color: #a9bdaf;
+        color: var(--muted);
         line-height: 1.45;
 }
 .blocked-copy {
@@ -1003,9 +983,7 @@ aside hr {
         display: grid;
         gap: 4px;
         margin-top: 14px;
-        padding: 13px 15px;
-        border-left: 3px solid var(--ok);
-        background: #17251f;
+        padding: 0;
         font-size: 12px;
 }
 .artifact-receipt small {
@@ -1185,12 +1163,8 @@ aside hr {
         .workflow-actions {
                 grid-template-columns: 1fr;
         }
-        .recommendation-facts,
         .recommendation-rules li {
                 grid-template-columns: 1fr;
-        }
-        .recommended-config > code {
-                font-size: 10px;
         }
         .active-workflow-head {
                 flex-direction: column;
@@ -1505,9 +1479,6 @@ dd {
         line-height: 1.4;
         margin-top: 5px;
 }
-.danger-check {
-        border-color: #70503d !important;
-}
 .review {
         position: sticky;
         bottom: 0;
@@ -1583,6 +1554,13 @@ dd {
         gap: 10px;
         align-items: center;
 }
+.notice.success {
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        color: var(--muted);
+}
 .notice.error span {
         flex: 1;
 }
@@ -1593,21 +1571,16 @@ dd {
 }
 .receipt {
         margin-top: 16px;
-        border: 1px solid #3d7257;
-        background: #18271f;
-        padding: 16px;
 }
 .receipt strong,
 .receipt span {
         display: block;
 }
-.receipt strong {
-        color: #83cea2;
-}
+
 .receipt span,
 .receipt p {
         font-size: 12px;
-        color: #b3c4ba;
+        color: var(--muted);
 }
 .validation-error {
         color: #f09a93 !important;

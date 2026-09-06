@@ -55,7 +55,7 @@ describe("i18n locale policy", () => {
                         translate("ko", "ui.legacyProfileCreated", {
                                 ruleCount: 2,
                         }),
-                ).toContain("규칙 2개");
+                ).toContain("패치 2개");
                 expect(
                         translate("ko", "ui.hardwareCheckDifferences", {
                                 differenceCount: 1,
@@ -74,7 +74,7 @@ describe("i18n locale policy", () => {
                                 },
                         ),
                 ).toBe(
-                        "The target DXE volume has 3016 bytes available, but the driver requires 34904 bytes. Select another official BIOS version for this motherboard.",
+                        "There is not enough room for the driver (3016 bytes free; 34904 needed). Select another official BIOS version for this motherboard.",
                 );
                 expect(
                         translate(
@@ -86,26 +86,26 @@ describe("i18n locale policy", () => {
                                 },
                         ),
                 ).toBe(
-                        "다시 만든 컨테이너는 91744바이트지만 원래 공간에는 90112바이트까지만 들어갑니다. 이 메인보드용 다른 공식 BIOS 버전을 선택하세요.",
+                        "변경한 BIOS 데이터가 너무 큽니다(크기 91744바이트, 여유 90112바이트). 이 메인보드용 다른 공식 BIOS 버전을 선택하세요.",
                 );
                 expect(
                         translate(
                                 "ko",
                                 "ui.firmwareInjectionIncompleteDxeTargetCensus",
                         ),
-                ).toContain("NvStrapsReBar는 이 이미지를 수정하지 않습니다.");
+                ).toContain("BIOS 이미지의 일부를 읽지 못했습니다.");
                 expect(
                         translate(
                                 "ko",
                                 "ui.firmwareInjectionUnsupportedDxeTarget",
                         ),
-                ).toContain("이미지를 수정하지 않았습니다.");
+                ).toContain("이 형식의 BIOS 이미지는 만들 수 없습니다.");
                 expect(
                         translate(
                                 "en",
                                 "ui.firmwareInjectionAmbiguousDxeTargets",
                         ),
-                ).toContain("Patch every detected DXE firmware domain");
+                ).toContain("Add the driver to all boot and recovery areas");
                 expect(
                         translate(
                                 "ko",
@@ -117,13 +117,13 @@ describe("i18n locale policy", () => {
                                 "ko",
                                 "ui.patchEveryDetectedDxeFirmwareDomain",
                         ),
-                ).toBe("감지된 모든 DXE 펌웨어 영역 수정");
+                ).toBe("모든 부팅·복구 영역에 드라이버 추가");
                 expect(
                         translate(
                                 "ko",
                                 "ui.patchEveryDxeDomainExplanation",
                         ),
-                ).toContain("보드가 부팅되지 않아도 쓸 수 있는");
+                ).toContain("컴퓨터가 켜지지 않아도 BIOS를 복구할 수 있는");
         });
 
         it("has complete non-empty English and Korean catalogs", () => {
@@ -131,7 +131,33 @@ describe("i18n locale policy", () => {
                 for (const id of messageIds) {
                         expect(messages[id].en.trim()).not.toBe("");
                         expect(messages[id].ko.trim()).not.toBe("");
+                        const placeholders = (text: string) =>
+                                [...text.matchAll(/\{([A-Za-z][A-Za-z0-9]*)\}/g)]
+                                        .map((match) => match[1]).sort();
+                        expect(placeholders(messages[id].ko), id).toEqual(
+                                placeholders(messages[id].en),
+                        );
                 }
+        });
+
+        it("keeps everyday settings copy free of implementation and safety narration", () => {
+                for (const id of [
+                        "ui.settingsIntroDetail",
+                        "ui.settingsSaveUsesTheCurrentTopologyAndConfigurationTokensThenReadsTheValueBack",
+                        "ui.builtInGpuListOnlyDescription",
+                        "ui.builtInGpuListFallbackDescription",
+                        "ui.gpuRulesExplained",
+                        "ui.checkCurrentBootRustDxeStatus",
+                        "ui.sourceFirmwareInspectedSizeAndSha256Recorded",
+                ] as const) {
+                        for (const locale of ["en", "ko"] as const) {
+                                expect(messages[id][locale]).not.toMatch(
+                                        /Rust|DXE|SHA-256|read.back|fingerprint|telemetry|proven|conservative|검증된|보수적|안전|다시 읽|지문|텔레메트리/i,
+                                );
+                        }
+                }
+                expect(translate("en", "ui.settingsIntroDetail")).toContain("restart Windows");
+                expect(translate("ko", "ui.settingsIntroDetail")).toContain("Windows를 다시 시작");
         });
 
         it("localizes the bundled lzma-sdk-rs attribution and upstream credit", () => {
@@ -183,7 +209,7 @@ describe("i18n locale policy", () => {
                         "정확한 펌웨어 이미지",
                         "정확한 MSI 보드 확인됨",
                         "자동 플래시 안 함",
-                        "백엔드 권장 배포 구성",
+                        "백엔드 권장 BAR 설정",
                         "고정된 호환성 규칙",
                         "컴퓨터 사전 점검",
                         "사전 점검 및 내보내기",

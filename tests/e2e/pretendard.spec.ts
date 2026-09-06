@@ -288,7 +288,7 @@ async function reachRecommendedConfiguration(page: Page) {
                 .click();
         await page
                 .getByRole("button", {
-                        name: "Prepare and inspect firmware artifact",
+                        name: "Prepare BIOS image",
                 })
                 .click();
         for (let gate = 0; gate < 2; gate += 1) {
@@ -304,7 +304,7 @@ async function reachRecommendedConfiguration(page: Page) {
         }
         await page
                 .getByRole("button", {
-                        name: "Check current boot + Rust DXE status",
+                        name: "Check driver after restart",
                 })
                 .click();
 }
@@ -489,6 +489,7 @@ test("Korean uses the bundled Pretendard variable font without external requests
                                 parsed.protocol === "data:"
                         );
                 }),
+                requests.join("\n"),
         ).toBe(true);
         expect(
                 await page.evaluate(() =>
@@ -501,7 +502,7 @@ test("Korean uses the bundled Pretendard variable font without external requests
         });
 });
 
-test("technical summaries use one Jetendard family for Korean and Latin cells", async ({
+test("recommendations use localized prose while retained technical fields keep Jetendard", async ({
         page,
 }) => {
         await page.setViewportSize({ width: 1180, height: 760 });
@@ -509,8 +510,9 @@ test("technical summaries use one Jetendard family for Korean and Latin cells", 
         await reachRecommendedConfiguration(page);
         await loadJetendardWeights(page);
 
-        const summary = page.locator(".recommended-config > code");
-        await expect(summary).toContainText("global mode 1");
+        const summary = page.locator(".recommended-config");
+        await expect(summary).toContainText("Recommended BAR settings");
+        await expect(summary.locator("code")).toHaveCount(0);
         await page.screenshot({
                 path: `${evidence}/english-jetendard-technical-summary-1180x760.png`,
         });
@@ -519,19 +521,8 @@ test("technical summaries use one Jetendard family for Korean and Latin cells", 
         await page.setViewportSize({ width: 900, height: 760 });
         await loadPretendardWeights(page);
         await loadJetendardWeights(page);
-        await expect(summary).toContainText("전역 모드 1");
-        const family = await summary.evaluate(
-                (element) => getComputedStyle(element).fontFamily,
-        );
-        await expect(summary).toHaveCSS("font-weight", "400");
-        expect(family).toContain("Jetendard");
-        expectJetendardGlyphs(
-                await platformFontsForSelector(
-                        page,
-                        ".recommended-config > code",
-                ),
-                "Regular",
-        );
+        await expect(summary).toContainText("권장 BAR 설정");
+        expectPretendardGlyphs(await platformFontsForSelector(page, ".recommended-config p"));
         await auditVisibleHangulText(page, "deploy-platform-font-audit.json");
         await auditVisibleTechnicalText(
                 page,

@@ -51,7 +51,6 @@ export const ConfigurationReview = ({
                                                                         report
                                                                                 .affectedGpuIds
                                                                                 .length,
-                                                                        report.encodedSize,
                                                                 )}
                                                         </p>
                                                 </>
@@ -199,16 +198,6 @@ export const ConfigurationReview = ({
                                                                   "ui.configurationWrittenAndReadBack",
                                                           )}
                                         </strong>
-                                        <span>
-                                                {t("ui.saveReceiptSummary", {
-                                                        bytes: receipt.save
-                                                                .bytesWritten,
-                                                        state: receipt.save
-                                                                .variablePresent
-                                                                ? t("ui.present")
-                                                                : t("ui.removed"),
-                                                })}
-                                        </span>
                                         <p>
                                                 {t(
                                                         "ui.restartWindowsWhenReadyTheFirmwareDriverCannotApplyThisConfigurationUntilTheNextBoot",
