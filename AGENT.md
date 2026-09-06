@@ -48,15 +48,16 @@ authoritative. Keep RIIR, deployment automation, and physical-machine proof as s
 
 ## Frontend ownership
 
-- Any change to a rendered screen, interaction, user-facing state/copy, layout, styling, or its
-  bridge-driven journey must be delegated to a GPT-5.6 Sol sub-agent. Do not use another model to
-  make frontend design judgments.
-- Explicitly activate and follow `superloopy:superloopy-frontend` for that delegated work. The main
+- When the primary agent is Daybreak Blue, any change to a rendered screen, interaction,
+  user-facing state/copy, layout, styling, or its bridge-driven journey must be delegated to a
+  GPT-5.6 Sol sub-agent. This delegation requirement applies only to Daybreak Blue; Astra may
+  implement and judge frontend changes directly.
+- Explicitly activate and follow `superloopy:superloopy-frontend` for frontend work. The main
   agent reads the skill, constrains the Rust contract, reviews the result, runs final gates, and
-  owns commits; the Sol agent does not commit.
+  owns commits; a delegated Sol agent does not commit.
 - Any Korean UI copy must also follow `superloopy:humanize-korean`. Preserve technical facts and
   protected tokens, run its file-backed audit, and keep the resulting evidence with the frontend
-  run receipt. Pass this requirement explicitly to the Sol frontend owner.
+  run receipt. When delegating, pass this requirement explicitly to the Sol frontend owner.
 - Use a fresh `.superloopy/evidence/frontend/<run-id>/` for each logical frontend run. Visible or
   spatial changes require proportional `UX_CONTRACT.md`, `VISUAL_QA.md`, rendered Chromium
   captures, and helper verification. Record native and physical limitations explicitly.
