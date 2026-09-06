@@ -92,6 +92,10 @@ authoritative. Keep RIIR, deployment automation, and physical-machine proof as s
   assets, legal notices, or any other path make the classifier fail closed and run every job.
 - `workflow_dispatch` always runs the complete CI floor. Do not use GitHub's native `[skip ci]`
   phrases because they can prevent required checks from registering at all.
+- Every `master` push runs the Tauri frontend and native Windows checks, including documentation
+  changes, to publish a portable Windows pre-release for that commit. Documentation-only PRs and
+  the separate Miri/UEFI workflows retain the scope classifier. Pre-releases use unique tags per
+  run attempt and never replace an existing release or the stable Latest release.
 
 Use the smallest relevant subset while iterating, then the full applicable floor before handoff:
 

@@ -11,8 +11,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: tauri-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: tauri-${{ github.workflow }}-${{ github.event_name == 'push' && github.run_id || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   scope:
@@ -39,7 +39,7 @@ jobs:
   frontend:
     name: Frontend and browser checks
     needs: scope
-    if: needs.scope.outputs.run-heavy == 'true'
+    if: needs.scope.outputs.run-heavy == 'true' || github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -69,7 +69,7 @@ jobs:
   native-windows:
     name: Rust backend and Windows shell
     needs: scope
-    if: needs.scope.outputs.run-heavy == 'true'
+    if: needs.scope.outputs.run-heavy == 'true' || github.event_name == 'push'
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
@@ -109,3 +109,32 @@ jobs:
             target/release/NvStrapsReBar.exe
             target/release/NvStrapsReBar.ffs
           if-no-files-found: error
+
+  prerelease:
+    name: Publish Windows pre-release
+    needs: [frontend, native-windows]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v8
+        with:
+          name: NvStrapsReBar-windows
+          path: release-files
+      - name: Package portable Windows application
+        working-directory: release-files
+        run: |
+          test -s NvStrapsReBar.exe
+          test -s NvStrapsReBar.ffs
+          zip NvStrapsReBar-windows-x64.zip NvStrapsReBar.exe NvStrapsReBar.ffs
+          sha256sum NvStrapsReBar-windows-x64.zip > SHA256SUMS.txt
+      - name: Publish this commit as a pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/publish-prerelease.mjs
