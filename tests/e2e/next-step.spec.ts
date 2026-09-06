@@ -18,8 +18,8 @@ async function chooseFirmwareAndCreateProfile(
         const notice = page.locator(".deployment-content .notice");
         await expect(notice).toContainText(
                 locale === "ko"
-                        ? "원본 펌웨어 검사 완료 · 크기와 SHA-256 기록"
-                        : "Source firmware inspected · size and SHA-256 recorded.",
+                        ? "BIOS 이미지를 불러왔습니다."
+                        : "BIOS image loaded.",
         );
         await expect(
                 page.getByRole("button", {
@@ -56,18 +56,18 @@ test("English rail shows the literal next plan step and updates after advance", 
         const card = nextStepCard(page);
         await expect(card.getByText("Next step", { exact: true })).toBeVisible();
         await expect(card).toContainText(
-                "Inject the driver and inspect the firmware artifact",
+                "Add the driver to the BIOS image",
         );
         await expect(card.locator("a, button, input, select, textarea")).toHaveCount(0);
         await expect(card).not.toHaveAttribute("tabindex");
         await page.screenshot({ path: `${evidence}/english-before-advance-1180x760.png` });
 
         await page
-                .getByRole("button", { name: "Prepare and inspect firmware artifact" })
+                .getByRole("button", { name: "Prepare BIOS image" })
                 .click();
         await expect(card).toContainText("Confirm firmware setup values");
         await expect(card).not.toContainText(
-                "Inject the driver and inspect the firmware artifact",
+                "Add the driver to the BIOS image",
         );
         await page.screenshot({ path: `${evidence}/english-after-advance-1180x760.png` });
 });
@@ -82,14 +82,14 @@ test("Korean rail shows the translated next plan step at the 900 px minimum", as
 
         const card = nextStepCard(page);
         await expect(card.getByText("다음 단계", { exact: true })).toBeVisible();
-        await expect(card).toContainText("드라이버 삽입 및 펌웨어 아티팩트 검사");
+        await expect(card).toContainText("BIOS 이미지에 드라이버 추가");
         await page.screenshot({ path: `${evidence}/korean-before-advance-900x760.png` });
 
         await page
-                .getByRole("button", { name: "펌웨어 아티팩트 준비 및 검사" })
+                .getByRole("button", { name: "BIOS 이미지 준비" })
                 .click();
         await expect(card).toContainText("펌웨어 설정값 확인");
-        await expect(card).not.toContainText("드라이버 삽입 및 펌웨어 아티팩트 검사");
+        await expect(card).not.toContainText("BIOS 이미지에 드라이버 추가");
         expect(
                 await page.evaluate(
                         () =>

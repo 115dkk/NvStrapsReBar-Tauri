@@ -1,6 +1,6 @@
 import { useI18n } from "../i18n";
 import { useConfigurationWorkspaceController } from "./context";
-import { formatPciSelector, hasOperationalConfiguration } from "./model";
+import { formatPciSelector } from "./model";
 
 export const AutomaticPolicyPanel = () => {
         const { t } = useI18n();
@@ -84,13 +84,6 @@ export const AutomaticPolicyPanel = () => {
                                         </label>
                                 ))}
                         </div>
-                        {!hasOperationalConfiguration(draft) && (
-                                        <div className="notice warning">
-                                                {t(
-                                                        "ui.automaticPolicyOffAndNoRules",
-                                                )}
-                                        </div>
-                                )}
                         <label className="field">
                                 <span>{t("ui.targetPciBarSize")}</span>
                                 <select

@@ -1,7 +1,7 @@
 import { translateMessage, useI18n } from "../i18n";
 import { stepKindIds, stepStateIds, stepTitleIds } from "./messages";
 import { useDeploymentWorkspaceController } from "./context";
-import { JourneyHeading, shortHash } from "./presentation";
+import { JourneyHeading } from "./presentation";
 import { WorkflowAction } from "./workflow-action";
 export const ArtifactJourney = () => {
         const { locale, t, n } = useI18n();
@@ -83,14 +83,13 @@ export const ArtifactJourney = () => {
                                                         {workflowReceipt && (
                                                                 <div className="workflow-receipt" role="status">
                                                                         <strong>{translateMessage(locale, workflowReceipt.title)}</strong>
-                                                                        <span>{translateMessage(locale, workflowReceipt.detail)}</span>
                                                                 </div>
                                                         )}
                                                         {barEvidence && (
                                                                 <div className="workflow-receipt" role="status">
                                                                         <strong>{barEvidence.gpus[0]?.productName}</strong>
                                                                         <span>
-                                                                                BAR1 {barEvidence.gpus[0]?.bar1TotalBytes ? `${Math.round(Number(barEvidence.gpus[0].bar1TotalBytes) / 1073741824)} GiB` : "unavailable"} · Driver {barEvidence.driverVersion}
+                                                                                BAR1 {barEvidence.gpus[0]?.bar1TotalBytes ? `${Math.round(Number(barEvidence.gpus[0].bar1TotalBytes) / 1073741824)} GiB` : t("ui.unavailable")} · {t("ui.driver")} {barEvidence.driverVersion}
                                                                         </span>
                                                                 </div>
                                                         )}
@@ -111,9 +110,7 @@ export const ArtifactJourney = () => {
                                                         )}
                                                         {launch && activeStep?.id === "configureNvidiaApplications" && (
                                                                 <small className="verified-line">
-                                                                        {t("ui.editorProcessLaunched", {
-                                                                                processId: launch.processId,
-                                                                        })}
+                                                                        {t("ui.nextApplyTheNvidiaPolicyThenRecordTheResult")}
                                                                 </small>
                                                         )}
                                                 </div>
@@ -147,7 +144,7 @@ export const ArtifactJourney = () => {
                                                 <div className="artifact-receipt" role="status">
                                                         <strong>{t("ui.preparedFirmwareArtifact")}</strong>
                                                         <span>
-                                                                {n(preparation.patchedFirmware.byteLength)} {t("ui.bytes")} · SHA-256 {shortHash(preparation.patchedFirmware.sha256)}
+                                                                {n(preparation.patchedFirmware.byteLength)} {t("ui.bytes")}
                                                         </span>
                                                         <small>{t("ui.nextExportThisArtifactForTheVendorTool")}</small>
                                                 </div>
@@ -180,9 +177,6 @@ export const ArtifactJourney = () => {
                                                 <div className="artifact-receipt" role="status">
                                                         <strong>{t("ui.packageExportedManualHandoffNext")}</strong>
                                                         <span className="mono-wrap">{packageReceipt.packagePath}</span>
-                                                        <small>
-                                                                {packageReceipt.manifest.files.length} files · manifest SHA-256 {shortHash(packageReceipt.manifestSha256)}
-                                                        </small>
                                                 </div>
                                         )}
                                 </section>

@@ -31,7 +31,7 @@ test("Deploy omits the redundant flash badge and retains the contextual handoff"
         ).toBeVisible();
         await expect(
                 page.getByText(
-                        "This screen builds a BIOS image with the driver inside and exports it as a package. Flash that package with the vendor tool, then return here to record the result.",
+                        "Prepare a BIOS image here, install it with the motherboard manufacturer's tool, then return to finish setup.",
                 ),
         ).toBeVisible();
         await expect(redundantBadge(page)).toHaveCount(0);
@@ -54,7 +54,7 @@ test("Deploy omits the redundant flash badge and retains the contextual handoff"
                 .click();
         await page
                 .getByRole("button", {
-                        name: "Prepare and inspect firmware artifact",
+                        name: "Prepare BIOS image",
                 })
                 .click();
 
@@ -125,7 +125,7 @@ test("Korean Deploy intro remains readable at the 900 px minimum without the bad
         ).toBeVisible();
         await expect(
                 page.getByText(
-                        "여기에서 드라이버를 넣은 BIOS 이미지를 만들어 패키지로 내보냅니다. 플래시는 제조사 도구로 진행하고, 끝나면 돌아와 결과를 기록하세요.",
+                        "여기서 BIOS 이미지를 준비한 뒤 메인보드 제조사 도구로 설치하세요. 설치가 끝나면 돌아와 설정을 마칩니다.",
                 ),
         ).toBeVisible();
         await expect(redundantBadge(page)).toHaveCount(0);

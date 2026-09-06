@@ -12,7 +12,7 @@ import {
 } from "./messages";
 import { useDeploymentWorkspaceController } from "./context";
 import { isBootIndependentRecoveryMethod } from "./machine-profile-draft";
-import { JourneyHeading, legacyRuleKey, shortHash } from "./presentation";
+import { JourneyHeading, legacyRuleKey } from "./presentation";
 export const SourceJourney = () => {
         const { locale, t, n, exactMatches, absentRules } = useI18n();
         const { view, commands, msi } = useDeploymentWorkspaceController();
@@ -125,10 +125,7 @@ export const SourceJourney = () => {
                                                                         {firmware.fileName} · {Math.round(
                                                                                 firmware.byteLength /
                                                                                         1048576,
-                                                                        )}{" "}
-                                                                        MiB · SHA-256 {shortHash(
-                                                                                firmware.sha256,
-                                                                        )}
+                                                                        )} MiB
                                                                 </small>
                                                         )}
                                                 </label>
@@ -229,7 +226,6 @@ export const SourceJourney = () => {
                                                 >
                                                         <div className="legacy-analysis-head">
                                                                 <div>
-                                                                        <span className="step">{t("ui.readOnly")}</span>
                                                                         <h4 id="legacy-analysis-title">{t("ui.legacyPatchAnalysis")}</h4>
                                                                         <p>{t("ui.theRustAnalyzerReportsMatchCountsForTheSelectedSourceImage")}</p>
                                                                 </div>
@@ -265,9 +261,6 @@ export const SourceJourney = () => {
                                                                                         <strong>
                                                                                                 {legacyAnalysis.value.firmware.fileName} · {Math.round(legacyAnalysis.value.firmware.byteLength / 1048576)} MiB
                                                                                         </strong>
-                                                                                        <small className="mono-wrap">
-                                                                                                SHA-256 {legacyAnalysis.value.firmware.sha256}
-                                                                                        </small>
                                                                                 </div>
                                                                                 {legacyAnalysis.value.catalogs.map(
                                                                                         (catalog) => {
@@ -304,9 +297,6 @@ export const SourceJourney = () => {
                                                                                                                                         {n(applicable.length)} {t("ui.applicable")} · {n(absent.length)} {t("ui.absent")} · {n(blocked.length)} {t("ui.blockedState")}
                                                                                                                                 </small>
                                                                                                                         </div>
-                                                                                                                        <span className="mono-wrap">
-                                                                                                                                {t("ui.source")} {shortHash(catalog.sourceSha256)}
-                                                                                                                        </span>
                                                                                                                 </div>
                                                                                                                 {applicable.length >
                                                                                                                 0 ? (
@@ -432,7 +422,6 @@ export const SourceJourney = () => {
                                                 />
                                                 <span>
                                                         <strong>{t("ui.iCheckedTheVendorInstallAndRecoveryInstructionsForThisBoard")}</strong>
-                                                        <small>{t("ui.thisRecordsTheSelectedInstallationAndRecoveryInstructions")}</small>
                                                 </span>
                                         </label>
                                         <label

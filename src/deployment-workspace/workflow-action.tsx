@@ -84,24 +84,13 @@ export const WorkflowAction = () => {
                                                 {configRecommendation && recommendationStatus === "ready" && (
                                                         <div className="recommended-config">
                                                                 <strong>{t("ui.recommendedDeploymentConfiguration")}</strong>
-                                                                <dl className="recommendation-facts">
-                                                                        <div><dt>{t("ui.turingGpus")}</dt><dd>{configRecommendation.value.turingGpuCount}</dd></div>
-                                                                        <div><dt>{t("ui.registryManaged")}</dt><dd>{configRecommendation.value.registryManagedGpuCount}</dd></div>
-                                                                        <div><dt>{t("ui.locationSpecificFallbackRules")}</dt><dd>{configRecommendation.value.exactFallbackRuleCount}</dd></div>
-                                                                </dl>
-                                                                <code>
-                                                                        {t("ui.globalMode")} {configRecommendation.value.draft.globalMode} · {t("ui.targetSelector")} {configRecommendation.value.draft.targetPciBarSize} · {t("ui.skipS3")} {String(configRecommendation.value.draft.skipS3Resume)} · {t("ui.maskOverride")} {String(configRecommendation.value.draft.overrideBarSizeMask)} · {t("ui.setupGuard")} {String(configRecommendation.value.draft.guardSetupChanges)}
-                                                                </code>
                                                                 {configRecommendation.value.draft.rules.length > 0 ? (
                                                                         <ul className="recommendation-rules" aria-label={t("ui.locationSpecificFallbackRules")}>
                                                                                 {configRecommendation.value.draft.rules.map((rule) => (
                                                                                         <li key={`${rule.bus}-${rule.device}-${rule.function}`}>
                                                                                                 <strong>{rule.bus.toString(16).padStart(2, "0")}:{rule.device.toString(16).padStart(2, "0")}.{rule.function}</strong>
                                                                                                 <span>
-                                                                                                        {t("ui.fallbackRuleFact", {
-                                                                                                                deviceId: rule.deviceId.toString(16).padStart(4, "0"),
-                                                                                                                selector: rule.barSizeSelector ?? "—",
-                                                                                                        })}
+                                                                                                        {t("ui.fallbackGpuSize")}
                                                                                                 </span>
                                                                                         </li>
                                                                                 ))}

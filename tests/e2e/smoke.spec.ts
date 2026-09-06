@@ -31,7 +31,7 @@ async function reachRecommendedConfiguration(
                 .click();
         await page
                 .getByRole("button", {
-                        name: "Prepare and inspect firmware artifact",
+                        name: "Prepare BIOS image",
                 })
                 .click();
         for (let gate = 0; gate < 2; gate += 1) {
@@ -47,13 +47,13 @@ async function reachRecommendedConfiguration(
         }
         await page
                 .getByRole("button", {
-                        name: "Check current boot + Rust DXE status",
+                        name: "Check driver after restart",
                 })
                 .click();
         if (expectRecommendation)
                 await expect(
                         page.getByText(
-                                "Recommended deployment configuration",
+                                "Recommended BAR settings",
                         ),
                 ).toBeVisible();
 }
@@ -88,12 +88,12 @@ test("preview discloses simulation and completes guarded save journey", async ({
         await expect(page.getByText("UNSAVED EDITS")).toBeVisible();
         await expect(
                 page.getByRole("heading", {
-                        name: "Draft is ready for review",
+                        name: "Changes ready to save",
                 }),
         ).toBeVisible();
         await page.getByRole("button", { name: "Review & save" }).click();
         await expect(page.getByRole("dialog")).toContainText(
-                "Save these BAR Settings to UEFI?",
+                "Save these BAR Settings?",
         );
         await page.screenshot({
                 path: `${evidence}/production-1180-confirmation.png`,
@@ -101,7 +101,7 @@ test("preview discloses simulation and completes guarded save journey", async ({
         });
         await page.getByRole("button", { name: "Save BAR Settings" }).click();
         await expect(
-                page.getByText("BAR Settings saved and read back", { exact: true }),
+                page.getByText("BAR Settings saved", { exact: true }),
         ).toBeVisible();
         await expect(page.getByText("IN SYNC")).toBeVisible();
 });
@@ -180,36 +180,36 @@ test("durable deployment completes in order and distinguishes requests from rece
                 .click();
         await expect(
                 page.getByText(
-                        "Machine profile created · source image fingerprint recorded.",
+                        "Profile created.",
                 ),
         ).toBeVisible();
 
         await page
-                .getByRole("button", { name: "Prepare and inspect firmware artifact" })
+                .getByRole("button", { name: "Prepare BIOS image" })
                 .click();
         await expect(
-                page.getByText("Prepared firmware artifact", { exact: true }),
+                page.getByText("Prepared BIOS image", { exact: true }),
         ).toBeVisible();
-        await expect(page.getByText("Next: export this artifact for the vendor tool.")).toBeVisible();
+        await expect(page.getByText("Export the image to use it in the manufacturer's tool.")).toBeVisible();
         await page.getByRole("button", { name: "Choose folder" }).click();
         await page.getByRole("button", { name: "Export package" }).click();
         await expect(
-                page.getByText("Package exported — manual handoff next"),
+                page.getByText("Files exported — install the BIOS image next"),
         ).toBeVisible();
 
         await expect(page.getByRole("heading", { name: "Flash with the documented vendor route" })).toBeVisible();
         await expect(
-                page.getByRole("button", { name: "Collect BAR1 data" }),
+                page.getByRole("button", { name: "Check Resizable BAR" }),
         ).toHaveCount(0);
 
-        await page.getByRole("button", { name: "Review restart to firmware UI" }).click();
+        await page.getByRole("button", { name: "Restart to BIOS settings…" }).click();
         const dialog = page.getByRole("dialog");
         await expect(dialog).toContainText(
                 "Windows opens the firmware setup screen; continue there with the vendor instructions.",
         );
         await expect(
                 dialog.getByRole("button", {
-                        name: "Restart to firmware UI",
+                        name: "Restart to BIOS settings",
                 }),
         ).toBeEnabled();
         await page.screenshot({
@@ -218,7 +218,7 @@ test("durable deployment completes in order and distinguishes requests from rece
         });
         await page.keyboard.press("Escape");
         await expect(dialog).toHaveCount(0);
-        await expect(page.getByRole("button", { name: "Review restart to firmware UI" })).toBeFocused();
+        await expect(page.getByRole("button", { name: "Restart to BIOS settings…" })).toBeFocused();
 
         await page.getByRole("button", { name: "Review & confirm completed step" }).click();
         const manual = page.getByRole("dialog");
@@ -231,25 +231,16 @@ test("durable deployment completes in order and distinguishes requests from rece
 
         await page.getByRole("button", { name: "Review & confirm completed step" }).click();
         await page.getByRole("dialog").getByRole("button", { name: "Record completed step" }).click();
-        await expect(page.getByRole("heading", { name: "Boot Windows after the firmware handoff" })).toBeVisible();
+        await expect(page.getByRole("heading", { name: "Start Windows after BIOS installation" })).toBeVisible();
 
-        await page.getByRole("button", { name: "Check current boot + Rust DXE status" }).click();
-        await expect(page.getByText("Current boot and Rust DXE status recorded")).toBeVisible();
-        await expect(page.getByRole("heading", { name: "Write and read back the NvStrapsReBar configuration" })).toBeVisible();
+        await page.getByRole("button", { name: "Check driver after restart" }).click();
+        await expect(page.getByText("Driver running after restart")).toBeVisible();
+        await expect(page.getByRole("heading", { name: "Save BAR settings" })).toBeVisible();
 
-        const write = page.getByRole("button", { name: "Write configuration and read it back" });
+        const write = page.getByRole("button", { name: "Save BAR settings" });
         await expect(write).toBeDisabled();
-        await expect(page.getByText("Covered by built-in GPU list")).toBeVisible();
-        await expect(page.getByText(/backend/i)).toHaveCount(0);
-        await expect(page.getByText("Location-specific fallback rules")).toBeVisible();
-        await expect(
-                page.getByText("Covered by built-in GPU list").locator("..").getByText("1", { exact: true }),
-        ).toBeVisible();
-        await expect(
-                page.getByText("Location-specific fallback rules").locator("..").getByText("0", { exact: true }),
-        ).toBeVisible();
-        await expect(page.getByText(/global mode 1 · target selector 0/)).toBeVisible();
-        await expect(page.getByText(/no fallback rule is added/i)).toBeVisible();
+        await expect(page.locator(".recommended-config")).toContainText("Use the listed sizes for your Turing GPUs.");
+        await expect(page.locator(".recommended-config code, .recommendation-facts")).toHaveCount(0);
         await page.screenshot({
                 path: `${evidence}/recommendation-1180-known-registry.png`,
                 fullPage: true,
@@ -257,29 +248,29 @@ test("durable deployment completes in order and distinguishes requests from rece
         await page.screenshot({
                 path: `${factualCopyEvidence}/english-recommendation-1180x760.png`,
         });
-        await page.getByLabel("I reviewed this configuration for the selected profile.").check();
+        await page.getByLabel("I reviewed these BAR settings.").check();
         await write.click();
-        await expect(page.getByText("Configuration written and read back", { exact: true })).toBeVisible();
+        await expect(page.getByText("Settings saved", { exact: true })).toBeVisible();
 
         await page.getByRole("button", { name: "Review restart after configuration" }).click();
         const configurationRestart = page.getByRole("dialog");
         await expect(configurationRestart).toContainText("Windows restarts immediately.");
-        await expect(configurationRestart).toContainText("Return after Windows boots so the app can compare the new boot time.");
+        await expect(configurationRestart).toContainText("After Windows starts, return here to continue.");
         await page.screenshot({
                 path: `${evidence}/workflow-1180-configuration-restart.png`,
                 fullPage: true,
         });
         await configurationRestart.getByRole("button", { name: "Request restart" }).click();
-        await expect(page.getByText("Return after Windows boots, then check the boot time.")).toBeVisible();
+        await expect(page.getByText("Windows accepted the restart request. Return after the next boot.")).toBeVisible();
         await expect(page.getByRole("heading", { name: "Restart after configuration" })).toBeVisible();
 
         await page.reload();
         await page.getByRole("button", { name: "Install firmware" }).click();
         await expect(page.getByRole("heading", { name: "Restart after configuration" })).toBeVisible();
-        await page.getByRole("button", { name: "Check Windows boot time" }).click();
+        await page.getByRole("button", { name: "Check that Windows restarted" }).click();
         await expect(page.getByText("Windows boot time recorded")).toBeVisible();
 
-        await page.getByRole("button", { name: "Collect BAR1 data" }).click();
+        await page.getByRole("button", { name: "Check Resizable BAR" }).click();
         await expect(
                 page.locator(".deployment-content").getByText(/BAR1 8 GiB/),
         ).toBeVisible();
@@ -287,7 +278,7 @@ test("durable deployment completes in order and distinguishes requests from rece
 
         await page.getByRole("button", { name: "Install Profile Inspector" }).click();
         await page.getByRole("button", { name: "Back up & launch editor" }).click();
-        await expect(page.getByText(/next: edit the policy and record the result/i)).toBeVisible();
+        await expect(page.getByText("Next: apply the NVIDIA policy, then record the result.").first()).toBeVisible();
         await expect(page.getByRole("heading", { name: "Configure NVIDIA application profiles" })).toBeVisible();
         await page.screenshot({
                 path: `${evidence}/workflow-1180-final-policy.png`,
@@ -314,7 +305,7 @@ test("deployment remains reachable without horizontal overflow at 900px", async 
         await expect(page.getByText(/E7D25IMS\.1N0 · 32 MiB/)).toBeVisible();
         await page.getByText("I checked the vendor install and recovery instructions for this board.").click();
         await page.getByRole("button", { name: "Create profile for this computer" }).click();
-        await page.getByRole("button", { name: "Prepare and inspect firmware artifact" }).click();
+        await page.getByRole("button", { name: "Prepare BIOS image" }).click();
         await expect(page.getByRole("heading", { name: "Flash with the documented vendor route" })).toBeVisible();
         await page.getByRole("button", { name: "Review & confirm completed step" }).focus();
         await expect(page.getByRole("button", { name: "Review & confirm completed step" })).toBeFocused();
@@ -339,7 +330,7 @@ test("manual preview suppresses duplicate submit and locks profile selection whi
         await page.getByRole("button", { name: "Choose file" }).click();
         await page.getByText("I checked the vendor install and recovery instructions for this board.").click();
         await page.getByRole("button", { name: "Create profile for this computer" }).click();
-        await page.getByRole("button", { name: "Prepare and inspect firmware artifact" }).click();
+        await page.getByRole("button", { name: "Prepare BIOS image" }).click();
 
         const path = page.getByPlaceholder("Choose a vendor BIOS image or enter an absolute path");
         await path.fill("C:\\Firmware\\changed-fingerprint.bin");
@@ -358,7 +349,7 @@ test("manual preview suppresses duplicate submit and locks profile selection whi
         await expect(selector).toBeEnabled();
         await selector.selectOption({ label: "Second machine profile" });
         await expect(page.getByRole("dialog")).toHaveCount(0);
-        await expect(page.getByRole("heading", { name: "Build and inspect the Rust DXE driver" })).toBeVisible();
+        await expect(page.getByRole("heading", { name: "Prepare the NvStrapsReBar driver" })).toBeVisible();
 });
 
 test("machine preflight mismatch is an error and never claims an exact match", async ({
@@ -405,23 +396,12 @@ test("unknown Turing recommendation pins an exact-location fallback rule", async
                 page,
                 "C:\\Firmware\\changed-fingerprint.bin",
         );
-        await expect(
-                page.getByText("Covered by built-in GPU list").locator("..").getByText("0", { exact: true }),
-        ).toBeVisible();
-        await expect(
-                page.getByText("Location-specific fallback rules").locator("..").getByText("1", { exact: true }),
-        ).toBeVisible();
+        await expect(page.locator(".recommendation-rules li")).toHaveCount(1);
         await expect(page.getByRole("list", { name: "Location-specific fallback rules" })).toContainText(
                 "01:00.0",
         );
         await expect(page.getByRole("list", { name: "Location-specific fallback rules" })).toContainText(
-                "PCI location only",
-        );
-        await expect(page.getByRole("list", { name: "Location-specific fallback rules" })).toContainText(
-                "Device 1f81",
-        );
-        await expect(page.getByRole("list", { name: "Location-specific fallback rules" })).toContainText(
-                "BAR selector 5",
+                "Expand this GPU to 2 GiB",
         );
         await page.screenshot({
                 path: `${evidence}/recommendation-1180-exact-fallback.png`,
@@ -441,12 +421,12 @@ test("malformed plan-changing receipt becomes an error without false success", a
         );
         await page
                 .getByLabel(
-                        "I reviewed this configuration for the selected profile.",
+                        "I reviewed these BAR settings.",
                 )
                 .check();
         await page
                 .getByRole("button", {
-                        name: "Write configuration and read it back",
+                        name: "Save BAR settings",
                 })
                 .click();
         await expect(
@@ -455,11 +435,11 @@ test("malformed plan-changing receipt becomes an error without false success", a
                 ),
         ).toBeVisible();
         await expect(
-                page.getByText("Configuration written and read back", { exact: true }),
+                page.getByText("Settings saved", { exact: true }),
         ).toHaveCount(0);
         await expect(
                 page.getByRole("heading", {
-                        name: "Write and read back the NvStrapsReBar configuration",
+                        name: "Save BAR settings",
                 }),
         ).toBeVisible();
 });
@@ -476,12 +456,12 @@ test("unexpected receipt revision delta is rejected without advancing the active
         );
         await page
                 .getByLabel(
-                        "I reviewed this configuration for the selected profile.",
+                        "I reviewed these BAR settings.",
                 )
                 .check();
         await page
                 .getByRole("button", {
-                        name: "Write configuration and read it back",
+                        name: "Save BAR settings",
                 })
                 .click();
         await expect(
@@ -490,11 +470,11 @@ test("unexpected receipt revision delta is rejected without advancing the active
                 ),
         ).toBeVisible();
         await expect(
-                page.getByText("Configuration written and read back", { exact: true }),
+                page.getByText("Settings saved", { exact: true }),
         ).toHaveCount(0);
         await expect(
                 page.getByRole("heading", {
-                        name: "Write and read back the NvStrapsReBar configuration",
+                        name: "Save BAR settings",
                 }),
         ).toBeVisible();
 });
@@ -516,12 +496,12 @@ test("non-guarded recommendation is rejected before confirmation", async ({
         ).toBeVisible();
         await expect(
                 page.getByLabel(
-                        "I reviewed this configuration for the selected profile.",
+                        "I reviewed these BAR settings.",
                 ),
         ).toBeDisabled();
         await expect(
                 page.getByRole("button", {
-                        name: "Write configuration and read it back",
+                        name: "Save BAR settings",
                 }),
         ).toBeDisabled();
 });
@@ -532,7 +512,7 @@ test("legacy analysis selects only the recommended safe rule before profile crea
         await page.setViewportSize({ width: 1180, height: 760 });
         await page.goto("/");
         await page.getByRole("button", { name: "Install firmware" }).click();
-        await page.getByLabel("Board path").selectOption("legacyAbove4g");
+        await page.getByLabel("Motherboard support").selectOption("legacyAbove4g");
         await page.getByRole("button", { name: "Choose file" }).click();
         await page
                 .getByText(
@@ -555,7 +535,7 @@ test("legacy analysis selects only the recommended safe rule before profile crea
                 page.getByRole("button", { name: "Analyzing image…" }),
         ).toBeDisabled();
         await expect(
-                page.getByText(/legacy analysis complete/i),
+                page.getByText(/Analysis complete\. Choose the patches below/i),
         ).toBeVisible();
         const safeRule = page.getByText(
                 "Above 4G decoding compatibility rule",
@@ -573,11 +553,11 @@ test("legacy analysis selects only the recommended safe rule before profile crea
         });
         await create.click();
         await expect(
-                page.getByText(/legacy profile created with 1 rule · source fingerprint recorded/i),
+                page.getByText(/Profile created with 1 compatibility patch/i),
         ).toBeVisible();
         await page
                 .getByRole("button", {
-                        name: "Prepare and inspect firmware artifact",
+                        name: "Prepare BIOS image",
                 })
                 .click();
         await page
@@ -610,7 +590,7 @@ test("risky legacy rule requires an explicit confirmation", async ({
         await page.setViewportSize({ width: 1180, height: 760 });
         await page.goto("/");
         await page.getByRole("button", { name: "Install firmware" }).click();
-        await page.getByLabel("Board path").selectOption("legacyAbove4g");
+        await page.getByLabel("Motherboard support").selectOption("legacyAbove4g");
         await page.getByRole("button", { name: "Choose file" }).click();
         await page
                 .getByText(
@@ -642,9 +622,9 @@ test("risky legacy rule requires an explicit confirmation", async ({
         });
         await create.click();
         await expect(
-                page.getByText(/legacy profile created with 2 rules · source fingerprint recorded/i),
+                page.getByText(/Profile created with 2 compatibility patches/i),
         ).toBeVisible();
-        await expect(page.getByText(/source fingerprint recorded/i)).toBeVisible();
+        await expect(page.getByText(/source fingerprint recorded/i)).toHaveCount(0);
 });
 
 test("legacy selections are invalidated by path and fingerprint drift", async ({
@@ -652,7 +632,7 @@ test("legacy selections are invalidated by path and fingerprint drift", async ({
 }) => {
         await page.goto("/");
         await page.getByRole("button", { name: "Install firmware" }).click();
-        await page.getByLabel("Board path").selectOption("legacyAbove4g");
+        await page.getByLabel("Motherboard support").selectOption("legacyAbove4g");
         await page.getByRole("button", { name: "Choose file" }).click();
         const firmwarePath = page.getByPlaceholder(
                 "Choose a vendor BIOS image or enter an absolute path",
@@ -692,7 +672,7 @@ test("legacy analysis remains reachable at the supported minimum window", async 
         await page.setViewportSize({ width: 900, height: 620 });
         await page.goto("/");
         await page.getByRole("button", { name: "Install firmware" }).click();
-        await page.getByLabel("Board path").selectOption("legacyAbove4g");
+        await page.getByLabel("Motherboard support").selectOption("legacyAbove4g");
         await page.getByRole("button", { name: "Choose file" }).click();
         await page.getByRole("button", { name: "Analyze image" }).click();
         await expect(
