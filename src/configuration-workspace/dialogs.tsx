@@ -47,7 +47,7 @@ export const SaveConfirmationDialog = () => {
                                                 {t("ui.cancel")}
                                         </button>
                                         <button
-                                                className="primary danger-button"
+                                                className={removesConfiguration ? "primary danger-button" : "primary"}
                                                 onClick={() => void save()}
                                         >
                                                 {removesConfiguration

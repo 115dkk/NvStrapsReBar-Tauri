@@ -63,11 +63,7 @@ test("Deploy omits the redundant flash badge and retains the contextual handoff"
                 "data-manual-step",
                 "flashWithVendorRoute",
         );
-        await expect(
-                flashHandoff.getByRole("heading", {
-                        name: "Flash the prepared firmware",
-                }),
-        ).toBeVisible();
+        await expect(flashHandoff).toHaveAccessibleName("Flash the prepared firmware");
         await expect(flashHandoff).toContainText(
                 "return here and record the completed step",
         );
@@ -86,7 +82,7 @@ test("Deploy omits the redundant flash badge and retains the contextual handoff"
                 })),
         ).toEqual({
                 text: "Export package",
-                color: "rgb(29, 18, 13)",
+                color: "rgb(16, 33, 54)",
                 opacity: "0.42",
         });
         await page.evaluate(async () => {

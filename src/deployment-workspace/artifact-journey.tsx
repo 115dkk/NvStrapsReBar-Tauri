@@ -1,11 +1,17 @@
+import { useEffect, useRef } from "react";
 import { translateMessage, useI18n } from "../i18n";
 import { stepKindIds, stepStateIds, stepTitleIds } from "./messages";
 import { useDeploymentWorkspaceController } from "./context";
 import { JourneyHeading } from "./presentation";
 import { WorkflowAction } from "./workflow-action";
+import { FirmwareJourney } from "./firmware-journey";
 export const ArtifactJourney = () => {
         const { locale, t, n } = useI18n();
         const { view, commands } = useDeploymentWorkspaceController();
+        const currentHeading = useRef<HTMLHeadingElement>(null);
+        useEffect(() => {
+                if (view.selectedProfileId) currentHeading.current?.focus();
+        }, [view.selectedProfileId, Boolean(view.plan)]);
         const {
                 profiles,
                 selectedProfileId,
@@ -29,13 +35,14 @@ export const ArtifactJourney = () => {
                 chooseDestination,
                 exportPackage,
         } = commands;
+        if (!plan && profiles.length === 0) return null;
         return (
                                 <section className="journey-panel" aria-labelledby="artifact-title">
                                         <JourneyHeading
                                                 number="02"
-                                                title={t("ui.checkExport")}
+                                                title={t("ui.installationProgress")}
                                                 id="artifact-title"
-                                                copy={t("ui.compareTheCurrentHardwareAndSourceImagePrepareTheRustFirmwareArtifactAndExportThePackage")}
+                                                copy={plan ? undefined : t("ui.compareTheCurrentHardwareAndSourceImagePrepareTheRustFirmwareArtifactAndExportThePackage")}
                                         />
                                         <label className="field profile-select">
                                                 <span>{t("ui.machineProfile")}</span>
@@ -64,7 +71,7 @@ export const ArtifactJourney = () => {
                                                         <div className="active-workflow-head">
                                                                 <div>
                                                                         <span className="step">{t("ui.activeStep")}</span>
-                                                                        <h4>
+                                                                        <h4 ref={currentHeading} tabIndex={-1}>
                                                                                 {activeStepTitleId ? t(activeStepTitleId) : t("ui.deploymentComplete")}
                                                                         </h4>
                                                                         <p>
@@ -78,6 +85,7 @@ export const ArtifactJourney = () => {
                                                                 </strong>
                                                         </div>
                                                         <div className="active-workflow-action">
+                                                                <FirmwareJourney />
                                                                 <WorkflowAction />
                                                         </div>
                                                         {workflowReceipt && (
@@ -116,6 +124,8 @@ export const ArtifactJourney = () => {
                                                 </div>
                                         )}
                                         {plan && (
+                                                <details className="plan-history">
+                                                <summary>{t("ui.allInstallationSteps")}</summary>
                                                 <ol className="plan-list" aria-label={t("ui.deploymentPlan")}>
                                                         {plan.steps.map((step) => (
                                                                 <li
@@ -133,6 +143,7 @@ export const ArtifactJourney = () => {
                                                                 </li>
                                                         ))}
                                                 </ol>
+                                                </details>
                                         )}
                                         <div className="action-row">
                                                 <button
@@ -149,7 +160,7 @@ export const ArtifactJourney = () => {
                                                         <small>{t("ui.nextExportThisArtifactForTheVendorTool")}</small>
                                                 </div>
                                         )}
-                                        <div className="path-control export-control">
+                                        {preparation?.patchedFirmware && <div className="path-control export-control">
                                                 <input
                                                         aria-label={t("ui.deploymentPackageDestination")}
                                                         value={destination}
@@ -172,7 +183,7 @@ export const ArtifactJourney = () => {
                                                                 !destination
                                                         }
                                                 >{t("ui.exportPackage")}</button>
-                                        </div>
+                                        </div>}
                                         {packageReceipt && (
                                                 <div className="artifact-receipt" role="status">
                                                         <strong>{t("ui.packageExportedManualHandoffNext")}</strong>

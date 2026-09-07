@@ -42,23 +42,7 @@ describe("application surface routing", () => {
                 );
         });
 
-        it("opens BAR settings once the driver left evidence in this boot", () => {
-                expect(
-                        initialApplicationSurface(snapshot("currentBootDxe")),
-                ).toBe("bar");
-                expect(
-                        initialApplicationSurface(
-                                snapshot("expandedTuringAperture"),
-                        ),
-                ).toBe("bar");
-        });
-
-        it("opens the firmware install journey before the driver is installed", () => {
-                expect(
-                        initialApplicationSurface(snapshot("notObserved")),
-                ).toBe("deploy");
-                expect(
-                        initialApplicationSurface(snapshot("indeterminate")),
-                ).toBe("deploy");
+        it("opens the purpose-first overview before either workflow", () => {
+                expect(initialApplicationSurface()).toBe("overview");
         });
 });

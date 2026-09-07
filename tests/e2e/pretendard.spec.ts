@@ -5,7 +5,9 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 const evidence =
         ".superloopy/evidence/frontend/20260814T212720Z-jetendard-technical-ui";
 mkdirSync(evidence, { recursive: true });
-const styles = readFileSync(new URL("../../src/styles.css", import.meta.url), "utf8");
+const styles = ["styles.css", "workspace-layout.css"].map((file) =>
+        readFileSync(new URL(`../../src/${file}`, import.meta.url), "utf8"),
+).join("\n");
 const assetChecker = readFileSync(
         new URL("../../tools/check-third-party-assets.mjs", import.meta.url),
         "utf8",
@@ -129,6 +131,7 @@ async function auditVisibleHangulText(
                                 const sample = `${directText} ${controlText}`.trim();
                                 const style = getComputedStyle(element);
                                 const visible =
+                                        element.checkVisibility() &&
                                         style.display !== "none" &&
                                         style.visibility !== "hidden" &&
                                         element.getClientRects().length > 0;
@@ -218,6 +221,7 @@ async function auditVisibleTechnicalText(
                                         .trim();
                                 const style = getComputedStyle(element);
                                 const visible =
+                                        element.checkVisibility() &&
                                         style.display !== "none" &&
                                         style.visibility !== "hidden" &&
                                         element.getClientRects().length > 0;
@@ -337,6 +341,7 @@ test("Jetendard keeps Korean at two Latin cells in every bundled weight", async 
         page,
 }) => {
         await page.goto("/");
+        await page.getByRole("navigation").getByRole("button", { name: "BAR Settings", exact: true }).click();
         await loadJetendardWeights(page);
         const metrics = await page.evaluate(() => {
                 const host = document.createElement("div");
@@ -402,6 +407,7 @@ test("Korean uses the bundled Pretendard variable font without external requests
         page.on("request", (request) => requests.push(request.url()));
         await page.setViewportSize({ width: 1180, height: 760 });
         await page.goto("/");
+        await page.getByRole("navigation").getByRole("button", { name: "BAR Settings", exact: true }).click();
 
         const englishFamily = await page.locator("html").evaluate(
                 (element) => getComputedStyle(element).fontFamily,
@@ -443,7 +449,7 @@ test("Korean uses the bundled Pretendard variable font without external requests
                         buttonWeight: style("button").fontWeight,
                         sectionWeight: style(".section-head h3").fontWeight,
                         pageWeight: style("h1").fontWeight,
-                        monoFamily: style(".product").fontFamily,
+                        monoFamily: style(".kicker").fontFamily,
                 };
         });
         expect(typography).toMatchObject({
@@ -507,6 +513,7 @@ test("recommendations use localized prose while retained technical fields keep J
 }) => {
         await page.setViewportSize({ width: 1180, height: 760 });
         await page.goto("/");
+        await page.getByRole("navigation").getByRole("button", { name: "BAR Settings", exact: true }).click();
         await reachRecommendedConfiguration(page);
         await loadJetendardWeights(page);
 
@@ -527,6 +534,7 @@ test("recommendations use localized prose while retained technical fields keep J
         await auditVisibleTechnicalText(
                 page,
                 "deploy-technical-platform-font-audit.json",
+                4, // Collapsed installation now has four painted technical readouts.
         );
         expect(
                 await page.evaluate(() =>
@@ -547,6 +555,10 @@ test("recommendations use localized prose while retained technical fields keep J
         await page.screenshot({
                 path: `${evidence}/korean-jetendard-technical-summary-900x760.png`,
         });
+        await page.getByText("전체 설치 단계", { exact: true }).click();
+        await page.getByText("BIOS 원본과 설치 방법", { exact: true }).click();
+        await auditVisibleHangulText(page, "deploy-expanded-platform-font-audit.json");
+        await auditVisibleTechnicalText(page, "deploy-expanded-technical-font-audit.json", 4);
 });
 
 test("both bundled OFL texts are readable in a focus-contained dialog", async ({
@@ -556,6 +568,7 @@ test("both bundled OFL texts are readable in a focus-contained dialog", async ({
         page.on("request", (request) => requests.push(request.url()));
         await page.setViewportSize({ width: 900, height: 760 });
         await page.goto("/");
+        await page.getByRole("navigation").getByRole("button", { name: "BAR Settings", exact: true }).click();
         await page.getByTestId("language-select").selectOption("en");
         await loadJetendardWeights(page);
         const englishOpenButton = page.getByRole("button", { name: "Licenses" });

@@ -26,13 +26,13 @@ export const JourneyHeading = ({
         number: string;
         title: string;
         id: string;
-        copy: string;
+        copy?: string;
 }) => (
         <div className="section-head journey-head">
                 <div>
                         <span className="step">{number}</span>
                         <h3 id={id}>{title}</h3>
                 </div>
-                <p>{copy}</p>
+                {copy && <p>{copy}</p>}
         </div>
 );

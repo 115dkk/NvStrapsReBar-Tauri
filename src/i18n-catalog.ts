@@ -1,4 +1,39 @@
 export const messages = {
+        "ui.gpuObservedState": { en: "{gpu}: {state} ({size})", ko: "{gpu}: {state} ({size})" },
+        "ui.overviewUefiRequired": { en: "UEFI startup is required", ko: "UEFI 모드로 부팅해야 합니다" },
+        "ui.overviewAdminRequired": { en: "Load settings as administrator", ko: "관리자 권한으로 설정 불러오기" },
+        "ui.overviewCheckState": { en: "Check the current PC state", ko: "현재 PC 상태 확인" },
+        "ui.retryStatusCheck": { en: "Check status again", ko: "상태 다시 확인" },
+        "ui.overviewNoTargetGpu": { en: "No Turing GPU detected", ko: "Turing GPU가 감지되지 않았습니다" },
+        "ui.overviewNoTargetGpuDetail": { en: "This utility configures NVIDIA Turing GPUs. Check the graphics cards detected by Windows before starting an installation.", ko: "이 도구는 NVIDIA Turing GPU용입니다. 설치 전에 Windows에서 감지한 그래픽 카드를 확인하세요." },
+        "ui.overview": { en: "Overview", ko: "개요" },
+        "ui.hardwareUtility": { en: "Resizable BAR utility", ko: "Resizable BAR 설정 도구" },
+        "ui.programPurpose": { en: "Resizable BAR for NVIDIA Turing.", ko: "NVIDIA Turing에서 Resizable BAR 사용하기" },
+        "ui.programPurposeDetail": { en: "Prepare the BIOS and configure your GPU so the CPU can access a larger part of its graphics memory at once.", ko: "CPU가 그래픽 메모리에 한 번에 더 넓게 접근하도록 BIOS를 준비하고 GPU를 설정합니다." },
+        "ui.yourPc": { en: "Your PC", ko: "내 PC" },
+        "ui.currentBoot": { en: "Current startup", ko: "이번 부팅 기준" },
+        "ui.continueInstallation": { en: "Continue your installation", ko: "진행하던 설치 계속하기" },
+        "ui.continueInstallationDetail": { en: "Your installation has unfinished steps. Pick up from the current step.", ko: "아직 설치 단계가 남아 있습니다. 하던 작업을 이어서 진행하세요." },
+        "ui.installationNeeded": { en: "Start with the BIOS installation", ko: "BIOS 설치부터 시작하세요" },
+        "ui.installationNeededDetail": { en: "Prepare a BIOS image with the NvStrapsReBar driver, then install it using your motherboard's tool.", ko: "NvStrapsReBar 드라이버를 넣은 BIOS 이미지를 준비하고 메인보드 도구로 설치합니다." },
+        "ui.expansionAlreadyActive": { en: "Resizable BAR is already active", ko: "Resizable BAR가 이미 켜져 있습니다" },
+        "ui.expansionAlreadyActiveDetail": { en: "You can review your BAR settings without starting a new BIOS installation.", ko: "BIOS를 다시 설치하지 않고 BAR 설정을 확인할 수 있습니다." },
+        "ui.chooseExpansionSettings": { en: "Choose your BAR settings", ko: "BAR 설정을 선택하세요" },
+        "ui.chooseExpansionSettingsDetail": { en: "The driver is available. Choose the expansion settings, save, and restart Windows.", ko: "드라이버를 사용할 수 있습니다. 확장 방식을 고르고 저장한 뒤 Windows를 다시 시작하세요." },
+        "ui.continueSetup": { en: "Continue setup", ko: "이어서 진행" },
+        "ui.startSetup": { en: "Start installation", ko: "설치 시작" },
+        "ui.openBarSettings": { en: "Open BAR settings", ko: "BAR 설정 열기" },
+        "ui.howSetupWorks": { en: "How setup works", ko: "설치는 이렇게 진행됩니다" },
+        "ui.outlinePrepare": { en: "Prepare a BIOS image", ko: "BIOS 이미지 준비" },
+        "ui.outlinePrepareDetail": { en: "Choose your motherboard's BIOS file and add the driver here.", ko: "메인보드용 BIOS 파일을 골라 드라이버를 추가합니다." },
+        "ui.outlineInstall": { en: "Install with the vendor tool", ko: "제조사 도구로 설치" },
+        "ui.outlineInstallDetail": { en: "Install the prepared image using your motherboard's firmware tool.", ko: "메인보드의 펌웨어 도구로 준비한 이미지를 설치합니다." },
+        "ui.outlineConfigure": { en: "Configure and restart", ko: "설정 후 다시 시작" },
+        "ui.outlineConfigureDetail": { en: "Set the BAR size here, restart Windows, then check the result.", ko: "여기서 BAR 크기를 설정하고 Windows를 다시 시작한 뒤 결과를 확인합니다." },
+        "ui.sourceAndInstallOptions": { en: "BIOS source and installation options", ko: "BIOS 원본과 설치 방법" },
+        "ui.installationProgress": { en: "Installation progress", ko: "설치 진행" },
+        "ui.allInstallationSteps": { en: "All installation steps", ko: "전체 설치 단계" },
+        "ui.advancedFirmwareSettings": { en: "Advanced firmware settings", ko: "펌웨어 고급 설정" },
         "ui.fallbackGpuSize": { en: "Expand this GPU to 2 GiB", ko: "이 GPU를 2 GiB로 확장" },
         "ui.language": { en: "Language", ko: "언어" },
         "ui.tagline": { en: "Turns on Resizable BAR for NVIDIA GPUs on motherboards without native support", ko: "자체 지원이 없는 메인보드에서 NVIDIA GPU의 Resizable BAR를 켭니다" },
@@ -461,6 +496,7 @@ export type MessagePrimitive = string | number;
 export type MessageValues = Readonly<Record<string, MessagePrimitive>>;
 
 export type MessageParameters = {
+        "ui.gpuObservedState": { gpu: string; state: string; size: string };
         "ui.motherboardResizableBarSupportState": { status: string };
         "ui.ruleMatchScope": { rule: number };
         "ui.ruleActionSize": { rule: number };

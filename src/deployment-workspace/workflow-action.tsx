@@ -54,7 +54,7 @@ export const WorkflowAction = () => {
                                                         disabled={Boolean(busyAction)}
                                                 >{t("ui.reviewRestartToFirmwareUi")}</button>
                                                 <button
-                                                        className="primary danger-button"
+                                                        className="primary"
                                                         onClick={openManualConfirmation}
                                                         disabled={Boolean(busyAction)}
                                                 >{t("ui.reviewConfirmCompletedStep")}</button>
@@ -178,7 +178,7 @@ export const WorkflowAction = () => {
                                                 </div>
                                                 <p>{t("ui.afterEditingTheNvidiaPolicyReturnHereAndRecordTheResult")}</p>
                                                 <button
-                                                        className="primary danger-button"
+                                                        className="primary"
                                                         onClick={openManualConfirmation}
                                                         disabled={Boolean(busyAction)}
                                                 >{t("ui.reviewConfirmAppliedNvidiaPolicy")}</button>

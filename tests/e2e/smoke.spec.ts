@@ -11,6 +11,7 @@ async function reachRecommendedConfiguration(
         expectRecommendation = true,
 ) {
         await page.goto("/");
+        await page.getByRole("navigation").getByRole("button", { name: "BAR Settings", exact: true }).click();
         await page.getByRole("button", { name: "Install firmware" }).click();
         await page.getByRole("button", { name: "Choose file" }).click();
         if (firmwarePath) {
@@ -62,7 +63,8 @@ test("preview discloses simulation and completes guarded save journey", async ({
 }) => {
         await page.setViewportSize({ width: 1180, height: 760 });
         await page.goto("/");
-        await page.getByRole("button", { name: "BAR Settings" }).click();
+        await page.getByRole("navigation").getByRole("button", { name: "BAR Settings", exact: true }).click();
+        await page.getByRole("button", { name: "BAR Settings", exact: true }).click();
         await expect(page).toHaveTitle("NvStrapsReBar");
         await expect(page.getByText("PREVIEW DATA")).toBeVisible();
         await expect(
@@ -103,12 +105,13 @@ test("preview discloses simulation and completes guarded save journey", async ({
         await expect(
                 page.getByText("BAR Settings saved", { exact: true }),
         ).toBeVisible();
-        await expect(page.getByText("IN SYNC")).toBeVisible();
+        await expect(page.getByText("UNSAVED EDITS")).toHaveCount(0);
 });
 test("GPU rule exposes scope, size, override, and removal", async ({
         page,
 }) => {
         await page.goto("/");
+        await page.getByRole("navigation").getByRole("button", { name: "BAR Settings", exact: true }).click();
         await page.getByRole("button", { name: "Add rule for this GPU" }).click();
         await expect(page.getByLabel("Match scope").first()).toHaveValue(
                 "location",
@@ -125,6 +128,7 @@ test("keyboard focus and minimum-width layout remain usable", async ({
 }) => {
         await page.setViewportSize({ width: 900, height: 620 });
         await page.goto("/");
+        await page.getByRole("navigation").getByRole("button", { name: "BAR Settings", exact: true }).click();
         await page.keyboard.press("Tab");
         await expect(page.locator(":focus")).toBeVisible();
         const offMode = page.getByRole("radio", { name: /^Off/ });
@@ -151,6 +155,7 @@ test("durable deployment completes in order and distinguishes requests from rece
 }) => {
         await page.setViewportSize({ width: 1180, height: 760 });
         await page.goto("/");
+        await page.getByRole("navigation").getByRole("button", { name: "BAR Settings", exact: true }).click();
         await page.getByRole("button", { name: "Install firmware" }).click();
         await expect(
                 page.getByRole("heading", { name: "Install firmware" }),
@@ -300,6 +305,7 @@ test("deployment remains reachable without horizontal overflow at 900px", async 
 }) => {
         await page.setViewportSize({ width: 900, height: 620 });
         await page.goto("/");
+        await page.getByRole("navigation").getByRole("button", { name: "BAR Settings", exact: true }).click();
         await page.getByRole("button", { name: "Install firmware" }).click();
         await page.getByRole("button", { name: "Choose file" }).click();
         await expect(page.getByText(/E7D25IMS\.1N0 · 32 MiB/)).toBeVisible();
@@ -326,12 +332,14 @@ test("manual preview suppresses duplicate submit and locks profile selection whi
         page,
 }) => {
         await page.goto("/");
+        await page.getByRole("navigation").getByRole("button", { name: "BAR Settings", exact: true }).click();
         await page.getByRole("button", { name: "Install firmware" }).click();
         await page.getByRole("button", { name: "Choose file" }).click();
         await page.getByText("I checked the vendor install and recovery instructions for this board.").click();
         await page.getByRole("button", { name: "Create profile for this computer" }).click();
         await page.getByRole("button", { name: "Prepare BIOS image" }).click();
 
+        await page.getByText("BIOS source and installation options", { exact: true }).click();
         const path = page.getByPlaceholder("Choose a vendor BIOS image or enter an absolute path");
         await path.fill("C:\\Firmware\\changed-fingerprint.bin");
         await page.getByRole("button", { name: "Inspect" }).click();
@@ -345,6 +353,8 @@ test("manual preview suppresses duplicate submit and locks profile selection whi
         await expect(review).toBeDisabled();
         await expect(selector).toBeDisabled();
         await expect(page.getByRole("dialog")).toBeVisible();
+        await expect(page.getByRole("navigation").getByRole("button", { name: "Overview", exact: true })).toBeDisabled();
+        await expect(page.getByRole("button", { name: "Refresh system" })).toBeDisabled();
         await page.keyboard.press("Escape");
         await expect(selector).toBeEnabled();
         await selector.selectOption({ label: "Second machine profile" });
@@ -356,6 +366,7 @@ test("machine preflight mismatch is an error and never claims an exact match", a
         page,
 }) => {
         await page.goto("/");
+        await page.getByRole("navigation").getByRole("button", { name: "BAR Settings", exact: true }).click();
         await page.getByRole("button", { name: "Install firmware" }).click();
         await page.getByRole("button", { name: "Choose file" }).click();
         await page
@@ -511,6 +522,7 @@ test("legacy analysis selects only the recommended safe rule before profile crea
 }) => {
         await page.setViewportSize({ width: 1180, height: 760 });
         await page.goto("/");
+        await page.getByRole("navigation").getByRole("button", { name: "BAR Settings", exact: true }).click();
         await page.getByRole("button", { name: "Install firmware" }).click();
         await page.getByLabel("Motherboard support").selectOption("legacyAbove4g");
         await page.getByRole("button", { name: "Choose file" }).click();
@@ -589,6 +601,7 @@ test("risky legacy rule requires an explicit confirmation", async ({
 }) => {
         await page.setViewportSize({ width: 1180, height: 760 });
         await page.goto("/");
+        await page.getByRole("navigation").getByRole("button", { name: "BAR Settings", exact: true }).click();
         await page.getByRole("button", { name: "Install firmware" }).click();
         await page.getByLabel("Motherboard support").selectOption("legacyAbove4g");
         await page.getByRole("button", { name: "Choose file" }).click();
@@ -631,6 +644,7 @@ test("legacy selections are invalidated by path and fingerprint drift", async ({
         page,
 }) => {
         await page.goto("/");
+        await page.getByRole("navigation").getByRole("button", { name: "BAR Settings", exact: true }).click();
         await page.getByRole("button", { name: "Install firmware" }).click();
         await page.getByLabel("Motherboard support").selectOption("legacyAbove4g");
         await page.getByRole("button", { name: "Choose file" }).click();
@@ -671,6 +685,7 @@ test("legacy analysis remains reachable at the supported minimum window", async 
 }) => {
         await page.setViewportSize({ width: 900, height: 620 });
         await page.goto("/");
+        await page.getByRole("navigation").getByRole("button", { name: "BAR Settings", exact: true }).click();
         await page.getByRole("button", { name: "Install firmware" }).click();
         await page.getByLabel("Motherboard support").selectOption("legacyAbove4g");
         await page.getByRole("button", { name: "Choose file" }).click();
