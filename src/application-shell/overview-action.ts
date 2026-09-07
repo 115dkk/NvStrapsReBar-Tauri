@@ -17,6 +17,7 @@ export function overviewAction(snapshot: SystemSnapshot, tone: ResizableBarStatu
         if (!snapshot.platform.uefi) return { title: "ui.overviewUefiRequired", detail: "ui.windowsIsNotRunningInUefiModeFirmwareVariablesAreUnavailable", action: null, label: "ui.tryAgain" };
         if (!snapshot.platform.elevated) return { title: "ui.overviewAdminRequired", detail: "ui.administratorAccessIsRequiredToReadOrSaveUefiSettings", action: "elevate", label: "ui.restartAsAdministrator" };
         if (tone === "loading" || tone === "unavailable") return { title: "ui.overviewCheckState", detail: tone === "loading" ? "ui.rebarVerdictCheckingDetail" : "ui.rebarVerdictUnavailableDetail", action: tone === "loading" ? null : "refresh", label: "ui.retryStatusCheck" };
+        if (snapshot.barSettings.controlEvidence === "indeterminate") return { title: "ui.overviewCheckState", detail: "ui.driverStatusUnavailable", action: "refresh", label: "ui.retryStatusCheck" };
         if (!firmwareInstalled(snapshot) && !snapshot.devices.some((gpu) => gpu.isTuring)) return { title: "ui.overviewNoTargetGpu", detail: "ui.overviewNoTargetGpuDetail", action: "refresh", label: "ui.retryStatusCheck" };
         return firmwareInstalled(snapshot)
                 ? { title: "ui.chooseExpansionSettings", detail: "ui.chooseExpansionSettingsDetail", action: "bar", label: "ui.openBarSettings" }

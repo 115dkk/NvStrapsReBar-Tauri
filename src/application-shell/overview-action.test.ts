@@ -19,6 +19,9 @@ describe("overview next action", () => {
         });
         it("does not call unknown state uninstalled or promise an unsupported GPU upgrade", () => {
                 expect(overviewAction(snapshot(), "unavailable", false).action).toBe("refresh");
+                const unknownDriver = snapshot();
+                unknownDriver.barSettings.controlEvidence = "indeterminate";
+                expect(overviewAction(unknownDriver, "legacy", false).action).toBe("refresh");
                 const noGpu = snapshot(); noGpu.devices = [];
                 expect(overviewAction(noGpu, "legacy", false).title).toBe("ui.overviewNoTargetGpu");
                 expect(overviewAction(noGpu, "expanded", false).action).toBe(null);
