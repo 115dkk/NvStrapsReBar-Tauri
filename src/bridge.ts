@@ -194,6 +194,7 @@ const mixedPreviewInspection: ResizableBarInspection = {
 };
 type PreviewState =
         | "expanded"
+        | "unavailable"
         | "expanded-no-access"
         | "mixed"
         | "not-observed"
@@ -202,6 +203,7 @@ const previewState = (): PreviewState => {
         if (typeof sessionStorage === "undefined") return "expanded";
         const value = sessionStorage.getItem(PREVIEW_REBAR_STATE_KEY);
         return value === "mixed" ||
+                value === "unavailable" ||
                 value === "not-observed" ||
                 value === "expanded-no-access" ||
                 value === "driver-cleared"
@@ -229,6 +231,10 @@ const notObservedPreviewInspection: ResizableBarInspection = {
 };
 const currentPreviewSnapshot = (): SystemSnapshot => {
         const value = structuredClone(previewSnapshot);
+        if (previewState() === "unavailable") {
+                value.driverStatus = null;
+                value.barSettings = { ...value.barSettings, currentBootDxeState: "indeterminate", currentBootDxeReasonCode: "statusVariableUnavailable", controlEvidence: "indeterminate", settingsAvailable: false };
+        }
         if (previewState() === "mixed") {
                 value.devices.push(structuredClone(mixedPreviewGpu));
                 value.machineIdentity?.gpus.push({
@@ -333,15 +339,17 @@ const savePreviewDraft = (draft: ConfigDraft): SaveReceipt => {
 export const previewConfigureBridge: ConfigureBridge = {
         snapshot: async () => currentPreviewSnapshot(),
         refresh: async () => currentPreviewSnapshot(),
-        inspectResizableBarStatus: async () =>
-                structuredClone(
+        inspectResizableBarStatus: async () => {
+                if (previewState() === "unavailable") throw new Error("Preview status unavailable");
+                return structuredClone(
                         previewState() === "mixed"
                                 ? mixedPreviewInspection
                                 : previewState() === "not-observed" ||
                                     previewState() === "driver-cleared"
                                   ? notObservedPreviewInspection
                                 : previewResizableBarInspection,
-                ),
+                );
+        },
         validate: async (draft) => {
                 const encodedSize = bytesFor(draft);
                 return {

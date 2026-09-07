@@ -17,6 +17,13 @@ const previewStorage = (value: string | null) => ({
 afterEach(() => vi.unstubAllGlobals());
 
 describe("ConfigureBridge Resizable BAR inspection", () => {
+        it("can preview unavailable observation without inventing installation or activation", async () => {
+                vi.stubGlobal("sessionStorage", previewStorage("unavailable"));
+                const snapshot = await previewConfigureBridge.snapshot();
+                expect(snapshot.barSettings.controlEvidence).toBe("indeterminate");
+                expect(snapshot.barSettings.settingsAvailable).toBe(false);
+                await expect(previewConfigureBridge.inspectResizableBarStatus()).rejects.toThrow("Preview status unavailable");
+        });
         it("exposes coherent expanded preview data without a deployment plan", async () => {
                 const [snapshot, inspection] = await Promise.all([
                         previewConfigureBridge.snapshot(),
