@@ -218,6 +218,14 @@ describe("i18n locale policy", () => {
                         expect(korean).not.toContain(copy);
         });
 
+        it("reserves Korean 경로 for literal filesystem locations", () => {
+                const ids = messageIds.filter((id) => messages[id].ko.includes("경로"));
+                expect(ids).toEqual(["ui.chooseAVendorBiosImageOrEnterAnAbsolutePath"]);
+                expect(translate("ko", "ui.recordTheFirmwareRecoveryRoute")).toBe("펌웨어 복구 방법 기록");
+                expect(translate("ko", "ui.flashWithTheDocumentedVendorRoute")).toBe("제조사 안내에 따라 플래시");
+                expect(translate("ko", "ui.deploymentPackageDestination")).toBe("패키지 저장 폴더");
+        });
+
         it("uses a fact-first motherboard capability label in both locales", () => {
                 expect(translate("en", "ui.motherboardResizableBarSupport")).toBe(
                         "Motherboard native ReBAR:",
