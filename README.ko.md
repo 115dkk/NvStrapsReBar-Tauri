@@ -48,7 +48,7 @@ GTX 1000(Pascal) 이하는 지원하지 않습니다. BAR가 바뀌면 Windows�
 Rust 드라이버와 펌웨어 도구는 호스트 테스트와 QEMU/OVMF 부팅 테스트를 통과했지만, 실제
 컴퓨터에서 플래시까지 끝까지 해 본 확인은 아직 없습니다. BIOS 플래시가 잘못되면 보드가 안
 켜질 수 있으니, 복구 방법이 실제로 되는지 확인한 다음에만 진행하세요. MSI PRO Z690-A
-DDR4(MS-7D25)는 문서에 있는 M-FLASH 설치와 Flash BIOS Button 복구 경로를 앱이 미리 채워
+DDR4(MS-7D25)는 문서에 있는 M-FLASH 설치와 Flash BIOS Button 복구 방법을 앱이 미리 채워
 주고, 다른 보드에서는 직접 고릅니다.
 
 ## 결과 확인
