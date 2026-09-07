@@ -8,7 +8,7 @@ test("language switch is accessible, immediate, persisted, and preserves the dra
         await page.goto("/");
         const selector = page.getByTestId("language-select");
         await expect(selector).toHaveAccessibleName("Language");
-        await page.getByRole("button", { name: "BAR Settings" }).click();
+        await page.getByRole("button", { name: "BAR Settings", exact: true }).click();
         await page.getByLabel("Built-in list + fallback").check();
         await selector.focus();
         await page.keyboard.press("ArrowDown");
@@ -18,13 +18,13 @@ test("language switch is accessible, immediate, persisted, and preserves the dra
         await expect(page.getByRole("heading", { name: "BAR 설정", exact: true })).toBeVisible();
         await expect(page.getByText("저장하지 않은 변경 사항")).toBeVisible();
         await expect(page.getByLabel("내장 목록 + 대체값")).toBeChecked();
-        await expect(page.getByText("자체 지원이 없는 메인보드에서 NVIDIA GPU의 Resizable BAR를 켭니다")).toBeVisible();
+        await expect(page.locator(".app-category")).toHaveText("Resizable BAR 설정 도구");
         await page.screenshot({ path: `${evidence}/korean-configure-1180x760.png`, fullPage: true });
         await page.screenshot({ path: `${evidence}/gallery-korean-configure-1180x760.png` });
         expect(await page.evaluate(() => window.__NVSTRAPS_I18N_MISSING__ ?? [])).toEqual([]);
         await page.reload();
         await expect(page.locator("html")).toHaveAttribute("lang", "ko");
-        await page.getByRole("button", { name: "BAR 설정" }).click();
+        await page.getByRole("button", { name: "BAR 설정", exact: true }).click();
         await expect(page.getByRole("heading", { name: "BAR 설정", exact: true })).toBeVisible();
 });
 
@@ -32,7 +32,7 @@ test("Korean consequential configuration modal remains truthful at the minimum w
         await page.setViewportSize({ width: 900, height: 760 });
         await page.goto("/");
         await page.getByTestId("language-select").selectOption("ko");
-        await page.getByRole("button", { name: "BAR 설정" }).click();
+        await page.getByRole("button", { name: "BAR 설정", exact: true }).click();
         await page.getByLabel("내장 목록 + 대체값").check();
         await page.getByRole("button", { name: "검토 후 저장" }).click();
         const dialog = page.getByRole("dialog");
@@ -68,7 +68,7 @@ test("English is the fallback and remains selectable", async ({ page }) => {
         await expect(page.locator("html")).toHaveAttribute("lang", "en");
         await page.getByTestId("language-select").selectOption("ko");
         await page.getByTestId("language-select").selectOption("en");
-        await page.getByRole("button", { name: "BAR Settings" }).click();
+        await page.getByRole("button", { name: "BAR Settings", exact: true }).click();
         await expect(page.getByRole("heading", { name: "BAR Settings", exact: true })).toBeVisible();
 });
 
@@ -80,7 +80,7 @@ test("Korean deployment reaches the recommended configuration without missing ca
         await page.getByRole("button", { name: "파일 선택" }).click();
         await page.getByText("이 보드의 제조사 설치 및 복구 지침을 확인했습니다.").click();
         await page.getByRole("button", { name: "이 컴퓨터의 프로필 만들기" }).click();
-        await expect(page.getByText("NvStrapsReBar 드라이버 준비", { exact: true }).first()).toBeVisible();
+        await expect(page.getByRole("heading", { name: "NvStrapsReBar 드라이버 준비", exact: true })).toBeVisible();
         await page.getByRole("button", { name: "BIOS 이미지 준비" }).click();
         for (let gate = 0; gate < 2; gate += 1) {
                 await page.getByRole("button", { name: "완료한 단계 검토 및 확인" }).click();

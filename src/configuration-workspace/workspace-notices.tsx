@@ -1,7 +1,7 @@
 import { translateMessage, useI18n } from "../i18n";
 import { useConfigurationWorkspaceController } from "./context";
 
-export const WorkspaceNotices = () => {
+export const WorkspaceNotices = ({ systemDetails = true }: { systemDetails?: boolean }) => {
         const { locale, t } = useI18n();
         const { error, setError, systemNotices } =
                 useConfigurationWorkspaceController();
@@ -21,7 +21,7 @@ export const WorkspaceNotices = () => {
                                         </button>
                                 </div>
                         )}
-                        {systemNotices.map((notice) => (
+                        {(systemDetails ? systemNotices : []).map((notice) => (
                                 <div
                                         className={`notice ${notice.tone}`}
                                         key={notice.id}

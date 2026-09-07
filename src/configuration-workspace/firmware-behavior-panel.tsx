@@ -5,6 +5,8 @@ export const FirmwareBehaviorPanel = () => {
         const { t } = useI18n();
         const { draft, patch } = useConfigurationWorkspaceController();
         return (
+                <details className="advanced-settings">
+                <summary>{t("ui.advancedFirmwareSettings")}</summary>
                 <section className="panel">
                         <div className="section-head">
                                 <div>
@@ -99,5 +101,6 @@ export const FirmwareBehaviorPanel = () => {
                                 </label>
                         </div>
                 </section>
+                </details>
         );
 };

@@ -61,7 +61,8 @@ test("English copy names hardware, selected files, and the next vendor action", 
         await page.screenshot({ path: `${evidence}/english-deployment-1180x760.png` });
 
         await page.setViewportSize({ width: 900, height: 760 });
-        await page.getByRole("button", { name: "BAR Settings" }).click();
+        await page.getByRole("button", { name: "BAR Settings", exact: true }).click();
+        await page.getByText("Advanced firmware settings", { exact: true }).click();
         await expect(page.getByRole("heading", { name: "Firmware behavior" })).toBeVisible();
         await expect(page.getByText(/Add a rule only to use a different size or exclude a GPU/)).toBeVisible();
         await expectCopyAbsent(page, forbiddenEnglish);
@@ -95,7 +96,8 @@ test("Korean copy states the same facts and actions without accuracy claims", as
         await page.screenshot({ path: `${evidence}/korean-deployment-1180x760.png` });
 
         await page.setViewportSize({ width: 900, height: 760 });
-        await page.getByRole("button", { name: "BAR 설정" }).click();
+        await page.getByRole("button", { name: "BAR 설정", exact: true }).click();
+        await page.getByText("펌웨어 고급 설정", { exact: true }).click();
         await expect(page.getByRole("heading", { name: "펌웨어 동작" })).toBeVisible();
         await expect(page.getByText(/다른 크기를 쓰거나 GPU를 제외할 때만 규칙을 추가하세요/)).toBeVisible();
         await expectCopyAbsent(page, forbiddenKorean);

@@ -1,33 +1,26 @@
-import type { SystemSnapshot } from "./types";
-import { DeploymentWorkspaceProvider } from "./deployment-workspace/context";
+import { useDeploymentWorkspaceController } from "./deployment-workspace/context";
 import { ArtifactJourney } from "./deployment-workspace/artifact-journey";
 import { DeploymentDialogs } from "./deployment-workspace/dialogs";
 import { DeploymentIntro } from "./deployment-workspace/deployment-intro";
 import { DeploymentRail } from "./deployment-workspace/deployment-rail";
-import { FirmwareJourney } from "./deployment-workspace/firmware-journey";
 import { SourceJourney } from "./deployment-workspace/source-journey";
-import { useDeploymentWorkspace } from "./deployment-workspace/use-deployment-workspace";
+import { useI18n } from "./i18n";
 
-type Props = { snapshot: SystemSnapshot };
-
-export function DeploymentWorkspace({ snapshot }: Props) {
-        const controller = useDeploymentWorkspace(snapshot);
+export function DeploymentWorkspace() {
+        const { t } = useI18n();
+        const { view } = useDeploymentWorkspaceController();
         return (
-                <DeploymentWorkspaceProvider value={controller}>
+                <>
                         <div className="deployment-shell">
-                                <DeploymentRail />
-
                                 <main className="deployment-content">
                                         <DeploymentIntro />
-                                        <SourceJourney />
-
+                                        {!view.plan && <SourceJourney />}
                                         <ArtifactJourney />
-
-                                        <FirmwareJourney />
+                                        <DeploymentRail />
+                                        {view.plan && <details className="source-disclosure"><summary>{t("ui.sourceAndInstallOptions")}</summary><SourceJourney /></details>}
                                 </main>
-
                                 <DeploymentDialogs />
                         </div>
-                </DeploymentWorkspaceProvider>
+                </>
         );
 }

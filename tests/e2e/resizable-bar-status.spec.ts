@@ -24,6 +24,7 @@ test("expanded Resizable BAR hero remains visible across English workspaces", as
         await expect(hero).toContainText("Expanded aperture");
         await expect(hero).toContainText("Expandable by this app: Not needed");
         await expect(hero.locator(".bar-block.expanded")).toHaveText("8 GiB");
+        await page.getByRole("button", { name: "BAR Settings", exact: true }).click();
         await expect(page.getByText("Current BAR aperture")).toBeVisible();
         await expect(page.getByText("BAR0", { exact: true })).toHaveCount(0);
         await page.screenshot({
@@ -32,8 +33,8 @@ test("expanded Resizable BAR hero remains visible across English workspaces", as
 
         await page.getByRole("button", { name: "Install firmware" }).click();
         await expect(hero).toBeVisible();
-        await expect(support).toBeVisible();
-        await expect(page.getByText("No profile yet")).toBeVisible();
+        await expect(support).toBeHidden();
+        await expect(page.getByRole("button", { name: "Create profile for this computer" })).toBeVisible();
         await expect(page.locator(".deployment-rail .rail-note")).toHaveCount(0);
         await page.evaluate(() => window.scrollTo(0, 0));
         await page.waitForTimeout(50);
@@ -63,6 +64,7 @@ test("expanded Resizable BAR hero is localized at the minimum window", async ({
         await expect(hero).toContainText("드라이버 596.36");
         await expect(hero).toContainText("확장 메모리 창");
         await expect(hero).toContainText("이 앱으로 확장: 불필요");
+        await page.getByRole("button", { name: "BAR 설정", exact: true }).click();
         await expect(page.getByText("현재 BAR 메모리 창")).toBeVisible();
         await page.screenshot({
                 path: `${evidence}/korean-settings-expanded-900x760.png`,
@@ -70,8 +72,8 @@ test("expanded Resizable BAR hero is localized at the minimum window", async ({
 
         await page.getByRole("button", { name: "펌웨어 설치" }).click();
         await expect(hero).toBeVisible();
-        await expect(support).toBeVisible();
-        await expect(page.getByText("아직 프로필 없음")).toBeVisible();
+        await expect(support).toBeHidden();
+        await expect(page.getByRole("button", { name: "이 컴퓨터의 프로필 만들기" })).toBeVisible();
         expect(
                 await page.evaluate(
                         () =>

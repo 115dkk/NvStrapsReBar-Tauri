@@ -8,6 +8,7 @@ import type { ResizableBarStatusPresentation } from "../resizable-bar-status";
 import { driverStatusMessageId } from "../system-messages";
 import { useConfigurationWorkspaceController } from "./context";
 import { formatBytes } from "./model";
+import { useDeploymentWorkspaceController } from "../deployment-workspace/context";
 
 const Status = ({ label, ok }: { label: string; ok: boolean }) => (
         <span className={"status " + (ok ? "ok" : "bad")}>
@@ -16,117 +17,22 @@ const Status = ({ label, ok }: { label: string; ok: boolean }) => (
         </span>
 );
 
-const SurfaceStep = ({
-        number,
-        label,
-        done,
-        current,
-        onSelect,
-}: {
-        number: number;
-        label: string;
-        done: boolean;
-        current: boolean;
-        onSelect: () => void;
-}) => (
-        <button
-                className="surface-step"
-                aria-label={label}
-                aria-current={current ? "page" : undefined}
-                onClick={onSelect}
-        >
-                <i className={done ? "done" : "todo"} aria-hidden="true">
-                        {done ? "✓" : number}
-                </i>
-                <span>{label}</span>
-        </button>
-);
-
-export const ApplicationHeader = ({
-        surface,
-        setSurface,
-}: {
-        surface: ApplicationSurface;
-        setSurface: (surface: ApplicationSurface) => void;
-}) => {
+export const ApplicationHeader = ({ surface }: { surface: ApplicationSurface }) => {
         const { locale, setLocale, t } = useI18n();
-        const {
-                licenseButton,
-                setShowLicenses,
-                dirty,
-                load,
-                busy,
-                snap,
-                rebarStatus,
-        } = useConfigurationWorkspaceController();
+        const { dirty, load, busy } = useConfigurationWorkspaceController();
+        const { view } = useDeploymentWorkspaceController();
+        const deploymentBusy = Boolean(view.busyAction) || view.showManual || view.showReboot || view.showConfigurationReboot;
         return (
-                <header>
-                        <div className="product-heading">
-                                <span className="product">NVSTRAPS / REBAR</span>
-                                <div className="title-row">
-                                        <h1>
-                                                {surface === "bar"
-                                                        ? t("ui.barSettings")
-                                                        : t("ui.stepInstallFirmware")}
-                                        </h1>
-                                        <button
-                                                ref={licenseButton}
-                                                className="license-button quiet"
-                                                onClick={() => setShowLicenses(true)}
-                                        >
-                                                {t("ui.licenses")}
-                                        </button>
-                                </div>
-                                <p className="tagline">{t("ui.tagline")}</p>
-                        </div>
+                <header className="workspace-header">
+                        <h1 tabIndex={-1}>{t(surface === "overview" ? "ui.overview" : surface === "deploy" ? "ui.stepInstallFirmware" : "ui.barSettings")}</h1>
                         <div className="header-actions">
-                                <label className="language-select">
-                                        <span>{t("ui.language")}</span>
-                                        <select
-                                                data-testid="language-select"
-                                                aria-label={t("ui.language")}
-                                                value={locale}
-                                                onChange={(event) =>
-                                                        setLocale(
-                                                                event.target.value as "en" | "ko",
-                                                        )
-                                                }
-                                        >
-                                                <option value="en">English</option>
-                                                <option value="ko">한국어</option>
+                                {surface === "bar" && dirty && <span className="dirty">{t("ui.unsavedEdits")}</span>}
+                                <label className="language-select"><span>{t("ui.language")}</span>
+                                        <select data-testid="language-select" aria-label={t("ui.language")} value={locale} onChange={(event) => setLocale(event.target.value as "en" | "ko")}>
+                                                <option value="en">English</option><option value="ko">한국어</option>
                                         </select>
                                 </label>
-                                <nav
-                                        className="surface-nav"
-                                        aria-label={t("ui.applicationWorkspace")}
-                                >
-                                        <SurfaceStep
-                                                number={1}
-                                                label={t("ui.stepInstallFirmware")}
-                                                done={Boolean(snap && firmwareInstalled(snap))}
-                                                current={surface === "deploy"}
-                                                onSelect={() => setSurface("deploy")}
-                                        />
-                                        <SurfaceStep
-                                                number={2}
-                                                label={t("ui.barSettings")}
-                                                done={rebarStatus.tone === "expanded"}
-                                                current={surface === "bar"}
-                                                onSelect={() => setSurface("bar")}
-                                        />
-                                </nav>
-                                {surface === "bar" && (
-                                        <span className={dirty ? "dirty" : "saved"}>
-                                                {dirty ? t("ui.unsavedEdits") : t("ui.inSync")}
-                                        </span>
-                                )}
-                                <button
-                                        className="quiet"
-                                        onClick={() => void load(true)}
-                                        disabled={busy}
-                                >
-                                        {t("ui.refreshSystem")}
-                                </button>
+                                <button className="quiet" onClick={() => void load(true)} disabled={busy || deploymentBusy}>{t("ui.refreshSystem")}</button>
                         </div>
                 </header>
         );
@@ -192,7 +98,7 @@ const GpuBarVisual = ({
         );
 };
 
-export const ResizableBarHero = () => {
+export const ResizableBarHero = ({ compact = false }: { compact?: boolean }) => {
         const { t } = useI18n();
         const { snap, motherboardSupport, rebarStatus } =
                 useConfigurationWorkspaceController();
@@ -204,7 +110,7 @@ export const ResizableBarHero = () => {
                         : verdict.detailId;
         return (
                 <section
-                        className={`rebar-hero ${rebarStatus.tone}`}
+                        className={`rebar-hero ${rebarStatus.tone}${compact ? " compact" : ""}`}
                         aria-label={t("ui.resizableBarStatus")}
                 >
                         <div
@@ -242,6 +148,12 @@ export const ResizableBarHero = () => {
                                                 <div
                                                         className="rebar-gpu-row"
                                                         key={row.gpu.pciBusId}
+                                                        role="group"
+                                                        aria-label={t("ui.gpuObservedState", {
+                                                                gpu: row.gpu.productName,
+                                                                state: t(row.apertureId),
+                                                                size: row.gpu.bar1TotalBytes ? formatBytes(row.gpu.bar1TotalBytes) : t("ui.unavailable"),
+                                                        })}
                                                 >
                                                         <span className="hero-gpu-name">
                                                                 {row.gpu.productName}

@@ -5,7 +5,6 @@ import {
         FirmwareBehaviorPanel,
         GpuRulesPanel,
 } from "./configuration-workspace/panels";
-import { SystemStatusSidebar } from "./configuration-workspace/workspace-shell";
 import { useConfigurationWorkspaceController } from "./configuration-workspace/context";
 import { WorkspaceNotices } from "./configuration-workspace/workspace-notices";
 
@@ -59,7 +58,6 @@ export const BarSettingsWorkspace = () => {
                         className="workspace settings-workspace"
                         data-testid="bar-settings-workspace"
                 >
-                        <SystemStatusSidebar />
                         <main className="content">
                                 <SettingsIntro />
                                 <WorkspaceNotices />

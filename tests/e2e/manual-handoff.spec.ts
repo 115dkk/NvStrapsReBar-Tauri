@@ -47,11 +47,7 @@ test("manual handoff reveals only the task owned by the active plan step", async
                 "data-manual-step",
                 "flashWithVendorRoute",
         );
-        await expect(
-                flashTask.getByRole("heading", {
-                        name: "Flash the prepared firmware",
-                }),
-        ).toBeVisible();
+        await expect(flashTask).toHaveAccessibleName("Flash the prepared firmware");
         await expect(
                 flashTask.getByRole("article", { name: "Current manual task" }),
         ).toHaveCount(1);
@@ -68,9 +64,7 @@ test("manual handoff reveals only the task owned by the active plan step", async
 
         await page.getByTestId("language-select").selectOption("ko");
         await page.setViewportSize({ width: 900, height: 760 });
-        await expect(
-                flashTask.getByRole("heading", { name: "준비한 펌웨어 플래시" }),
-        ).toBeVisible();
+        await expect(flashTask).toHaveAccessibleName("준비한 펌웨어 플래시");
         await expect(flashTask.getByRole("note", { name: "시작하기 전에" }))
                 .toContainText("복구 파일 준비");
         await expect(flashTask).not.toContainText("UEFI 설정값 변경");
@@ -96,9 +90,7 @@ test("manual handoff reveals only the task owned by the active plan step", async
                 "data-manual-step",
                 "configureFirmwareSetup",
         );
-        await expect(
-                uefiTask.getByRole("heading", { name: "Update the UEFI settings" }),
-        ).toBeVisible();
+        await expect(uefiTask).toHaveAccessibleName("Update the UEFI settings");
         await expect(
                 uefiTask.getByRole("article", { name: "Current manual task" }),
         ).toHaveCount(1);
