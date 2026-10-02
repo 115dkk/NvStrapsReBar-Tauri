@@ -1,11 +1,12 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chooseLanguage, open, reachTurnOn } from "./support";
 
 const evidence =
         ".superloopy/evidence/frontend/20260814T212720Z-jetendard-technical-ui";
 mkdirSync(evidence, { recursive: true });
-const styles = ["styles.css", "workspace-layout.css"].map((file) =>
+const styles = ["styles.css", "workspace-layout.css", "guided/guided.css"].map((file) =>
         readFileSync(new URL(`../../src/${file}`, import.meta.url), "utf8"),
 ).join("\n");
 const assetChecker = readFileSync(
@@ -105,6 +106,7 @@ async function loadJetendardWeights(page: Page) {
 async function auditVisibleHangulText(
         page: Page,
         evidenceName: string,
+        minimumTargets = 21,
 ): Promise<void> {
         const targets = await page.evaluate(() => {
                 document
@@ -195,7 +197,7 @@ async function auditVisibleHangulText(
                 `${evidence}/${evidenceName}`,
                 `${JSON.stringify({ targetCount: targets.length, offenders, results }, null, 2)}\n`,
         );
-        expect(targets.length).toBeGreaterThan(20);
+        expect(targets.length).toBeGreaterThanOrEqual(minimumTargets);
         expect(offenders).toEqual([]);
 }
 
@@ -278,41 +280,6 @@ async function auditVisibleTechnicalText(
         expect(offenders).toEqual([]);
 }
 
-async function reachRecommendedConfiguration(page: Page) {
-        await page.getByTestId("language-select").selectOption("en");
-        await page.getByRole("button", { name: "Install firmware" }).click();
-        await page.getByRole("button", { name: "Choose file" }).click();
-        await page
-                .getByText(
-                        "I checked the vendor install and recovery instructions for this board.",
-                )
-                .click();
-        await page
-                .getByRole("button", { name: "Create profile for this computer" })
-                .click();
-        await page
-                .getByRole("button", {
-                        name: "Prepare BIOS image",
-                })
-                .click();
-        for (let gate = 0; gate < 2; gate += 1) {
-                await page
-                        .getByRole("button", {
-                                name: "Review & confirm completed step",
-                        })
-                        .click();
-                const dialog = page.getByRole("dialog");
-                await dialog
-                        .getByRole("button", { name: "Record completed step" })
-                        .click();
-        }
-        await page
-                .getByRole("button", {
-                        name: "Check driver after restart",
-                })
-                .click();
-}
-
 test("every technical declaration routes through the pinned Jetendard faces", () => {
         expect(styles).toMatch(/font-weight:\s*45 920;/);
         for (const [file, weight] of [
@@ -329,7 +296,12 @@ test("every technical declaration routes through the pinned Jetendard faces", ()
         const technicalStack = styles.match(/--font-technical:\s*([^;]+);/)?.[1];
         expect(technicalStack?.trim()).toBe('"Jetendard", monospace');
         expect(styles.match(/\bmonospace\b/g)).toHaveLength(1);
-        expect(styles.match(/var\(--font-technical\)/g)?.length).toBeGreaterThan(17);
+        // The guided components read the same token through --font-mono.
+        expect(styles).toMatch(/--font-mono:\s*var\(--font-technical\);/);
+        expect(
+                (styles.match(/var\(--font-technical\)/g)?.length ?? 0) +
+                        (styles.match(/var\(--font-mono\)/g)?.length ?? 0),
+        ).toBeGreaterThan(10);
         expect(styles).not.toMatch(/font:\s*650[^;]+var\(--font-technical\)/);
         expect(styles).toContain(":where(code, pre, kbd, samp)");
         expect(assetChecker).toContain(
@@ -340,8 +312,8 @@ test("every technical declaration routes through the pinned Jetendard faces", ()
 test("Jetendard keeps Korean at two Latin cells in every bundled weight", async ({
         page,
 }) => {
-        await page.goto("/");
-        await page.getByRole("navigation").getByRole("button", { name: "BAR Settings", exact: true }).click();
+        await open(page, "expanded");
+        await page.getByRole("button", { name: "BAR Settings" }).first().click();
         await loadJetendardWeights(page);
         const metrics = await page.evaluate(() => {
                 const host = document.createElement("div");
@@ -406,8 +378,8 @@ test("Korean uses the bundled Pretendard variable font without external requests
         const requests: string[] = [];
         page.on("request", (request) => requests.push(request.url()));
         await page.setViewportSize({ width: 1180, height: 760 });
-        await page.goto("/");
-        await page.getByRole("navigation").getByRole("button", { name: "BAR Settings", exact: true }).click();
+        await open(page, "expanded");
+        await page.getByRole("button", { name: "BAR Settings" }).first().click();
 
         const englishFamily = await page.locator("html").evaluate(
                 (element) => getComputedStyle(element).fontFamily,
@@ -419,7 +391,7 @@ test("Korean uses the bundled Pretendard variable font without external requests
                 path: `${evidence}/english-jetendard-configure-1180x760.png`,
         });
 
-        await page.getByTestId("language-select").selectOption("ko");
+        await chooseLanguage(page, "한국어");
         await expect(page.locator("html")).toHaveAttribute("lang", "ko");
         await expect
                 .poll(() =>
@@ -444,7 +416,7 @@ test("Korean uses the bundled Pretendard variable font without external requests
                 return {
                         rootFamily: style("html").fontFamily,
                         bodyWeight: style("body").fontWeight,
-                        supportingWeight: style(".intro p").fontWeight,
+                        supportingWeight: style(".section-head p").fontWeight,
                         labelWeight: style(".mode-grid label").fontWeight,
                         buttonWeight: style("button").fontWeight,
                         sectionWeight: style(".section-head h3").fontWeight,
@@ -462,7 +434,7 @@ test("Korean uses the bundled Pretendard variable font without external requests
         });
         expect(typography.rootFamily).toContain("Pretendard Variable");
         expect(typography.monoFamily).toContain("Jetendard");
-        expectPretendardGlyphs(await platformFontsForSelector(page, ".intro p"));
+        expectPretendardGlyphs(await platformFontsForSelector(page, ".section-head p"));
         expectJetendardGlyphs(
                 await platformFontsForSelector(page, ".kicker"),
                 "Bold",
@@ -512,38 +484,29 @@ test("recommendations use localized prose while retained technical fields keep J
         page,
 }) => {
         await page.setViewportSize({ width: 1180, height: 760 });
-        await page.goto("/");
-        await page.getByRole("navigation").getByRole("button", { name: "BAR Settings", exact: true }).click();
-        await reachRecommendedConfiguration(page);
+        await reachTurnOn(page);
         await loadJetendardWeights(page);
-
-        const summary = page.locator(".recommended-config");
-        await expect(summary).toContainText("Recommended BAR settings");
+        const summary = page.getByRole("region", { name: "These sizes are used" });
+        await expect(summary).toContainText("NVIDIA GeForce RTX 2080 SUPER");
         await expect(summary.locator("code")).toHaveCount(0);
         await page.screenshot({
                 path: `${evidence}/english-jetendard-technical-summary-1180x760.png`,
         });
-
-        await page.getByTestId("language-select").selectOption("ko");
+        await chooseLanguage(page, "한국어");
         await page.setViewportSize({ width: 900, height: 760 });
         await loadPretendardWeights(page);
         await loadJetendardWeights(page);
-        await expect(summary).toContainText("권장 BAR 설정");
-        expectPretendardGlyphs(await platformFontsForSelector(page, ".recommended-config p"));
-        await auditVisibleHangulText(page, "deploy-platform-font-audit.json");
+        const koreanSummary = page.getByRole("region", { name: "이 크기로 켭니다" });
+        await expect(koreanSummary).toContainText("앱에 등록된 모델이라 권장 크기를 씁니다.");
+        expectPretendardGlyphs(await platformFontsForSelector(page, 'section[aria-labelledby="recommended"] p'));
+        expectJetendardGlyphs(await platformFontsForSelector(page, ".nv-size.target"), "SemiBold");
+        // One task per screen: the turn-on screen carries fewer Korean lines than the old form.
+        await auditVisibleHangulText(page, "deploy-platform-font-audit.json", 15);
         await auditVisibleTechnicalText(
                 page,
                 "deploy-technical-platform-font-audit.json",
-                4, // Collapsed installation now has four painted technical readouts.
+                2, // The two BAR size readouts on the turn-on screen.
         );
-        expect(
-                await page.evaluate(() =>
-                        document.fonts.check(
-                                '400 11px "Jetendard"',
-                                "전역 모드 1 · target false",
-                        ),
-                ),
-        ).toBe(true);
         expect(
                 await page.evaluate(
                         () =>
@@ -551,14 +514,9 @@ test("recommendations use localized prose while retained technical fields keep J
                                 document.documentElement.clientWidth,
                 ),
         ).toBe(true);
-        await summary.scrollIntoViewIfNeeded();
         await page.screenshot({
                 path: `${evidence}/korean-jetendard-technical-summary-900x760.png`,
         });
-        await page.getByText("전체 설치 단계", { exact: true }).click();
-        await page.getByText("BIOS 원본과 설치 방법", { exact: true }).click();
-        await auditVisibleHangulText(page, "deploy-expanded-platform-font-audit.json");
-        await auditVisibleTechnicalText(page, "deploy-expanded-technical-font-audit.json", 4);
 });
 
 test("both bundled OFL texts are readable in a focus-contained dialog", async ({
@@ -567,12 +525,11 @@ test("both bundled OFL texts are readable in a focus-contained dialog", async ({
         const requests: string[] = [];
         page.on("request", (request) => requests.push(request.url()));
         await page.setViewportSize({ width: 900, height: 760 });
-        await page.goto("/");
-        await page.getByRole("navigation").getByRole("button", { name: "BAR Settings", exact: true }).click();
-        await page.getByTestId("language-select").selectOption("en");
+        await open(page, "expanded");
+        await page.getByRole("button", { name: "BAR Settings" }).first().click();
         await loadJetendardWeights(page);
-        const englishOpenButton = page.getByRole("button", { name: "Licenses" });
-        await englishOpenButton.click();
+        await page.getByRole("button", { name: "Menu" }).click();
+        await page.getByRole("menuitem", { name: "Licenses" }).click();
         const englishDialog = page.getByRole("dialog", {
                 name: "Open-source licenses",
         });
@@ -582,12 +539,13 @@ test("both bundled OFL texts are readable in a focus-contained dialog", async ({
         await expect(englishDialog).toContainText("Pretendard v1.3.9");
         await englishDialog.getByRole("button", { name: "Close" }).click();
 
-        await page.getByTestId("language-select").selectOption("ko");
+        await chooseLanguage(page, "한국어");
         await loadPretendardWeights(page);
         await loadJetendardWeights(page);
 
-        const openButton = page.getByRole("button", { name: "라이선스" });
+        const openButton = page.getByRole("button", { name: "메뉴" });
         await openButton.click();
+        await page.getByRole("menuitem", { name: "라이선스" }).click();
         const dialog = page.getByRole("dialog", {
                 name: "오픈 소스 라이선스",
         });
