@@ -23,7 +23,9 @@ export const initialInstallUi: InstallUi = {
 
 export type GuidedNavigation = {
         page: GuidedPage;
-        go(page: GuidedPage): void;
+        /** Opens a page; `settingsFile` opens BAR settings with the settings file section expanded. */
+        go(page: GuidedPage, options?: { settingsFile?: boolean }): void;
+        settingsFileOpen: boolean;
         installUi: InstallUi;
         setInstallUi(patch: Partial<InstallUi>): void;
         /** Starts stage 1 again with a new BIOS file, keeping earlier records. */

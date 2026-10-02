@@ -1,6 +1,0 @@
-details > summary { cursor: pointer; min-height: 44px; padding: 14px 0; color: var(--ink); font-size: 13px; font-weight: 600; }
-details > summary::marker { color: var(--muted); }
-details > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.advanced-settings { margin: 0 0 24px; border-bottom: 1px solid var(--line); }
-.advanced-settings[open] > summary { color: var(--accent); }
-.advanced-settings .panel { margin: 0; border-bottom: 0; }

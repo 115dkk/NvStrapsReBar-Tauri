@@ -50,7 +50,7 @@ const HomeRows = () => {
                 <ul className="nv-rows">
                         <ListRow icon="sliders" title={t("ui.barSettings")} detail={t("ui.homeRowBarSettingsDetail")} onClick={() => go("bar")} />
                         <ListRow icon="game" title={t("ui.enablePerGame")} detail={t("ui.homeRowGamesDetail")} onClick={() => go("games")} />
-                        <ListRow icon="save" title={t("ui.homeRowBackup")} detail={t("ui.homeRowBackupDetail")} onClick={() => go("bar")} />
+                        <ListRow icon="save" title={t("ui.homeRowBackup")} detail={t("ui.homeRowBackupDetail")} onClick={() => go("bar", { settingsFile: true })} />
                         <ListRow icon="swap" title={t("ui.changesTitleShort")} detail={t("ui.homeRowChangesDetail")} onClick={() => go("changes")} />
                 </ul>
         );

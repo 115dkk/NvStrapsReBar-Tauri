@@ -2,7 +2,6 @@ import { translateMessage, useI18n } from "./i18n";
 import { ThirdPartyLicensesDialog } from "./ThirdPartyLicensesDialog";
 import { useConfigurationWorkspace } from "./configuration-workspace/use-configuration-workspace";
 import { ConfigurationWorkspaceProvider } from "./configuration-workspace/context";
-import { SaveConfirmationDialog } from "./configuration-workspace/dialogs";
 import { GuidedApp } from "./guided/guided-app";
 
 export function App() {
@@ -26,7 +25,6 @@ export function App() {
         return (
                 <ConfigurationWorkspaceProvider value={workspace}>
                         <GuidedApp snapshot={snap} />
-                        <SaveConfirmationDialog />
                         {showLicenses && <ThirdPartyLicensesDialog onClose={closeLicenses} returnFocus={licenseButton} />}
                 </ConfigurationWorkspaceProvider>
         );
