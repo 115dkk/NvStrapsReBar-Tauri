@@ -9,7 +9,7 @@ test("the language switch is immediate, persisted, and keeps an unsaved BAR draf
         await chooseLanguage(page, "한국어");
         await expect(page.locator("html")).toHaveAttribute("lang", "ko");
         await expect(page.getByRole("heading", { level: 1 })).toHaveText("BAR 설정");
-        await expect(page.getByLabel("RTX 2080 SUPER 크기")).toHaveValue("6");
+        await expect(page.getByLabel("RTX 2080 SUPER 다시 시작 후 크기")).toHaveValue("6");
         await expect(page.getByRole("region", { name: "저장하지 않은 변경" })).toContainText("변경 1개 · RTX 2080 SUPER 8 GiB → 4 GiB");
         expect(await missingMessages(page)).toEqual([]);
         await page.screenshot({ path: `${evidence}/ko-bar-settings-draft-1180.png` });

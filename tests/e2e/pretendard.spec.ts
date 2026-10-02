@@ -436,7 +436,7 @@ test("Korean uses the bundled Pretendard variable font without external requests
         expect(typography.rootFamily).toContain("Pretendard Variable");
         expect(typography.technicalToken).toContain("Jetendard");
         expectPretendardGlyphs(await platformFontsForSelector(page, ".nv-gpu .nv-supporting"));
-        // BAR settings carry no technical readouts; the turn-on screen audits Jetendard.
+        // BAR settings show sizes inside sentences and controls; the turn-on screen audits the Jetendard readouts.
         await auditVisibleHangulText(page, "configure-platform-font-audit.json", 10);
 
         const fontRequest = requests.find((url) =>

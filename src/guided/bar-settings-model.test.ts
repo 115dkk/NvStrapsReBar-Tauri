@@ -6,7 +6,9 @@ import {
         automaticSelector,
         changeItems,
         expansionOn,
+        expansionState,
         gpuChoice,
+        maskRule,
         otherRules,
         pciLocation,
         withExpansion,
@@ -78,6 +80,16 @@ describe("choosing a size", () => {
                 expect(gpuChoice(twice, twin)).toBe("auto");
         });
 
+        it("keeps the other card's size when Automatic clears a rule both cards shared", () => {
+                // Two cards of one model, sized by a device rule in rules-only mode.
+                const shared = draft({ globalMode: 0, rules: [rule("device", 8)] });
+                const next = applyGpuChoice(shared, gpu, "auto", [gpu, twin]);
+                expect(gpuChoice(next, gpu)).toBe("auto");
+                expect(gpuChoice(next, twin)).toBe(8);
+                expect(next.rules).toEqual([{ ...rule("location", 8, twin) }]);
+                expect(expansionOn(next)).toBe(true);
+        });
+
         it("returns to automatic by clearing every sized rule that matches, keeping mask overrides", () => {
                 const masked = { ...rule("location", 4), overrideBarSizeMask: true };
                 const next = applyGpuChoice(draft({ rules: [rule("device", 3), masked, rule("location", 2, unlisted)] }), gpu, "auto");
@@ -87,19 +99,33 @@ describe("choosing a size", () => {
 });
 
 describe("the expansion switch", () => {
-        it("is on for an expanding mode or a sized rule", () => {
+        it("is on for an expanding mode, a sized rule or a motherboard-side size", () => {
                 expect(expansionOn(draft({ globalMode: 0 }))).toBe(false);
+                expect(expansionOn(draft({ globalMode: 0, targetPciBarSize: 32 }))).toBe(true);
                 expect(expansionOn(draft({ globalMode: 0, rules: [rule("location", EXCLUDED_SELECTOR)] }))).toBe(false);
                 expect(expansionOn(draft({ globalMode: 0, rules: [rule("location", 4)] }))).toBe(true);
                 expect(expansionOn(draft({ globalMode: 1 }))).toBe(true);
         });
 
-        it("turns off by clearing the rules and turns on with what was there, or the recommended mode", () => {
-                const before = draft({ globalMode: 1, rules: [rule("location", 6)] });
-                const off = withExpansion(before, false, null);
-                expect(off).toMatchObject({ globalMode: 0, rules: [] });
-                expect(withExpansion(off, true, { globalMode: before.globalMode, rules: before.rules })).toEqual(before);
+        it("turns off by clearing the mode, rules and motherboard-side size, and turns on with what was there", () => {
+                const before = draft({ globalMode: 1, targetPciBarSize: 32, rules: [rule("location", 6)] });
+                const off = withExpansion(before, false, null, before);
+                expect(off).toMatchObject({ globalMode: 0, rules: [], targetPciBarSize: 0 });
+                expect(expansionOn(off)).toBe(false);
+                expect(withExpansion(off, true, expansionState(before))).toEqual(before);
                 expect(withExpansion(off, true, null)).toMatchObject({ globalMode: 2, rules: [] });
+        });
+
+        it("returns to the saved settings when they were already off", () => {
+                const saved = draft({ globalMode: 0, rules: [rule("location", EXCLUDED_SELECTOR)] });
+                const on = withExpansion(saved, true, null, saved);
+                expect(withExpansion(on, false, null, saved)).toEqual(saved);
+        });
+
+        it("finds the rule that decides a GPU's mask override", () => {
+                const masked = { ...rule("location", null), overrideBarSizeMask: false };
+                expect(maskRule(draft({ rules: [rule("device", 4), masked] }), gpu)).toEqual(masked);
+                expect(maskRule(draft({ rules: [rule("device", 4)] }), gpu)).toBeNull();
         });
 });
 
@@ -112,9 +138,16 @@ describe("the change summary", () => {
                 expect(items[0]).toMatchObject({ kind: "gpu", from: "auto", to: 6 });
         });
 
-        it("reports switching expansion off without listing every GPU", () => {
-                const saved = draft({ globalMode: 2 });
-                expect(changeItems(saved, withExpansion(saved, false, null), [gpu, twin])).toEqual([{ kind: "expansion", on: false }]);
+        it("reports switching expansion off without listing every GPU or the cleared size", () => {
+                const saved = draft({ globalMode: 2, targetPciBarSize: 32 });
+                expect(changeItems(saved, withExpansion(saved, false, null, saved), [gpu, twin])).toEqual([{ kind: "expansion", on: false }]);
+        });
+
+        it("keeps rules for a GPU outside the RTX 20 and GTX 16 list with the other rules", () => {
+                const pascal: GpuDevice = { ...gpu, id: "pci-04-00-0", deviceId: 0x1b80, bus: 4, isTuring: false, recommendedBarSizeSelector: null, registryBarSizeSelector: null };
+                const saved = draft({ rules: [rule("location", 4, pascal)] });
+                expect(otherRules(saved, [gpu])).toHaveLength(1);
+                expect(changeItems(saved, { ...saved, rules: [] }, [gpu, pascal])).toEqual([{ kind: "otherRules" }]);
         });
 
         it("groups firmware options as advanced and keeps rules for other GPUs separate", () => {

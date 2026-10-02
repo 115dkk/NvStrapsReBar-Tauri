@@ -117,7 +117,7 @@ export const messages = {
         "ui.builtInGpuListFallback": { en: "Built-in list + fallback", ko: "내장 목록 + 대체값" },
         "ui.builtInGpuListFallbackDescription": { en: "Also expand Turing GPUs missing from the list to 2 GiB.", ko: "목록에 없는 Turing GPU도 2 GiB로 확장합니다." },
         "ui.targetPciBarSize": { en: "Target PCI BAR size", ko: "대상 PCI BAR 크기" },
-        "ui.defaultNoPciResize": { en: "Default (no PCI-side resize)", ko: "기본 (PCI 측 크기 변경 없음)" },
+        "ui.defaultNoPciResize": { en: "Default (PCI bridge size unchanged)", ko: "기본값 (PCI 브리지 크기 그대로)" },
         "ui.anySupportedSize": { en: "Any supported size", ko: "지원되는 모든 크기" },
         "ui.selectedGpusOnly": { en: "Selected GPUs only", ko: "선택한 GPU만" },
         "ui.gpuStrapsOnly": { en: "GPU straps only", ko: "GPU 스트랩만" },
@@ -857,24 +857,29 @@ export const messages = {
         "ui.changesSwapPower": { en: "Shut the PC down and change the part.", ko: "컴퓨터를 끄고 부품을 바꾸세요." },
         "ui.changesSwapPowerDetail": { en: "Afterwards, open the app, check this PC again, and save the settings again.", ko: "바꾼 뒤 앱을 열고 PC 상태를 다시 확인한 다음 설정을 다시 저장하세요." },
         "ui.barSettingsLead": { en: "Saved settings apply the next time Windows restarts.", ko: "저장한 설정은 다음에 다시 시작할 때 적용됩니다." },
+        "ui.useListedSizes": { en: "Expand GPUs the app lists to their recommended size", ko: "앱에 등록된 GPU를 권장 크기로 확장" },
+        "ui.ruleDevice": { en: "Every GPU with device {device}", ko: "장치 {device}인 모든 GPU" },
+        "ui.ruleSubsystem": { en: "Device {device} · subsystem {subsystem}", ko: "장치 {device} · 서브시스템 {subsystem}" },
+        "ui.otherGpuRuleNamed": { en: "{gpu} · slot {location}", ko: "{gpu} · 슬롯 {location}" },
+        "ui.gpuNameWithSlot": { en: "{gpu} ({location})", ko: "{gpu} ({location})" },
+        "ui.maskRuleAllow": { en: "sizes outside the GPU list allowed", ko: "GPU 목록 밖 크기 허용" },
+        "ui.maskRuleListed": { en: "GPU-listed sizes only", ko: "GPU 목록 크기만" },
         "ui.barExpansion": { en: "Resizable BAR expansion", ko: "Resizable BAR 확장" },
         "ui.barExpansionDetailFallback": { en: "GPUs the app lists get their recommended size; other RTX 20 and GTX 16 series GPUs get 2 GiB.", ko: "앱에 등록된 GPU는 권장 크기로, 등록되지 않은 RTX 20·GTX 16 시리즈 GPU는 2 GiB로 확장합니다." },
         "ui.barExpansionDetailListed": { en: "GPUs the app lists get their recommended size.", ko: "앱에 등록된 GPU를 권장 크기로 확장합니다." },
         "ui.barExpansionDetailRules": { en: "Only the sizes chosen below are used.", ko: "아래에서 고른 크기만 씁니다." },
         "ui.gpuSizesTitle": { en: "Size for each GPU", ko: "GPU별 크기" },
         "ui.afterRestart": { en: "After restart", ko: "다시 시작 후" },
-        "ui.gpuSizeFor": { en: "{gpu} size", ko: "{gpu} 크기" },
+        "ui.gpuSizeFor": { en: "{gpu} size after restart", ko: "{gpu} 다시 시작 후 크기" },
         "ui.gpuSlotNow": { en: "Slot {location} · now {size}", ko: "슬롯 {location} · 지금 {size}" },
         "ui.barSizeAutoWith": { en: "Automatic ({size})", ko: "자동 ({size})" },
         "ui.barSizeAuto": { en: "Automatic", ko: "자동" },
-        "ui.barSizeExcluded": { en: "Do not expand", ko: "확장 안 함" },
+        "ui.barSizeExcluded": { en: "No expansion", ko: "확장 안 함" },
         "ui.noTuringGpuFound": { en: "No RTX 20 or GTX 16 series GPU in this PC", ko: "이 PC에 RTX 20·GTX 16 시리즈 GPU 없음" },
-        "ui.advancedBarSummary": { en: "Advanced · motherboard-side size limit, BIOS change detection, sleep resume", ko: "고급 설정 · 메인보드 쪽 크기 상한, BIOS 변경 감지, 절전 복귀" },
+        "ui.advancedBarSummary": { en: "Advanced · motherboard-side BAR size, BIOS change detection, sleep resume", ko: "고급 설정 · 메인보드 쪽 BAR 크기, BIOS 변경 감지, 절전 복귀" },
         "ui.expandUnlistedGpus": { en: "Also expand unlisted RTX 20 and GTX 16 GPUs to 2 GiB", ko: "목록에 없는 RTX 20·GTX 16 GPU도 2 GiB로 확장" },
-        "ui.expandUnlistedGpusDetail": { en: "When off, only the GPUs the app lists are expanded.", ko: "끄면 앱에 등록된 GPU만 확장합니다." },
-        "ui.motherboardSizeLimit": { en: "Motherboard-side size limit", ko: "메인보드 쪽 크기 상한" },
+        "ui.motherboardSizeLimit": { en: "Motherboard-side BAR size", ko: "메인보드 쪽 BAR 크기" },
         "ui.reapplyAfterSleep": { en: "Reapply settings after sleep (S3)", ko: "절전(S3)에서 깨어날 때 설정 다시 적용" },
-        "ui.reapplyAfterSleepDetail": { en: "If you turn this off, check that graphics work after waking from sleep.", ko: "끄면 절전에서 깨어난 뒤 화면이 제대로 나오는지 확인하세요." },
         "ui.otherGpuRules": { en: "Rules for other GPUs", ko: "다른 GPU 규칙" },
         "ui.otherGpuRule": { en: "Device {device} · slot {location}", ko: "장치 {device} · 슬롯 {location}" },
         "ui.removeRule": { en: "Remove", ko: "삭제" },
@@ -882,8 +887,8 @@ export const messages = {
         "ui.changesOne": { en: "1 change · {item}", ko: "변경 1개 · {item}" },
         "ui.changesMany": { en: "{count} changes · {item} and {more} more", ko: "변경 {count}개 · {item} 외 {more}개" },
         "ui.changeGpuSize": { en: "{gpu} {from} → {to}", ko: "{gpu} {from} → {to}" },
-        "ui.changeExpansionOn": { en: "Expansion on", ko: "확장 켜기" },
-        "ui.changeExpansionOff": { en: "Expansion off", ko: "확장 끄기" },
+        "ui.changeExpansionOn": { en: "Expansion on", ko: "확장 켬" },
+        "ui.changeExpansionOff": { en: "Expansion off", ko: "확장 끔" },
         "ui.changeAdvanced": { en: "Advanced settings", ko: "고급 설정" },
         "ui.changeOtherRules": { en: "Rules for other GPUs", ko: "다른 GPU 규칙" },
         "ui.changeSettings": { en: "Settings", ko: "설정" },
@@ -899,7 +904,7 @@ export const messages = {
         "ui.appliesAfterRestart": { en: "Applies after a restart.", ko: "다시 시작하면 적용됩니다." },
         "ui.loadSavedSettings": { en: "Load the saved settings", ko: "저장된 설정 불러오기" },
         "ui.reopenAdminToLoadSettings": { en: "Reopen the app as administrator to load and change BAR settings.", ko: "BAR 설정을 불러와 바꾸려면 앱을 관리자 권한으로 다시 여세요." },
-        "ui.readPcToLoadSettings": { en: "Read this PC again to load the saved settings.", ko: "PC 상태를 다시 읽어 저장된 설정을 불러오세요." },
+        "ui.readPcToLoadSettings": { en: "Check this PC again to load the saved settings.", ko: "PC 상태를 다시 확인해 저장된 설정을 불러오세요." },
         "ui.recordCompareHint": { en: "Compares this PC and the chosen BIOS file with the record.", ko: "이 PC와 고른 BIOS 파일을 기록과 비교합니다." },
         "ui.compareWithThisPc": { en: "Compare with this PC", ko: "이 PC와 비교" },
         "ui.recordPackage": { en: "Files saved to USB", ko: "USB에 저장한 파일" },
@@ -956,6 +961,10 @@ export type MessageParameters = {
         "ui.homeEyebrowGpu": { gpu: string };
         "ui.gpuAtPciLocation": { location: string };
         "ui.gpuSizeFor": { gpu: string };
+        "ui.ruleDevice": { device: string };
+        "ui.ruleSubsystem": { device: string; subsystem: string };
+        "ui.otherGpuRuleNamed": { gpu: string; location: string };
+        "ui.gpuNameWithSlot": { gpu: string; location: string };
         "ui.gpuSlotNow": { location: string; size: string };
         "ui.barSizeAutoWith": { size: string };
         "ui.otherGpuRule": { device: string; location: string };

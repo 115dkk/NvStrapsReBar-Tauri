@@ -52,10 +52,11 @@ test("a size change shows the save bar, saves through one confirmation, and retu
 test("revert restores the saved settings and turning expansion back on restores the sizes", async ({ page }) => {
         await openBarSettings(page);
         const size = page.getByLabel("RTX 2080 SUPER size");
-        await size.selectOption({ label: "Do not expand" });
-        await expect(saveBar(page)).toContainText("RTX 2080 SUPER 8 GiB → Do not expand");
+        await size.selectOption({ label: "No expansion" });
+        await expect(saveBar(page)).toContainText("RTX 2080 SUPER 8 GiB → No expansion");
         await saveBar(page).getByRole("button", { name: "Revert" }).click();
         await expect(saveBar(page)).toHaveCount(0);
+        await expect(page.getByRole("heading", { level: 1 })).toBeFocused();
         await expect(size).toHaveValue("auto");
 
         const expansion = page.getByRole("switch", { name: "Resizable BAR expansion" });
@@ -83,7 +84,8 @@ test("turning expansion off is confirmed as turning it off", async ({ page }) =>
 test("advanced settings keep every firmware option, each described by its on state", async ({ page }) => {
         await page.setViewportSize({ width: 1180, height: 760 });
         await openBarSettings(page);
-        await page.getByText("Advanced · motherboard-side size limit, BIOS change detection, sleep resume").click();
+        await page.getByText("Advanced · motherboard-side BAR size, BIOS change detection, sleep resume").click();
+        await expect(page.getByRole("switch", { name: "Expand GPUs the app lists to their recommended size" })).toHaveAttribute("aria-checked", "true");
         const unlisted = page.getByRole("switch", { name: "Also expand unlisted RTX 20 and GTX 16 GPUs to 2 GiB" });
         await expect(unlisted).toHaveAttribute("aria-checked", "false");
         await unlisted.click();
@@ -94,7 +96,7 @@ test("advanced settings keep every firmware option, each described by its on sta
         await expect(sleep).toHaveAttribute("aria-checked", "true");
         await sleep.click();
         await expect(page.getByText("Check that graphics work after waking from sleep (S3).")).toBeVisible();
-        await page.getByLabel("Motherboard-side size limit").selectOption("10");
+        await page.getByLabel("Motherboard-side BAR size").selectOption("10");
         await expect(saveBar(page)).toContainText("1 change · Advanced settings");
         expect(await noHorizontalOverflow(page)).toBe(true);
         await page.screenshot({ path: `${evidence}/en-bar-settings-advanced-1180.png` });
@@ -106,8 +108,8 @@ test("mixed apertures lead to BAR settings and stay usable at the minimum window
         await expect(page.getByRole("heading", { name: "일부 GPU만 확장되어 있습니다" })).toBeVisible();
         await button(page, "BAR 설정 열기").click();
         await expect(page.getByTestId("bar-page")).toBeVisible();
-        await expect(page.getByLabel("Quadro RTX 4000 크기")).toBeVisible();
-        await page.getByLabel("Quadro RTX 4000 크기").selectOption({ label: "4 GiB" });
+        await expect(page.getByLabel("Quadro RTX 4000 다시 시작 후 크기")).toBeVisible();
+        await page.getByLabel("Quadro RTX 4000 다시 시작 후 크기").selectOption({ label: "4 GiB" });
         await expect(saveBar(page)).toContainText("변경 1개 · Quadro RTX 4000 8 GiB → 4 GiB");
         expect(await noHorizontalOverflow(page)).toBe(true);
         await page.screenshot({ path: `${evidence}/ko-bar-settings-mixed-900x620.png` });
@@ -136,11 +138,11 @@ test("settings backup from home opens the file section; a loaded file becomes a 
         await expect(page.getByText("Settings saved to file", { exact: true })).toBeVisible();
         await file.getByRole("button", { name: "Load from file" }).click();
         await expect(page.getByText("Settings loaded from file", { exact: true })).toBeVisible();
-        await expect(page.getByLabel("Motherboard-side size limit")).toHaveValue("10");
+        await expect(page.getByLabel("Motherboard-side BAR size")).toHaveValue("10");
         await expect(saveBar(page)).toContainText("1 change · Advanced settings");
         await chooseLanguage(page, "한국어");
         await expect(file).toContainText("설정 파일");
-        await expect(page.getByLabel("메인보드 쪽 크기 상한")).toHaveValue("10");
+        await expect(page.getByLabel("메인보드 쪽 BAR 크기")).toHaveValue("10");
         await expect(saveBar(page)).toContainText("변경 1개 · 고급 설정");
         expect(await missingMessages(page)).toEqual([]);
 });

@@ -58,7 +58,7 @@ async function collect(page: Page, locale: "en" | "ko") {
         await page.getByRole("button", { name: ko ? "BAR 설정" : "BAR Settings" }).first().click();
         await page.getByTestId("advanced-settings").locator("summary").click();
         await page.getByTestId("settings-file").locator("summary").click();
-        await page.getByLabel(ko ? "RTX 2080 SUPER 크기" : "RTX 2080 SUPER size").selectOption({ label: "4 GiB" });
+        await page.getByLabel(ko ? "RTX 2080 SUPER 다시 시작 후 크기" : "RTX 2080 SUPER size after restart").selectOption({ label: "4 GiB" });
         await grab();
         expect(await missingMessages(page)).toEqual([]);
         return texts;

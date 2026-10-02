@@ -63,10 +63,10 @@ html:lang(ko) {
                 "Segoe UI", "Malgun Gothic", sans-serif;
         font-weight: var(--ko-weight-body);
 }
-html:lang(ko) :where(.intro p, .section-head p, .field small, .modal p) {
+html:lang(ko) .modal p {
         font-weight: var(--ko-weight-supporting);
 }
-html:lang(ko) :where(label, .field > span) {
+html:lang(ko) label {
         font-weight: var(--ko-weight-label);
 }
 html:lang(ko) button {
@@ -99,8 +99,9 @@ textarea {
         font-family: var(--font-technical);
         font-weight: 400;
 }
-button,
-select {
+/* Plain controls outside the guided frame: the licenses dialog. */
+.modal button,
+.modal select {
         color: var(--ink);
         background: #252b30;
         border: 1px solid #485058;
@@ -110,7 +111,7 @@ input,
 textarea {
         border-radius: 6px;
 }
-button {
+.modal button {
         transition-property: background-color, border-color, color, scale;
         transition-duration: 0.15s;
         transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
@@ -118,13 +119,13 @@ button {
 button:active:not(:disabled) {
         scale: 0.96;
 }
-button {
+.modal button {
         min-height: 40px;
         padding: 8px 13px;
         font-weight: 650;
         cursor: pointer;
 }
-button:hover:not(:disabled) {
+.modal button:hover:not(:disabled) {
         border-color: #77818b;
         background: #2b3238;
 }
@@ -249,13 +250,4 @@ button:disabled {
         }
 }
 
-@media (max-width: 760px) {
-        aside {
-                position: static;
-                width: auto;
-                height: auto;
-                border-right: 0;
-                border-bottom: 1px solid var(--line);
-        }
-}
 

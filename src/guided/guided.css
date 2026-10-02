@@ -254,7 +254,7 @@
 .nv-app .nv-switch-row { display: flex; flex-direction: row; align-items: center; gap: 16px; }
 .nv-app .nv-switch-row > .nv-fact-text { flex: 1; min-width: 0; }
 .nv-app .nv-switch { min-height: 0; padding: 0; }
-.nv-app .nv-switch:hover:not(:disabled) { background: var(--muted); }
+.nv-app .nv-switch:hover:not(:disabled) { background: var(--control-line); box-shadow: inset 0 0 0 1px var(--ink); }
 .nv-app .nv-switch[aria-checked="true"]:hover:not(:disabled) { background: var(--accent-hover); }
 .nv-app .nv-switch:disabled { opacity: 0.42; cursor: not-allowed; }
 .nv-app .nv-select:disabled { opacity: 0.6; cursor: not-allowed; }
@@ -262,3 +262,5 @@
 .nv-app .nv-disclosure-body { padding: 8px 4px 8px 32px; gap: 20px; }
 .nv-app .nv-button-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .nv-app .nv-savebar-text { flex: 1; min-width: 0; }
+.nv-app .nv-disclosure > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-sm); }
+.nv-app .nv-select, .nv-app .nv-input { font-weight: 400; }

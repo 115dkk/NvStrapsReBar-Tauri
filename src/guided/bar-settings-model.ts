@@ -15,19 +15,20 @@ export const EXCLUDED_SELECTOR = 254;
 export type GpuChoice = "auto" | "exclude" | number;
 
 const sized = (rule: GpuRule) => rule.barSizeSelector !== null;
+const masked = (rule: GpuRule) => rule.overrideBarSizeMask !== null;
 const isLocation = (rule: GpuRule) => rule.matchScope === "location";
 const isSubsystem = (rule: GpuRule) => rule.matchScope === "subsystem";
 
+const byPrecedence = (rules: GpuRule[]) =>
+        rules.find(isLocation) ?? rules.filter(isSubsystem).at(-1) ?? rules.filter((rule) => rule.matchScope === "device").at(-1) ?? null;
+
 /** The sized rule that decides this GPU's size, following the core's precedence. */
-export const decidingRule = (draft: ConfigDraft, gpu: GpuDevice): GpuRule | null => {
-        const matching = draft.rules.filter((rule) => sized(rule) && ruleMatchesGpu(rule, gpu));
-        return (
-                matching.find(isLocation) ??
-                matching.filter(isSubsystem).at(-1) ??
-                matching.filter((rule) => rule.matchScope === "device").at(-1) ??
-                null
-        );
-};
+export const decidingRule = (draft: ConfigDraft, gpu: GpuDevice): GpuRule | null =>
+        byPrecedence(draft.rules.filter((rule) => sized(rule) && ruleMatchesGpu(rule, gpu)));
+
+/** The rule that decides this GPU's size-mask override, or null when the global switch decides. */
+export const maskRule = (draft: ConfigDraft, gpu: GpuDevice): GpuRule | null =>
+        byPrecedence(draft.rules.filter((rule) => masked(rule) && ruleMatchesGpu(rule, gpu)));
 
 export const gpuChoice = (draft: ConfigDraft, gpu: GpuDevice): GpuChoice => {
         const selector = decidingRule(draft, gpu)?.barSizeSelector ?? null;
@@ -35,36 +36,64 @@ export const gpuChoice = (draft: ConfigDraft, gpu: GpuDevice): GpuChoice => {
         return selector >= EXCLUDED_SELECTOR ? "exclude" : selector;
 };
 
-/**
- * Sets one GPU's choice. A size or exclusion is written as a location rule for
- * that slot, which outranks broader rules. "auto" clears every sized rule that
- * matches the GPU, so the global mode decides again; a rule that also carries a
- * mask override keeps that override and loses only its size.
- */
-export const applyGpuChoice = (draft: ConfigDraft, gpu: GpuDevice, choice: GpuChoice): ConfigDraft => {
-        if (choice === "auto") {
-                const rules = draft.rules.flatMap((rule) => {
-                        if (!sized(rule) || !ruleMatchesGpu(rule, gpu)) return [rule];
-                        return rule.overrideBarSizeMask === null ? [] : [{ ...rule, barSizeSelector: null }];
-                });
-                return { ...draft, rules };
-        }
-        const selector = choice === "exclude" ? EXCLUDED_SELECTOR : choice;
+const withLocationSelector = (draft: ConfigDraft, gpu: GpuDevice, selector: number): ConfigDraft => {
         const index = draft.rules.findIndex((rule) => isLocation(rule) && ruleMatchesGpu(rule, gpu));
         const rules =
                 index >= 0
                         ? draft.rules.map((rule, current) => (current === index ? { ...rule, barSizeSelector: selector } : rule))
-                        : [...draft.rules, { ...ruleForGpu(gpu), barSizeSelector: selector }];
+                        : [...draft.rules, { ...ruleForGpu(gpu), overrideBarSizeMask: null, barSizeSelector: selector }];
         return { ...draft, rules };
 };
 
-/** Expansion is on when the global mode expands GPUs or any rule sets a size. */
-export const expansionOn = (draft: ConfigDraft) =>
-        draft.globalMode !== 0 || draft.rules.some((rule) => rule.barSizeSelector !== null && rule.barSizeSelector < EXCLUDED_SELECTOR);
+/**
+ * Sets one GPU's choice. A size or exclusion is written as a location rule for
+ * that slot, which outranks broader rules. "auto" clears every sized rule that
+ * matches the GPU, so the global mode decides again; a rule that also carries a
+ * mask override keeps that override and loses only its size. When a cleared
+ * device or subsystem rule also sized another GPU in this PC, that GPU keeps its
+ * size through a location rule of its own.
+ */
+export const applyGpuChoice = (draft: ConfigDraft, gpu: GpuDevice, choice: GpuChoice, devices: GpuDevice[] = [gpu]): ConfigDraft => {
+        if (choice !== "auto") return withLocationSelector(draft, gpu, choice === "exclude" ? EXCLUDED_SELECTOR : choice);
+        const rules = draft.rules.flatMap((rule) => {
+                if (!sized(rule) || !ruleMatchesGpu(rule, gpu)) return [rule];
+                return masked(rule) ? [{ ...rule, barSizeSelector: null }] : [];
+        });
+        let next: ConfigDraft = { ...draft, rules };
+        for (const other of devices) {
+                if (other.id === gpu.id) continue;
+                const before = decidingRule(draft, other)?.barSizeSelector ?? null;
+                const after = decidingRule(next, other)?.barSizeSelector ?? null;
+                if (before !== null && before !== after) next = withLocationSelector(next, other, before);
+        }
+        return next;
+};
 
-/** Turning expansion off removes every rule; turning it on restores what was there, or the recommended mode. */
-export const withExpansion = (draft: ConfigDraft, on: boolean, restore: Pick<ConfigDraft, "globalMode" | "rules"> | null): ConfigDraft => {
-        if (!on) return { ...draft, globalMode: 0, rules: [] };
+/** Expansion is on when the global mode expands GPUs, a rule sets a size, or a motherboard-side size is set. */
+export const expansionOn = (draft: ConfigDraft) =>
+        draft.globalMode !== 0 ||
+        draft.targetPciBarSize !== 0 ||
+        draft.rules.some((rule) => rule.barSizeSelector !== null && rule.barSizeSelector < EXCLUDED_SELECTOR);
+
+/** The parts of a draft the expansion switch turns off and restores. */
+export type ExpansionState = Pick<ConfigDraft, "globalMode" | "rules" | "targetPciBarSize">;
+export const expansionState = (draft: ConfigDraft): ExpansionState => ({
+        globalMode: draft.globalMode,
+        rules: draft.rules,
+        targetPciBarSize: draft.targetPciBarSize,
+});
+
+/**
+ * Turning expansion off clears the mode, the rules and the motherboard-side size,
+ * so nothing is resized after the restart; when the saved settings were already
+ * off, it returns to them. Turning it on restores what was there, or the
+ * recommended mode.
+ */
+export const withExpansion = (draft: ConfigDraft, on: boolean, restore: ExpansionState | null, baseline?: ConfigDraft): ConfigDraft => {
+        if (!on) {
+                if (baseline && !expansionOn(baseline)) return { ...draft, ...expansionState(baseline) };
+                return { ...draft, globalMode: 0, rules: [], targetPciBarSize: 0 };
+        }
         if (restore && expansionOn({ ...draft, ...restore })) return { ...draft, ...restore };
         return { ...draft, globalMode: 2 };
 };
@@ -86,7 +115,7 @@ export const automaticSelector = (draft: ConfigDraft, gpu: GpuDevice): number | 
 /** True when the selector leaves the GPU at its default size. */
 export const leavesAlone = (selector: number | null) => selector === null || selector >= EXCLUDED_SELECTOR;
 
-/** Rules that match no GPU in this PC (kept from another configuration or an earlier GPU). */
+/** Rules that match none of the listed GPUs (another GPU in this PC, an earlier GPU, or another configuration). */
 export const otherRules = (draft: ConfigDraft, devices: GpuDevice[]) =>
         draft.rules.map((rule, index) => ({ rule, index })).filter(({ rule }) => !devices.some((gpu) => ruleMatchesGpu(rule, gpu)));
 
@@ -105,14 +134,15 @@ export type ChangeItem =
 const advancedKeys = ["targetPciBarSize", "skipS3Resume", "overrideBarSizeMask", "guardSetupChanges"] as const;
 
 /** What differs between the saved settings and the draft, in the order the screen lists it. */
-export const changeItems = (baseline: ConfigDraft, draft: ConfigDraft, devices: GpuDevice[]): ChangeItem[] => {
+export const changeItems = (baseline: ConfigDraft, draft: ConfigDraft, allDevices: GpuDevice[]): ChangeItem[] => {
         if (JSON.stringify(baseline) === JSON.stringify(draft)) return [];
+        const devices = allDevices.filter((device) => device.isTuring);
         const items: ChangeItem[] = [];
         const before = expansionOn(baseline);
         const after = expansionOn(draft);
         if (before !== after) items.push({ kind: "expansion", on: after });
         if (after) {
-                for (const gpu of devices.filter((device) => device.isTuring)) {
+                for (const gpu of devices) {
                         const from = gpuChoice(baseline, gpu);
                         const to = gpuChoice(draft, gpu);
                         const fromAuto = from === "auto" ? automaticSelector(baseline, gpu) : null;
@@ -121,7 +151,8 @@ export const changeItems = (baseline: ConfigDraft, draft: ConfigDraft, devices: 
                 }
         }
         const modeFlip = before && after && baseline.globalMode !== draft.globalMode;
-        if (modeFlip || advancedKeys.some((key) => baseline[key] !== draft[key])) items.push({ kind: "advanced" });
+        // Switching expansion off also clears the motherboard-side size; the switch line covers it.
+        if (before === after && (modeFlip || advancedKeys.some((key) => baseline[key] !== draft[key]))) items.push({ kind: "advanced" });
         if (JSON.stringify(otherRules(baseline, devices).map(({ rule }) => rule)) !== JSON.stringify(otherRules(draft, devices).map(({ rule }) => rule)))
                 items.push({ kind: "otherRules" });
         if (!items.length) items.push({ kind: "settings" });

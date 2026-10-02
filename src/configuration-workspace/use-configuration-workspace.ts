@@ -138,10 +138,9 @@ export const useConfigurationWorkspace = () => {
 
         useEffect(() => {
                 const sequence = ++validationSequence.current;
-                if (!snap || !dirty) {
-                        setReport(null);
-                        return;
-                }
+                // A report describes the draft it validated; an older one must not gate or word a save.
+                setReport(null);
+                if (!snap || !dirty) return;
                 const id = setTimeout(
                         () =>
                                 bridge
