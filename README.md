@@ -13,25 +13,32 @@ stable-Rust implementation of the original C/C++
 [NvStrapsReBar](https://github.com/terminatorul/NvStrapsReBar), together with a Rust/Tauri
 Windows app that prepares your BIOS image and edits the driver's settings.
 
-## The two steps
+## How the app guides you
 
-The app presents the whole journey as two steps, in the order you meet them:
+The app opens on the state of your PC and shows one task per screen. An installation runs in four
+stages, and you can close the app at any point; it reopens on the same step.
 
-1. **Install firmware** — pick the official BIOS image for your exact motherboard. The app
-   fingerprints it, adds the NvStrapsReBar DXE driver (plus, for older boards, any BIOS patches
-   you select from the pinned catalogs), and exports a package: the new image, the untouched
-   original, checksums, and step-by-step instructions in English and Korean. On a board whose
-   flashback recovery file name the app knows (`MSI.ROM` on the MSI PRO Z690-A DDR4), it also
-   saves a copy of the original under that name next to the package. You then flash the new image
-   yourself with your vendor's own tool: M-FLASH, a flashback button, whatever your board uses.
-2. **BAR Settings** — once the new BIOS has booted, the app talks to the driver through a UEFI
-   variable. Turn Resizable BAR expansion on or off, set per-GPU sizes or exclusions, and set a
-   motherboard-side BAR limit for boards that need one. Saving asks for one confirmation and
-   takes effect at the next restart.
+1. **Prepare** — choose the official BIOS file for your exact motherboard and confirm the install
+   and recovery methods (the app fills them in for boards it knows; other boards answer three
+   questions from the manual, and older Above 4G boards also review the BIOS patches the analyzer
+   recommends). The app adds the NvStrapsReBar DXE driver, checks the result, and saves a package
+   to your USB drive: the new BIOS file, the untouched original, checksums, and step-by-step
+   instructions in English and Korean. On a board whose flashback recovery file name the app knows
+   (`MSI.ROM` on the MSI PRO Z690-A DDR4), it also saves a copy of the original under that name next
+   to the package.
+2. **Install** — restart into BIOS setup from the app, install the new file with your vendor's own
+   tool (M-FLASH, a flashback button, whatever your board uses) and change the listed settings.
+   Back in Windows, the app sees NvStrapsReBar running and you record what you did.
+3. **Turn on** — save the recommended sizes (the button is the confirmation; the app reads the
+   value back) and restart.
+4. **Finish** — the app reads the BAR size the NVIDIA driver reports. Turning Resizable BAR on per
+   game in NVIDIA Profile Inspector is offered afterwards from the finish screen and from home.
 
-The home screen shows every NVIDIA GPU with its current BAR size and what to do next. If you
-already installed the original NvStrapsReBar with other tools, the app recognizes the expanded
-aperture and edits the same UEFI variable.
+After installation, home shows every NVIDIA GPU with its current BAR size. **BAR Settings** turns
+expansion on or off, sets per-GPU sizes or exclusions, and sets a motherboard-side BAR limit for
+boards that need one; saving there asks for one confirmation and takes effect at the next restart.
+If you already installed the original NvStrapsReBar with other tools, the app recognizes the
+expanded aperture and edits the same UEFI variable.
 
 ## What you need
 
