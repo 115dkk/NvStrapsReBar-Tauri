@@ -132,6 +132,13 @@ export const useDeploymentWorkspace = (snapshot: SystemSnapshot) => {
                 reboot: () => send({ type: "requestFirmwareReboot" }),
                 openManualConfirmation: () => send({ type: "openManual" }),
                 confirmManual: () => send({ type: "confirmManual" }),
+                recordFirmwareHandoff: (includeSetup: boolean) =>
+                        send({ type: "recordFirmwareHandoff", includeSetup }),
+                autoCheck: () => send({ type: "autoCheck" }),
+                saveToUsb: () => send({ type: "saveToUsb" }),
+                openInspector: () => send({ type: "openInspector" }),
+                saveRecommendedConfig: () =>
+                        send({ type: "saveRecommendedConfig" }),
                 verifyDriver: () => send({ type: "verifyDriver" }),
                 saveGuardedConfig: () => send({ type: "saveGuardedConfig" }),
                 openConfigurationReboot: () =>

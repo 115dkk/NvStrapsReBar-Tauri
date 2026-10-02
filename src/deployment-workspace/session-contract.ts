@@ -20,6 +20,7 @@ import type {
         ProfileInspectorInstallation,
         ProfileInspectorLaunch,
         RecoveryMethod,
+        StepId,
 } from "./contract";
 
 export type DeploymentWorkspaceActivity = {
@@ -62,6 +63,8 @@ export interface DeploymentWorkspaceView {
                 Record<LegacyPatchRisk, { confirmed: boolean }>
         >;
         profiles: MachineProfile[];
+        /** Stored records and the selected plan have been read once. */
+        profilesLoaded: boolean;
         selectedProfileId: string;
         selectedProfile: MachineProfile | null;
         plan: DeploymentPlan | null;
@@ -98,6 +101,12 @@ export interface DeploymentWorkspaceView {
         launch: ProfileInspectorLaunch | null;
         busyAction: string;
         activity: DeploymentWorkspaceActivity;
+        /** A read-only check the guided screens run on their own after a restart. */
+        autoCheck: {
+                stepId: StepId;
+                status: "running" | "failed";
+                message: MessageDescriptor | null;
+        } | null;
         legacyAnalysisValid: boolean;
         selectedLegacyEntries: {
                 catalog: LegacyFirmwareAnalysis["catalogs"][number];
@@ -128,7 +137,8 @@ type FieldIntent =
                   type: "setLegacyRiskConfirmed";
                   risk: LegacyPatchRisk;
                   confirmed: boolean;
-          };
+          }
+        | { type: "recordFirmwareHandoff"; includeSetup: boolean };
 
 export type DeploymentWorkspaceIntent =
         | FieldIntent
@@ -155,6 +165,10 @@ export type DeploymentWorkspaceIntent =
                           | "installInspector"
                           | "backupProfiles"
                           | "launchInspector"
+                          | "autoCheck"
+                          | "saveToUsb"
+                          | "openInspector"
+                          | "saveRecommendedConfig"
                           | "closeModals";
           };
 

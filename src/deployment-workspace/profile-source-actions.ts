@@ -70,11 +70,25 @@ export class ProfileSourceActions {
                                 selectedLegacyRules: [],
                                 legacyAcknowledgements: {},
                         });
-                        const result = await analyzeLegacyFirmware(
-                                this.runtime.adapter,
-                                requestedPath,
-                                requestedFirmware,
-                        );
+                        let result: Awaited<ReturnType<typeof analyzeLegacyFirmware>>;
+                        try {
+                                result = await analyzeLegacyFirmware(
+                                        this.runtime.adapter,
+                                        requestedPath,
+                                        requestedFirmware,
+                                );
+                        } catch (error) {
+                                // A failed analysis must not stay "pending"; it can be run again.
+                                if (requestedPath === this.runtime.state().firmwarePath)
+                                        tx.patch({
+                                                legacyAnalysisStatus: "error",
+                                                legacyAnalysisError:
+                                                        error instanceof Error
+                                                                ? error.message
+                                                                : String(error),
+                                        });
+                                throw error;
+                        }
                         if (
                                 requestedPath !==
                                 this.runtime.state().firmwarePath

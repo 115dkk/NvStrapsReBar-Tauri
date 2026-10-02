@@ -50,6 +50,7 @@ export const createInitialDeploymentState = (
                 routeConfirmed: false,
                 ...legacyReset,
                 profiles: [],
+                profilesLoaded: false,
                 selectedProfileId: "",
                 plan: null,
                 preflightExact: null,
@@ -73,6 +74,7 @@ export const createInitialDeploymentState = (
                 launch: null,
                 busyAction: "",
                 activity: null,
+                autoCheck: null,
         };
 };
 
@@ -99,6 +101,7 @@ export const resetProfileProjection = (
         backup: null,
         launch: null,
         activity: null,
+        autoCheck: null,
         busyAction: "",
 });
 

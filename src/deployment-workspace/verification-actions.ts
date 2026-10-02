@@ -1,4 +1,6 @@
 import { message } from "../i18n-catalog";
+import type { StepId } from "./contract";
+import { formatDeploymentError } from "./deployment-errors";
 import type { DeploymentSessionRuntime } from "./session-action-runtime";
 import {
         collectResizableBarEvidence,
@@ -63,6 +65,126 @@ export class VerificationActions {
                                 ),
                         );
                 });
+        }
+
+        /**
+         * Records the vendor flash and, when asked, the firmware setup values
+         * from one explicit confirmation. Each step still loads its own
+         * preview and confirmation token before it is recorded.
+         */
+        recordFirmwareHandoff(includeSetup: boolean) {
+                const targets: StepId[] = includeSetup
+                        ? ["flashWithVendorRoute", "configureFirmwareSetup"]
+                        : ["flashWithVendorRoute"];
+                return this.runtime.run("manual-confirm", async (tx) => {
+                        let recorded = 0;
+                        for (const stepId of targets) {
+                                const before = this.runtime.state().plan!;
+                                const active = before.steps.find(
+                                        (step) => step.state === "ready",
+                                );
+                                if (active?.id !== stepId) continue;
+                                const preview = await loadManualStepPreview(
+                                        this.runtime.adapter,
+                                        before,
+                                );
+                                if (!tx.current()) return;
+                                const receipt = await confirmManualStep(
+                                        this.runtime.adapter,
+                                        before,
+                                        preview,
+                                );
+                                if (!tx.current()) return;
+                                tx.patch({ plan: receipt.plan });
+                                recorded += 1;
+                        }
+                        if (!recorded)
+                                throw new Error(
+                                        "The BIOS installation step is no longer the active step.",
+                                );
+                        tx.success(
+                                message(
+                                        "ui.manualStepRecordedInTheDeploymentPlan",
+                                ),
+                        );
+                });
+        }
+
+        /**
+         * Runs the read-only check that belongs to the active restart or
+         * observation step. A failure is kept on the step instead of becoming
+         * an error notice, because the user may simply not have restarted yet.
+         */
+        autoCheck() {
+                const before = this.runtime.state().plan;
+                const active = before?.steps.find(
+                        (step) => step.state === "ready",
+                );
+                if (!before || !active) return Promise.resolve();
+                const stepId = active.id;
+                if (
+                        stepId !== "rebootAfterFirmware" &&
+                        stepId !== "verifyDriverLoaded" &&
+                        stepId !== "rebootAfterConfiguration" &&
+                        stepId !== "verifyResizableBar"
+                )
+                        return Promise.resolve();
+                return this.runtime.run("auto-check", async (tx) => {
+                        tx.patch({
+                                autoCheck: {
+                                        stepId,
+                                        status: "running",
+                                        message: null,
+                                },
+                        });
+                        try {
+                                if (stepId === "rebootAfterConfiguration") {
+                                        const receipt = await verifyConfigurationBoot(
+                                                this.runtime.adapter,
+                                                before,
+                                        );
+                                        tx.patch({ plan: receipt.plan, autoCheck: null });
+                                } else if (stepId === "verifyResizableBar") {
+                                        const receipt =
+                                                await collectResizableBarEvidence(
+                                                        this.runtime.adapter,
+                                                        before,
+                                                );
+                                        tx.patch({
+                                                plan: receipt.plan,
+                                                barEvidence: receipt.evidence,
+                                                autoCheck: null,
+                                        });
+                                } else {
+                                        const receipt = await verifyDeploymentDriver(
+                                                this.runtime.adapter,
+                                                before,
+                                        );
+                                        tx.patch({ plan: receipt.plan, autoCheck: null });
+                                }
+                        } catch (error) {
+                                tx.patch({
+                                        autoCheck: {
+                                                stepId,
+                                                status: "failed",
+                                                message: formatDeploymentError(error),
+                                        },
+                                });
+                                return;
+                        }
+                        if (
+                                tx.current() &&
+                                (stepId === "rebootAfterFirmware" ||
+                                        stepId === "verifyDriverLoaded")
+                        )
+                                await this.runtime.loadRecommendation();
+                });
+        }
+
+        /** The guided screen's save button is the explicit review of the shown values. */
+        saveRecommendedConfig() {
+                this.runtime.patch({ guardedConfigConfirmed: true });
+                return this.saveGuardedConfig();
         }
 
         verifyDriver() {
