@@ -1,0 +1,43 @@
+import { createContext, useContext, type ReactNode } from "react";
+import type { GuidedPage, InstallUiState } from "./routing";
+
+export type InstallUi = Omit<InstallUiState, "catalogBoard" | "exported"> & {
+        /** The user chose to answer the route questions on a catalog board. */
+        customRoutes: boolean;
+        /** The user reviewed the legacy patch selection and moved on. */
+        legacyAccepted: boolean;
+        /** Record that was selected when a new preparation started. */
+        startNewFrom: string;
+};
+
+export const initialInstallUi: InstallUi = {
+        startNew: false,
+        question: 1,
+        claimedInstalled: false,
+        savingAgain: false,
+        showGuide: false,
+        customRoutes: false,
+        legacyAccepted: false,
+        startNewFrom: "",
+};
+
+export type GuidedNavigation = {
+        page: GuidedPage;
+        go(page: GuidedPage): void;
+        installUi: InstallUi;
+        setInstallUi(patch: Partial<InstallUi>): void;
+        /** Starts stage 1 again with a new BIOS file, keeping earlier records. */
+        startNewPreparation(): void;
+};
+
+const NavigationContext = createContext<GuidedNavigation | null>(null);
+
+export const GuidedNavigationProvider = ({ value, children }: { value: GuidedNavigation; children: ReactNode }) => (
+        <NavigationContext.Provider value={value}>{children}</NavigationContext.Provider>
+);
+
+export const useGuidedNavigation = () => {
+        const value = useContext(NavigationContext);
+        if (!value) throw new Error("Guided screens require the navigation provider.");
+        return value;
+};

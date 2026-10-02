@@ -47,7 +47,7 @@ const SettingsAccessRequired = () => {
         );
 };
 
-export const BarSettingsWorkspace = () => {
+export const BarSettingsWorkspace = ({ embedded = false }: { embedded?: boolean }) => {
         const { t } = useI18n();
         const { snap } = useConfigurationWorkspaceController();
         const configurationLoaded = Boolean(
@@ -59,7 +59,7 @@ export const BarSettingsWorkspace = () => {
                         data-testid="bar-settings-workspace"
                 >
                         <main className="content">
-                                <SettingsIntro />
+                                {!embedded && <SettingsIntro />}
                                 <WorkspaceNotices />
                                 {snap?.barSettings.savedConfigurationState ===
                                         "invalid" && (
