@@ -220,6 +220,7 @@ mod tests {
             dedicated_video_memory: 8 * 1024 * 1024 * 1024,
             is_turing: false,
             recommended_bar_size_selector: None,
+            registry_bar_size_selector: None,
             effective_bar_size_selector: None,
         }
     }

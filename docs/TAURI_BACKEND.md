@@ -12,7 +12,7 @@ native boundary.
 
 | Command | Arguments | Result and owner |
 | --- | --- | --- |
-| `get_system_snapshot` | none | Cached platform (including the current Windows boot time, `platform.bootedAtUnixMs`), firmware access, current-boot DXE observation, BAR Settings tokens, saved config, GPU inventory, machine identity, and notices |
+| `get_system_snapshot` | none | Cached platform (including the current Windows boot time, `platform.bootedAtUnixMs`), firmware access, current-boot DXE observation, BAR Settings tokens, saved config, GPU inventory (each GPU with its listed, recommended and effective BAR size selectors), machine identity, and notices |
 | `refresh_system` | none | Fresh Windows/PCI/EFI enumeration and snapshot |
 | `validate_config` | `{ draft }` | Errors, warnings, affected GPUs, encoded size, change state, and reboot requirement without writing |
 | `save_config` | `{ draft }` | A save receipt only after the EFI variable is written and read back byte-for-byte |

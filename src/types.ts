@@ -34,6 +34,8 @@ export type GpuDevice = {
         dedicatedVideoMemory: string;
         isTuring: boolean;
         recommendedBarSizeSelector: number | null;
+        /** Size the built-in list assigns this model; null when the model is not listed. */
+        registryBarSizeSelector: number | null;
         effectiveBarSizeSelector: number | null;
 };
 export type FirmwareVolumePathDiagnostic = {

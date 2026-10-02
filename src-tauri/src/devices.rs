@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use nvstraps_core::registry::{NVIDIA_VENDOR_ID, automatic_bar_size, is_turing};
+use nvstraps_core::registry::{NVIDIA_VENDOR_ID, automatic_bar_size, is_turing, registry_bar_size};
 
 use crate::error::{BackendError, BackendResult};
 
@@ -37,6 +37,8 @@ pub struct GpuDevice {
     pub dedicated_video_memory: u64,
     pub is_turing: bool,
     pub recommended_bar_size_selector: Option<u8>,
+    /// Size the built-in list assigns this model, used when the saved global mode is the list only.
+    pub registry_bar_size_selector: Option<u8>,
     pub effective_bar_size_selector: Option<u8>,
 }
 
@@ -268,6 +270,7 @@ mod windows_impl {
                 dedicated_video_memory,
                 is_turing: is_turing(ids.device_id),
                 recommended_bar_size_selector: automatic_bar_size(ids.device_id),
+                registry_bar_size_selector: registry_bar_size(ids.device_id),
                 effective_bar_size_selector: None,
             });
         }

@@ -243,6 +243,7 @@ mod tests {
             dedicated_video_memory: 8 << 30,
             is_turing: true,
             recommended_bar_size_selector: Some(7),
+            registry_bar_size_selector: Some(7),
             effective_bar_size_selector: Some(7),
         }
     }
