@@ -359,7 +359,7 @@ fn boot_proves_configuration_reboot(configuration_saved_at: u64, booted_at: u64)
 }
 
 #[cfg(windows)]
-fn current_boot_time_unix_ms() -> BackendResult<u64> {
+pub(crate) fn current_boot_time_unix_ms() -> BackendResult<u64> {
     use windows_sys::Win32::System::SystemInformation::GetTickCount64;
 
     let now: u64 = SystemTime::now()
@@ -376,7 +376,7 @@ fn current_boot_time_unix_ms() -> BackendResult<u64> {
 }
 
 #[cfg(not(windows))]
-fn current_boot_time_unix_ms() -> BackendResult<u64> {
+pub(crate) fn current_boot_time_unix_ms() -> BackendResult<u64> {
     Err(BackendError::UnsupportedPlatform)
 }
 

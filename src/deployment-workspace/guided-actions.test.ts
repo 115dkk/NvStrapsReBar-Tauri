@@ -8,7 +8,7 @@ import { createDeploymentWorkspaceSession } from "./session";
 
 const snapshot = {
         schemaVersion: 1,
-        platform: { operatingSystem: "windows", architecture: "x86_64", supported: true, uefi: true, elevated: true },
+        platform: { operatingSystem: "windows", architecture: "x86_64", supported: true, uefi: true, elevated: true, bootedAtUnixMs: null },
         firmware: { accessible: true, privilegeEnabled: true, configVariablePresent: true, accessError: null },
         driverStatus: null,
         barSettings: {

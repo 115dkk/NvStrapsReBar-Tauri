@@ -10,6 +10,7 @@ const snapshot = (state: "supported" | "unknown"): SystemSnapshot => ({
                 supported: true,
                 uefi: true,
                 elevated: true,
+                bootedAtUnixMs: null,
         },
         firmware: {
                 accessible: true,

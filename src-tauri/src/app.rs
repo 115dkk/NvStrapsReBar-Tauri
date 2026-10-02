@@ -19,6 +19,7 @@ use crate::{
         ConfigDraft, NvConfig, config_from_draft, draft_from_config, effective_bar_size,
         setup_crc_hex, validate_draft,
     },
+    deployment_workflow::current_boot_time_unix_ms,
     devices::{GpuDevice, enumerate_gpus},
     error::{ApiError, BackendError, BackendResult, CommandResult},
     firmware::{
@@ -82,6 +83,10 @@ pub struct PlatformInfo {
     pub supported: bool,
     pub uefi: bool,
     pub elevated: bool,
+    /// Wall-clock time of the current Windows boot. The guided screens compare it with the time
+    /// a deployment package was saved, so a driver left by an earlier install is not mistaken for
+    /// the file the user is about to flash.
+    pub booted_at_unix_ms: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -384,6 +389,9 @@ fn refresh_snapshot(state: &AppState) -> BackendResult<SystemSnapshot> {
             supported: cfg!(windows),
             uefi: access.is_uefi,
             elevated: access.is_elevated,
+            booted_at_unix_ms: current_boot_time_unix_ms()
+                .ok()
+                .map(|value| value.to_string()),
         },
         firmware: FirmwareInfo {
             accessible: firmware_accessible,

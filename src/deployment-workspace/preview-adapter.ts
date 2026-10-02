@@ -22,6 +22,8 @@ const restartedKey = (profileId: string) =>
         `nvstraps-preview-config-restarted:${profileId}`;
 /** Same key the preview system snapshot reads; a simulated restart changes what it reports. */
 const PREVIEW_SYSTEM_STATE_KEY = "nvstraps-preview-rebar-state";
+const PREVIEW_BOOTED_AT_KEY = "nvstraps-preview-booted-at";
+const simulateRestart = () => sessionStorage.setItem(PREVIEW_BOOTED_AT_KEY, String(Date.now() + 1));
 const firmware: FirmwareFingerprint = {
         fileName: "E7D25IMS.1N0",
         byteLength: 33554432,
@@ -866,6 +868,7 @@ export const previewDeploymentAdapter: DeploymentAdapter = {
                         throw new Error("Saved-work confirmation is required.");
                 // After the simulated BIOS install, the next snapshot sees the driver running.
                 sessionStorage.setItem(PREVIEW_SYSTEM_STATE_KEY, "driver-cleared");
+                simulateRestart();
                 return { profileId: preview.profileId, accepted: true };
         },
         previewManualDeploymentStep: async (profileId) => {
@@ -1026,6 +1029,7 @@ export const previewDeploymentAdapter: DeploymentAdapter = {
                 // The simulated restart applies the saved size.
                 sessionStorage.setItem(restartedKey(preview.profileId), "1");
                 sessionStorage.setItem(PREVIEW_SYSTEM_STATE_KEY, "expanded");
+                simulateRestart();
                 return {
                         profileId: preview.profileId,
                         accepted: true,
