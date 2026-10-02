@@ -1,10 +1,9 @@
 import type { ReactNode, Ref } from "react";
-import { BarSettingsWorkspace } from "../BarSettingsWorkspace";
 import { useConfigurationWorkspaceController } from "../configuration-workspace/context";
-import { AutomaticPolicyPanel, ConfigurationIntro, ConfigurationReview, FirmwareBehaviorPanel, GpuRulesPanel } from "../configuration-workspace/panels";
 import { useDeploymentWorkspaceController } from "../deployment-workspace/context";
 import { stepKindIds, stepStateIds, stepTitleIds } from "../deployment-workspace/messages";
 import { translateMessage, useI18n } from "../i18n";
+import { BarSettingsPage } from "./bar-settings";
 import { recallExport } from "./export-memory";
 import { Icon } from "./icons";
 import { initialInstallUi, useGuidedNavigation } from "./navigation";
@@ -36,22 +35,8 @@ const SubPage = ({ here, title, lead, titleRef, children, bar, wide = false, tes
         );
 };
 
-export const BarPage = ({ titleRef }: { titleRef: Ref<HTMLHeadingElement> }) => {
-        const { t } = useI18n();
-        const { snap } = useConfigurationWorkspaceController();
-        if (!snap) return null;
-        return (
-                <SubPage here={t("ui.barSettings")} title={t("ui.barSettings")} lead={t("ui.barSettingsLead")} titleRef={titleRef} wide testId="bar-page">
-                        <div className="nv-legacy-panels">
-                                {snap.barSettings.settingsAvailable ? (
-                                        <BarSettingsWorkspace embedded />
-                                ) : (
-                                        <div className="workspace"><div className="content"><ConfigurationIntro /><AutomaticPolicyPanel /><GpuRulesPanel /><FirmwareBehaviorPanel /><ConfigurationReview savePath="configure" /></div></div>
-                                )}
-                        </div>
-                </SubPage>
-        );
-};
+/** BAR settings; the screen itself lives in bar-settings.tsx. */
+export const BarPage = BarSettingsPage;
 
 export const GamesPage = ({ titleRef }: { titleRef: Ref<HTMLHeadingElement> }) => {
         const { t, locale } = useI18n();

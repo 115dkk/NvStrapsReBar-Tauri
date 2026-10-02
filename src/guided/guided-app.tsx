@@ -23,6 +23,7 @@ export const GuidedApp = ({ snapshot }: { snapshot: SystemSnapshot }) => {
         const deployment = useDeploymentWorkspace(snapshot);
         const { view, commands } = deployment;
         const [chosenPage, setChosenPage] = useState<GuidedPage | null>(null);
+        const [settingsFileOpen, setSettingsFileOpen] = useState(false);
         const [installUi, setInstallUiState] = useState<InstallUi>(initialInstallUi);
         const [screen, setScreen] = useState<InstallScreen | null>(null);
         const titleRef = useRef<HTMLHeadingElement>(null);
@@ -33,7 +34,10 @@ export const GuidedApp = ({ snapshot }: { snapshot: SystemSnapshot }) => {
         useEffect(() => {
                 if (chosenPage === null && automatic === "install") setChosenPage("install");
         }, [chosenPage, automatic]);
-        const go = useCallback((next: GuidedPage) => setChosenPage(next), []);
+        const go = useCallback((next: GuidedPage, options?: { settingsFile?: boolean }) => {
+                setChosenPage(next);
+                setSettingsFileOpen(Boolean(options?.settingsFile));
+        }, []);
         const setInstallUi = useCallback((patch: Partial<InstallUi>) => setInstallUiState((current) => ({ ...current, ...patch })), []);
         const startNewPreparation = useCallback(() => {
                 commands.setFirmwarePath("");
@@ -42,8 +46,8 @@ export const GuidedApp = ({ snapshot }: { snapshot: SystemSnapshot }) => {
                 setChosenPage("install");
         }, [commands, view.profileCreations]);
         const navigation = useMemo<GuidedNavigation>(
-                () => ({ page, go, installUi, setInstallUi, startNewPreparation }),
-                [page, go, installUi, setInstallUi, startNewPreparation],
+                () => ({ page, go, settingsFileOpen, installUi, setInstallUi, startNewPreparation }),
+                [page, go, settingsFileOpen, installUi, setInstallUi, startNewPreparation],
         );
 
         // Move focus to the new heading whenever the page or install screen changes.

@@ -141,7 +141,8 @@ mod tests {
             current_bar_size: 0x1000_0000,
             dedicated_video_memory: 8 * 1024 * 1024 * 1024,
             is_turing: true,
-            recommended_bar_size_selector: Some(13),
+            recommended_bar_size_selector: Some(7),
+            registry_bar_size_selector: Some(7),
             effective_bar_size_selector: None,
         }
     }

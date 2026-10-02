@@ -6,7 +6,7 @@ import { chooseLanguage, open, reachTurnOn } from "./support";
 const evidence =
         ".superloopy/evidence/frontend/20260814T212720Z-jetendard-technical-ui";
 mkdirSync(evidence, { recursive: true });
-const styles = ["styles.css", "workspace-layout.css", "guided/guided.css"].map((file) =>
+const styles = ["styles.css", "guided/guided.css"].map((file) =>
         readFileSync(new URL(`../../src/${file}`, import.meta.url), "utf8"),
 ).join("\n");
 const assetChecker = readFileSync(
@@ -298,10 +298,11 @@ test("every technical declaration routes through the pinned Jetendard faces", ()
         expect(styles.match(/\bmonospace\b/g)).toHaveLength(1);
         // The guided components read the same token through --font-mono.
         expect(styles).toMatch(/--font-mono:\s*var\(--font-technical\);/);
+        // Technical text in the guided components and the licenses dialog uses the token.
         expect(
                 (styles.match(/var\(--font-technical\)/g)?.length ?? 0) +
                         (styles.match(/var\(--font-mono\)/g)?.length ?? 0),
-        ).toBeGreaterThan(10);
+        ).toBeGreaterThanOrEqual(5);
         expect(styles).not.toMatch(/font:\s*650[^;]+var\(--font-technical\)/);
         expect(styles).toContain(":where(code, pre, kbd, samp)");
         expect(assetChecker).toContain(
@@ -416,12 +417,12 @@ test("Korean uses the bundled Pretendard variable font without external requests
                 return {
                         rootFamily: style("html").fontFamily,
                         bodyWeight: style("body").fontWeight,
-                        supportingWeight: style(".section-head p").fontWeight,
-                        labelWeight: style(".mode-grid label").fontWeight,
+                        supportingWeight: style(".nv-gpu .nv-supporting").fontWeight,
+                        labelWeight: style(".nv-gpu .nv-label").fontWeight,
                         buttonWeight: style("button").fontWeight,
-                        sectionWeight: style(".section-head h3").fontWeight,
+                        sectionWeight: style("h2.nv-section").fontWeight,
                         pageWeight: style("h1").fontWeight,
-                        monoFamily: style(".kicker").fontFamily,
+                        technicalToken: getComputedStyle(document.documentElement).getPropertyValue("--font-technical"),
                 };
         });
         expect(typography).toMatchObject({
@@ -433,17 +434,10 @@ test("Korean uses the bundled Pretendard variable font without external requests
                 pageWeight: "720",
         });
         expect(typography.rootFamily).toContain("Pretendard Variable");
-        expect(typography.monoFamily).toContain("Jetendard");
-        expectPretendardGlyphs(await platformFontsForSelector(page, ".section-head p"));
-        expectJetendardGlyphs(
-                await platformFontsForSelector(page, ".kicker"),
-                "Bold",
-        );
-        await auditVisibleHangulText(page, "configure-platform-font-audit.json");
-        await auditVisibleTechnicalText(
-                page,
-                "configure-technical-platform-font-audit.json",
-        );
+        expect(typography.technicalToken).toContain("Jetendard");
+        expectPretendardGlyphs(await platformFontsForSelector(page, ".nv-gpu .nv-supporting"));
+        // BAR settings show sizes inside sentences and controls; the turn-on screen audits the Jetendard readouts.
+        await auditVisibleHangulText(page, "configure-platform-font-audit.json", 10);
 
         const fontRequest = requests.find((url) =>
                 url.includes("PretendardVariable") && url.endsWith(".woff2"),

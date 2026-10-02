@@ -1,9 +1,8 @@
 # Desktop guided design
 
 The executable design source is `src/guided/guided.css` (guided components, `nv-` classes,
-ported from the NvStrapsReBar design system), `src/styles.css` (fonts, base tokens and the BAR
-settings panels) and `src/workspace-layout.css` (shared disclosures). This document maps that
-source, not a second theme implementation. The design system artifact and the reviewed screen
+ported from the NvStrapsReBar design system) and `src/styles.css` (fonts, base tokens and the
+licenses dialog). This document maps that source, not a second theme implementation. The design system artifact and the reviewed screen
 designs live outside the repository; the UX contract and visual QA notes are under
 `.superloopy/evidence/frontend/`.
 
@@ -37,8 +36,13 @@ board, GPU and file names go into the lead or the body, not the heading.
   observed; per-game setup is offered from the finish screen and from home.
 - A restart request is never shown as a finished restart; confirmation dialogs ask the user to
   save their work and their left button is Close.
-- Settings put expansion first, GPU exceptions second, advanced firmware options on demand,
-  and saved-file import/export last. Preserve edit/review/save semantics.
+- BAR settings (`src/guided/bar-settings.tsx`) put one expansion switch first, a size for each
+  RTX 20 and GTX 16 GPU second (Automatic with the size it resolves to, a size, or Do not
+  expand), then two closed disclosures: advanced firmware options and the settings file. A save
+  bar appears only while the draft differs from the saved settings; it names the change, offers
+  Revert, and Save opens one confirmation. Removing the saved settings is confirmed as turning
+  expansion off. `bar-settings-model.ts` mirrors the nvstraps-core lookup order so the screen
+  shows the size each GPU actually gets. Validation and the write stay in Rust.
 - Native window chrome stays OS-owned. Desktop minimum width remains 900px.
 
 ## Color and depth

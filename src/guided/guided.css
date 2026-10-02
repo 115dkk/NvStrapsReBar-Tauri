@@ -23,8 +23,8 @@
 .nv-app { container-type: inline-size; position: relative; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; font-family: var(--font-ko); font-size: 15px; line-height: 24px; font-weight: 400; color: var(--ink); background: var(--bg); -webkit-font-smoothing: antialiased; font-synthesis: none; font-variant-numeric: tabular-nums; }
 .nv-app:lang(en) { font-family: var(--font-en); }
 .nv-app *, .nv-app *::before, .nv-app *::after { box-sizing: border-box; }
-.nv-app :where(h1, h2, h3, h4, p, ol, ul, dl, dd, figure):where(:not(.nv-legacy-panels *)) { margin: 0; }
-.nv-app :where(ol, ul):where(:not(.nv-legacy-panels *)) { padding: 0; list-style: none; }
+.nv-app :where(h1, h2, h3, h4, p, ol, ul, dl, dd, figure) { margin: 0; }
+.nv-app :where(ol, ul) { padding: 0; list-style: none; }
 .nv-app :where(button, input, select, textarea) { font: inherit; color: inherit; }
 .nv-app .nv-title { font-size: 28px; line-height: 36px; font-weight: 720; letter-spacing: -0.4px; text-wrap: balance; }
 .nv-app .nv-section { font-size: 18px; line-height: 26px; font-weight: 680; text-wrap: balance; }
@@ -234,14 +234,11 @@
 .nv-app .nv-textarea { min-height: 72px; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--control-line); background: var(--surface); color: var(--ink); resize: vertical; }
 .nv-app .nv-choice.disabled { opacity: 0.6; cursor: not-allowed; }
 .nv-app .nv-home > .nv-task-body.wide { max-width: 1000px; }
-.nv-app .nv-home .nv-legacy-panels { display: flex; flex-direction: column; gap: 16px; }
 .nv-app .nv-ledger { display: flex; flex-direction: column; gap: 2px; }
 .nv-app .nv-ledger li { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; column-gap: 12px; align-items: center; min-height: 40px; }
 .nv-app .nv-gpu .nv-sizes { display: flex; align-items: center; gap: 8px; }
 .nv-app .nv-meta { font-size: 13px; line-height: 20px; color: var(--muted); }
 .nv-app.nv-center { align-items: center; justify-content: center; gap: 12px; padding: 24px; text-align: center; }
-.nv-app .nv-legacy-panels .workspace { display: block; }
-.nv-app .nv-legacy-panels .content { padding: 0; max-width: none; overflow: visible; }
 .nv-app .nv-loading { flex: 1; display: grid; place-items: center; color: var(--muted); }
 @container (max-width: 1000px) {
         .nv-app .nv-actionbar:has(.nv-actionbar-actions > :nth-child(3)) { flex-wrap: wrap; row-gap: 6px; padding-block: 10px 12px; }
@@ -251,3 +248,19 @@
 .nv-app .nv-manual-address { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .nv-app .nv-manual-address .nv-mono { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; }
 .nv-app .nv-manual-address .nv-btn { flex: none; min-height: 36px; }
+
+/* BAR settings */
+.nv-app .nv-page { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.nv-app .nv-switch-row { display: flex; flex-direction: row; align-items: center; gap: 16px; }
+.nv-app .nv-switch-row > .nv-fact-text { flex: 1; min-width: 0; }
+.nv-app .nv-switch { min-height: 0; padding: 0; }
+.nv-app .nv-switch:hover:not(:disabled) { background: var(--control-line); box-shadow: inset 0 0 0 1px var(--ink); }
+.nv-app .nv-switch[aria-checked="true"]:hover:not(:disabled) { background: var(--accent-hover); }
+.nv-app .nv-switch:disabled { opacity: 0.42; cursor: not-allowed; }
+.nv-app .nv-select:disabled { opacity: 0.6; cursor: not-allowed; }
+.nv-app .nv-disclosure > summary { font-size: 15px; line-height: 22px; }
+.nv-app .nv-disclosure-body { padding: 8px 4px 8px 32px; gap: 20px; }
+.nv-app .nv-button-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.nv-app .nv-savebar-text { flex: 1; min-width: 0; }
+.nv-app .nv-disclosure > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-sm); }
+.nv-app .nv-select, .nv-app .nv-input { font-weight: 400; }

@@ -47,8 +47,10 @@ const gpu = {
         currentBarSize: "8589934592",
         dedicatedVideoMemory: "8589934592",
         isTuring: true,
-        recommendedBarSizeSelector: 13,
-        effectiveBarSizeSelector: 13,
+        // Selectors use the strap encoding (0 = 64 MiB); both preview models are 8 GiB in the list.
+        recommendedBarSizeSelector: 7,
+        registryBarSizeSelector: 7,
+        effectiveBarSizeSelector: 7,
 };
 const identity: MachineIdentity = {
         boardManufacturer: "Micro-Star International Co., Ltd.",
@@ -173,6 +175,7 @@ const mixedPreviewGpu = {
         currentBarSize: "268435456",
         dedicatedVideoMemory: "8589934592",
         recommendedBarSizeSelector: 7,
+        registryBarSizeSelector: 7,
         effectiveBarSizeSelector: null,
 };
 const mixedPreviewInspection: ResizableBarInspection = {
