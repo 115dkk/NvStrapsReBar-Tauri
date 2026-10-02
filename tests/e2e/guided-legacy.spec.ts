@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { button, evidence, noHorizontalOverflow, open } from "./support";
 
-/** Chooses the file, then answers the route questions with an older Above 4G board. */
+/** Chooses the file, then chooses the routes with an older Above 4G board. */
 async function reachLegacyAnalysis(page: Page, path?: string) {
         await open(page, "not-observed");
         await button(page, "Get started").click();
@@ -13,10 +13,10 @@ async function reachLegacyAnalysis(page: Page, path?: string) {
                 await button(page, "Choose file").click();
         }
         await page.getByText("Choose other install and recovery methods").click();
-        await button(page, "Answer the questions").click();
-        await expect(page.getByRole("heading", { name: "Does BIOS setup have a Re-Size BAR item?" })).toBeVisible();
-        await expect(page.getByText("Step 1 · Prepare · Question 1 of 3")).toBeVisible();
-        await page.getByText("No, only Above 4G Decoding").click();
+        await button(page, "Choose manually").click();
+        await expect(page.getByRole("heading", { name: "Choose whether BIOS setup has a Re-Size BAR item" })).toBeVisible();
+        await expect(page.getByText("Step 1 · Prepare · Choice 1 of 3")).toBeVisible();
+        await page.getByText("Only Above 4G Decoding").click();
         await button(page, "Next").click();
         await expect(page.getByRole("heading", { name: "Choose the extra patches for this BIOS file" })).toBeVisible();
 }
@@ -30,9 +30,9 @@ test("legacy analysis preselects only the recommended safe rule and keeps the le
         await page.screenshot({ path: `${evidence}/en-legacy-analysis-1180.png` });
         await button(page, "Next").click();
 
-        await expect(page.getByRole("heading", { name: "How do you install the BIOS?" })).toBeVisible();
+        await expect(page.getByRole("heading", { name: "Choose how to install the BIOS" })).toBeVisible();
         await button(page, "Next").click();
-        await expect(page.getByRole("heading", { name: "How do you recover if the BIOS install fails?" })).toBeVisible();
+        await expect(page.getByRole("heading", { name: "Choose how to recover if the BIOS install fails" })).toBeVisible();
         await button(page, "Checked · make the file").click();
         await button(page, "Save to USB").click();
         await expect(page.getByText("Turn on Re-Size BAR")).toHaveCount(0);

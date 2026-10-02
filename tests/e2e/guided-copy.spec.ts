@@ -3,10 +3,14 @@ import { button, missingMessages, open } from "./support";
 
 /**
  * Screen copy states what the user does next and what the app just did.
- * It never lists what the app does not do, and it never claims safety.
+ * It never lists what the app does not do, never claims safety, and never
+ * talks like a person: the app does not ask, tell, promise or keep things
+ * ready as a favour, and labels do not speak as "I".
  */
 const negativeEnglish = /\b(?:the|this) app\b[^.]*\b(?:does not|doesn't|cannot|can't|won't|never|is not able)\b/i;
 const negativeKorean = /앱[은이]\s?[^.]*?(?:않습니다|않는|못합니다|못하|없습니다)/;
+const chatEnglish = /\b(?:we|we'll|let's|asks?|will be asked|tells? you|don't worry|you're all set|at any time)\b/i;
+const chatKorean = /내가|나의|담습니|담아|묻습니다|물어|알려 ?(?:주|준|드)|[아어해] ?두었|골라 ?두|드립니다|드릴게|언제든|하기만 하면|요청하는 것/;
 const claims = /\bsafe(?:ly)?\b|\bguarantee|\bverified\b|안전|보장|검증된/i;
 
 async function collect(page: Page, locale: "en" | "ko") {
@@ -24,7 +28,7 @@ async function collect(page: Page, locale: "en" | "ko") {
         await grab();
         await button(page, ko ? "USB에 저장" : "Save to USB").click();
         await grab();
-        await button(page, ko ? "BIOS에서 설치를 마쳤습니다" : "I finished in BIOS setup").click();
+        await button(page, ko ? "BIOS 작업 완료" : "Done in BIOS setup").click();
         await grab();
         await button(page, ko ? "BIOS 화면으로 다시 시작" : "Restart into BIOS setup").click();
         await grab();
@@ -54,19 +58,21 @@ async function collect(page: Page, locale: "en" | "ko") {
         return texts;
 }
 
-test("English screens describe the next action without listing what the app does not do", async ({ page }) => {
+test("English screens describe the next action without listing what the app does not do or chatting", async ({ page }) => {
         const texts = await collect(page, "en");
         for (const text of texts) {
                 expect(text).not.toMatch(negativeEnglish);
+                expect(text).not.toMatch(chatEnglish);
                 expect(text).not.toMatch(claims);
                 expect(text).not.toContain("—");
         }
 });
 
-test("Korean screens describe the next action without listing what the app does not do", async ({ page }) => {
+test("Korean screens describe the next action without listing what the app does not do or chatting", async ({ page }) => {
         const texts = await collect(page, "ko");
         for (const text of texts) {
                 expect(text).not.toMatch(negativeKorean);
+                expect(text).not.toMatch(chatKorean);
                 expect(text).not.toMatch(claims);
                 expect(text).not.toContain("경로");
                 expect(text).not.toContain("—");

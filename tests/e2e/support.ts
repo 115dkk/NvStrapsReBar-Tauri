@@ -40,7 +40,7 @@ export async function reachGuide(page: Page) {
         await button(page, "Checked · make the file").click();
         await expect(page.getByRole("heading", { name: "Save to USB" })).toBeVisible();
         await button(page, "Save to USB").click();
-        await expect(page.getByRole("heading", { name: "Now install it in BIOS setup" })).toBeVisible();
+        await expect(page.getByRole("heading", { name: "Install it in BIOS setup" })).toBeVisible();
 }
 
 /** Restarts into BIOS setup through the dialog and reopens the app afterwards. */

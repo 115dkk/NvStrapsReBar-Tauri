@@ -7,7 +7,7 @@ test("the guided install runs from home to the observed size, one task per scree
 
         // Home: value first, then the user's steps and what is needed.
         await expect(page.getByRole("heading", { name: "You can turn on Resizable BAR" })).toBeVisible();
-        await expect(page.getByText("Your PC · RTX 2080 SUPER · this boot")).toBeVisible();
+        await expect(page.getByText("This PC · RTX 2080 SUPER · this boot")).toBeVisible();
         await expect(page.getByRole("img", { name: "Now 256 MiB, 8 GiB when on" })).toBeVisible();
         await expect(page.getByRole("heading", { name: "Your steps" })).toBeVisible();
         await expect(page.getByRole("navigation", { name: "Setup progress" })).toHaveCount(0);
@@ -33,7 +33,7 @@ test("the guided install runs from home to the observed size, one task per scree
         await page.screenshot({ path: `${evidence}/en-03-save-1180.png` });
 
         await button(page, "Save to USB").click();
-        await expect(page.getByRole("heading", { name: "Now install it in BIOS setup" })).toBeVisible();
+        await expect(page.getByRole("heading", { name: "Install it in BIOS setup" })).toBeVisible();
         await expect(page.locator(".nv-stage.current")).toContainText("2 Install");
         await expect(page.getByText("In M-FLASH, choose E7D25IMS.1N0 in the flash folder.")).toBeVisible();
         await expect(page.getByRole("note")).toContainText("Flash BIOS button");
@@ -67,7 +67,7 @@ test("the guided install runs from home to the observed size, one task per scree
         await page.screenshot({ path: `${evidence}/en-08-restart-1180.png` });
 
         await button(page, "Restart").click();
-        await expect(page.getByRole("dialog")).toContainText("It checks the new size right away.");
+        await expect(page.getByRole("dialog")).toContainText("The new size is checked automatically.");
         await page.getByRole("dialog").getByRole("button", { name: "Restart", exact: true }).click();
         // Accepting the restart request does not advance the plan.
         await expect(page.getByRole("heading", { name: "Restart to turn it on" })).toBeVisible();
@@ -89,8 +89,8 @@ test("the guided install runs from home to the observed size, one task per scree
 test("closing the app mid-install reopens on the same step", async ({ page }) => {
         await reachGuide(page);
         await page.reload();
-        await expect(page.getByRole("heading", { name: "Now install it in BIOS setup" })).toBeVisible();
-        await expect(page.getByText("You can close the app. It picks up here next time.")).toBeVisible();
+        await expect(page.getByRole("heading", { name: "Install it in BIOS setup" })).toBeVisible();
+        await expect(page.getByText("After closing the app, it continues from this step next time.")).toBeVisible();
 });
 
 test("the restart screen waits for a real restart before checking the size", async ({ page }) => {
@@ -99,25 +99,25 @@ test("the restart screen waits for a real restart before checking the size", asy
         await button(page, "Record install and settings").click();
         await button(page, "Save these settings").click();
         await expect(page.getByRole("heading", { name: "Restart to turn it on" })).toBeVisible();
-        await button(page, "I already restarted").click();
+        await button(page, "Already restarted").click();
         await expect(page.getByRole("alert")).toContainText("Windows has not restarted since the configuration was saved.");
         await expect(page.getByRole("heading", { name: "Restart to turn it on" })).toBeVisible();
 });
 
 test("an unconfirmed BIOS install leads to checks, not to a failure", async ({ page }) => {
         await reachGuide(page);
-        await button(page, "I finished in BIOS setup").click();
+        await button(page, "Done in BIOS setup").click();
         await expect(page.getByRole("heading", { name: "Check two things in BIOS setup" })).toBeVisible();
         await expect(page.getByText("Check that CSM is off in BIOS setup.")).toBeVisible();
         await button(page, "Back to the steps").click();
-        await expect(page.getByRole("heading", { name: "Now install it in BIOS setup" })).toBeVisible();
+        await expect(page.getByRole("heading", { name: "Install it in BIOS setup" })).toBeVisible();
 });
 
 test("Korean install stays readable at the 900 px minimum window", async ({ page }) => {
         await page.setViewportSize({ width: 900, height: 760 });
         await open(page, "not-observed", "ko");
         await expect(page.getByRole("heading", { name: "Resizable BAR를 켤 수 있습니다" })).toBeVisible();
-        await expect(page.getByRole("heading", { name: "내가 할 일" })).toBeVisible();
+        await expect(page.getByRole("heading", { name: "사용자가 할 일" })).toBeVisible();
         expect(await noHorizontalOverflow(page)).toBe(true);
         await page.screenshot({ path: `${evidence}/ko-01-home-start-900.png` });
         await button(page, "시작하기").click();
@@ -127,7 +127,7 @@ test("Korean install stays readable at the 900 px minimum window", async ({ page
         await page.screenshot({ path: `${evidence}/ko-02-routes-900.png` });
         await button(page, "확인 완료 · 파일 만들기").click();
         await button(page, "USB에 저장").click();
-        await expect(page.getByRole("heading", { name: "이제 BIOS 화면에서 설치합니다" })).toBeVisible();
+        await expect(page.getByRole("heading", { name: "BIOS 화면에서 설치하세요" })).toBeVisible();
         await expect(page.getByText("이 순서를 휴대폰으로 찍어 두세요. USB의 DEPLOYMENT.ko.txt에도 있습니다.")).toBeVisible();
         expect(await noHorizontalOverflow(page)).toBe(true);
         await page.screenshot({ path: `${evidence}/ko-03-guide-900.png` });

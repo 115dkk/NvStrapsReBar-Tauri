@@ -13,8 +13,10 @@ NvStrapsReBar prepares a motherboard BIOS file containing NvStrapsReBar, guides 
 installation, and manages Resizable BAR settings for NVIDIA Turing GPUs.
 
 Copy tells the user what to do next and what the app just did. It never lists what the app does
-not do; a manual step appears as the user's action at the moment it is needed. Headings say the
-task; board, GPU and file names go into the lead or the body, not the heading.
+not do; a manual step appears as the user's action at the moment it is needed. The app is an
+instrument, not a conversation partner: no asking, telling, promising or favours, no "I" in
+labels, and choices are instructions with options named as states. Headings say the task;
+board, GPU and file names go into the lead or the body, not the heading.
 
 - There is no persistent navigation. The system state picks the first page: an installation in
   progress opens its current step, everything else opens home (`src/guided/routing.ts`).
