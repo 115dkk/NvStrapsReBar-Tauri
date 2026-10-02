@@ -212,6 +212,8 @@ export type SystemSnapshot = {
                 supported: boolean;
                 uefi: boolean;
                 elevated: boolean;
+                /** Wall-clock time of the current Windows boot, when Windows reports it. */
+                bootedAtUnixMs: string | null;
         };
         firmware: {
                 accessible: boolean;

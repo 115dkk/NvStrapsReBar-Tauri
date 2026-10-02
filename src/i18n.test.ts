@@ -252,7 +252,8 @@ describe("i18n locale policy", () => {
                 expect(Object.keys(guardedSources)).toEqual(
                         expect.arrayContaining([
                                 "./App.tsx",
-                                "./DeploymentWorkspace.tsx",
+                                "./guided/guided-app.tsx",
+                                "./guided/install-progress.tsx",
                                 "./bridge.ts",
                                 "./deployment-workspace/session.ts",
                                 "./deployment-workspace/preview-adapter.ts",

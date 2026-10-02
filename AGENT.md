@@ -61,6 +61,11 @@ authoritative. Keep RIIR, deployment automation, and physical-machine proof as s
   and documented for developers in this file, `CONTEXT.md`, and the README. Turn a limit into an
   action ("Install it with M-FLASH", "Prepare the recovery USB first") and state a real risk once,
   at the step where the user can act on it.
+- The app does not converse with the user. It does not ask, tell, promise, pick things out or
+  keep things ready as a favour ("한 번 더 묻습니다", "앱이 골라 두었습니다", "저장해 두었습니다"),
+  labels do not speak as "I" ("내가 할 일"), and choices are instructions with options named as
+  states, not questions answered by "있습니다". Use operational verbs (저장, 기록, 표시, 보고), not
+  literary ones ("담습니다"). See `write.md` in the make-interfaces-feel-better skill.
 - Any Korean UI copy must also follow `superloopy:humanize-korean`. Preserve technical facts and
   protected tokens, run its file-backed audit, and keep the resulting evidence with the frontend
   run receipt. When delegating, pass this requirement explicitly to the Sol frontend owner.

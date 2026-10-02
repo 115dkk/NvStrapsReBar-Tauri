@@ -68,6 +68,30 @@ export class FirmwareDeploymentActions {
                 });
         }
 
+        /**
+         * Asks for the destination and exports to it in one step. Closing the
+         * folder picker leaves everything as it was.
+         */
+        saveToDestination() {
+                return this.runtime.run("export", async (tx) => {
+                        const value =
+                                await this.runtime.adapter.selectDestinationDirectory();
+                        if (!value || !tx.current()) return;
+                        tx.patch({ destination: value });
+                        const packageReceipt =
+                                await this.runtime.adapter.exportDeploymentPackage(
+                                        this.runtime.state().selectedProfileId,
+                                        value,
+                                );
+                        tx.patch({ packageReceipt });
+                        tx.success(
+                                message(
+                                        "ui.deploymentPackageExportedOpenItInTheVendorToolForFlashing",
+                                ),
+                        );
+                });
+        }
+
         previewFirmwareReboot() {
                 return this.runtime.run("reboot-preview", async (tx) => {
                         const plan = this.runtime.state().plan!;

@@ -73,6 +73,9 @@ const identity: MachineIdentity = {
 const previewTopologyToken = "a1".repeat(32);
 const mixedPreviewTopologyToken = "b2".repeat(32);
 let previewConfigToken = "c3".repeat(32);
+/** Preview boot time before any simulated restart (2026-01-01). */
+const PREVIEW_FIRST_BOOT_UNIX_MS = "1767225600000";
+const PREVIEW_BOOTED_AT_KEY = "nvstraps-preview-booted-at";
 let previewSnapshot: SystemSnapshot = {
         schemaVersion: 2,
         platform: {
@@ -81,6 +84,7 @@ let previewSnapshot: SystemSnapshot = {
                 supported: true,
                 uefi: true,
                 elevated: true,
+                bootedAtUnixMs: PREVIEW_FIRST_BOOT_UNIX_MS,
         },
         firmware: {
                 accessible: true,
@@ -231,6 +235,9 @@ const notObservedPreviewInspection: ResizableBarInspection = {
 };
 const currentPreviewSnapshot = (): SystemSnapshot => {
         const value = structuredClone(previewSnapshot);
+        // A simulated restart moves the boot time, as a real restart does.
+        if (typeof sessionStorage !== "undefined")
+                value.platform.bootedAtUnixMs = sessionStorage.getItem(PREVIEW_BOOTED_AT_KEY) ?? PREVIEW_FIRST_BOOT_UNIX_MS;
         if (previewState() === "unavailable") {
                 value.driverStatus = null;
                 value.barSettings = { ...value.barSettings, currentBootDxeState: "indeterminate", currentBootDxeReasonCode: "statusVariableUnavailable", controlEvidence: "indeterminate", settingsAvailable: false };

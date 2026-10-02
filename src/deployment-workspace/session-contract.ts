@@ -20,6 +20,7 @@ import type {
         ProfileInspectorInstallation,
         ProfileInspectorLaunch,
         RecoveryMethod,
+        StepId,
 } from "./contract";
 
 export type DeploymentWorkspaceActivity = {
@@ -62,6 +63,10 @@ export interface DeploymentWorkspaceView {
                 Record<LegacyPatchRisk, { confirmed: boolean }>
         >;
         profiles: MachineProfile[];
+        /** Stored records and the selected plan have been read; false while a record loads. */
+        profilesLoaded: boolean;
+        /** Counts successful profile creations, so a screen can tell a new record was made. */
+        profileCreations: number;
         selectedProfileId: string;
         selectedProfile: MachineProfile | null;
         plan: DeploymentPlan | null;
@@ -98,6 +103,12 @@ export interface DeploymentWorkspaceView {
         launch: ProfileInspectorLaunch | null;
         busyAction: string;
         activity: DeploymentWorkspaceActivity;
+        /** A read-only check the guided screens run on their own after a restart. */
+        autoCheck: {
+                stepId: StepId;
+                status: "running" | "failed";
+                message: MessageDescriptor | null;
+        } | null;
         legacyAnalysisValid: boolean;
         selectedLegacyEntries: {
                 catalog: LegacyFirmwareAnalysis["catalogs"][number];
@@ -128,6 +139,13 @@ type FieldIntent =
                   type: "setLegacyRiskConfirmed";
                   risk: LegacyPatchRisk;
                   confirmed: boolean;
+          }
+        | { type: "retryRecommendation" }
+        | {
+                  type: "recordFirmwareHandoff";
+                  includeSetup: boolean;
+                  /** Plan revision the user reviewed; a moved plan is refused. */
+                  planRevision: number;
           };
 
 export type DeploymentWorkspaceIntent =
@@ -155,6 +173,10 @@ export type DeploymentWorkspaceIntent =
                           | "installInspector"
                           | "backupProfiles"
                           | "launchInspector"
+                          | "autoCheck"
+                          | "saveToUsb"
+                          | "openInspector"
+                          | "saveRecommendedConfig"
                           | "closeModals";
           };
 

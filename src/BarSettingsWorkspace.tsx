@@ -47,19 +47,21 @@ const SettingsAccessRequired = () => {
         );
 };
 
-export const BarSettingsWorkspace = () => {
+export const BarSettingsWorkspace = ({ embedded = false }: { embedded?: boolean }) => {
         const { t } = useI18n();
         const { snap } = useConfigurationWorkspaceController();
         const configurationLoaded = Boolean(
                 snap?.config && snap.barSettings.configToken !== null,
         );
+        // Inside the guided frame the page already owns the main landmark.
+        const Content = embedded ? "div" : "main";
         return (
                 <div
                         className="workspace settings-workspace"
                         data-testid="bar-settings-workspace"
                 >
-                        <main className="content">
-                                <SettingsIntro />
+                        <Content className="content">
+                                {!embedded && <SettingsIntro />}
                                 <WorkspaceNotices />
                                 {snap?.barSettings.savedConfigurationState ===
                                         "invalid" && (
@@ -77,7 +79,7 @@ export const BarSettingsWorkspace = () => {
                                 ) : (
                                         <SettingsAccessRequired />
                                 )}
-                        </main>
+                        </Content>
                 </div>
         );
 };

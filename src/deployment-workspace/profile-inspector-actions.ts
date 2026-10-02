@@ -40,6 +40,34 @@ export class ProfileInspectorActions {
                 });
         }
 
+        /** Installs the pinned release when it is missing, then backs up and launches it. */
+        installAndLaunch() {
+                return this.runtime.run("launch-inspector", async (tx) => {
+                        const profileId =
+                                this.runtime.state().selectedProfileId;
+                        if (!this.runtime.state().installation) {
+                                const installation =
+                                        await this.runtime.adapter.installNvidiaProfileInspector();
+                                if (!tx.current()) return;
+                                tx.patch({ installation });
+                        }
+                        const launch =
+                                await this.runtime.adapter.launchNvidiaProfileInspector(
+                                        profileId,
+                                );
+                        if (
+                                launch.profileId !== profileId ||
+                                launch.backup.manifest.profileId !== profileId ||
+                                !launch.executableSha256.trim()
+                        )
+                                throw new Error(
+                                        "The Profile Inspector launch receipt does not match the selected profile.",
+                                );
+                        tx.patch({ launch, backup: launch.backup });
+                        tx.success(message("ui.profileInspectorLaunched"));
+                });
+        }
+
         launch() {
                 return this.runtime.run("launch-inspector", async (tx) => {
                         const profileId =

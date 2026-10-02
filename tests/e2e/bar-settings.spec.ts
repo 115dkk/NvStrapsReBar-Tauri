@@ -1,309 +1,86 @@
 import { expect, test, type Page } from "@playwright/test";
+import { button, chooseLanguage, evidence, missingMessages, noHorizontalOverflow, open, type PreviewState } from "./support";
 
-const evidence =
-        ".superloopy/evidence/frontend/20260815T161821Z-bar-settings-workspace";
+async function openBarSettings(page: Page, state: PreviewState = "expanded", locale: "en" | "ko" = "en") {
+        await open(page, state, locale);
+        await page.getByRole("button", { name: locale === "ko" ? "BAR 설정" : "BAR Settings" }).first().click();
+        await expect(page.getByTestId("bar-page")).toBeVisible();
+}
 
-const noHorizontalOverflow = async (page: Page) =>
-        page.evaluate(
-                () =>
-                        document.documentElement.scrollWidth <=
-                        document.documentElement.clientWidth,
-        );
-
-const captureFromDocumentTop = async (page: Page, path: string) => {
-        await page.evaluate(async () => {
-                window.scrollTo(0, 0);
-                await document.fonts.ready;
-                await new Promise<void>((resolve) =>
-                        requestAnimationFrame(() =>
-                                requestAnimationFrame(() => resolve()),
-                        ),
-                );
-                window.scrollTo(0, 0);
-        });
-        expect(await page.evaluate(() => window.scrollY)).toBe(0);
-        await page.screenshot({ path });
-};
-
-test("an installed driver opens BAR Settings, saves through its own path, and refresh preserves a user step choice", async ({
-        page,
-}) => {
+test("an installed driver opens BAR settings from home and saves through its own dialog", async ({ page }) => {
         await page.setViewportSize({ width: 1180, height: 760 });
-        await page.goto("/");
-        await page.getByRole("navigation").getByRole("button", { name: (await page.evaluate(() => sessionStorage.getItem("nvstraps-preview-rebar-state"))) === "not-observed" ? "Install firmware" : "BAR Settings", exact: true }).click();
-
-        const settings = page.getByRole("button", { name: "BAR Settings", exact: true });
-        const install = page.getByRole("button", { name: "Install firmware" });
-        await expect(settings).toHaveAttribute("aria-current", "page");
-        await expect(install).toBeEnabled();
+        await openBarSettings(page);
+        await expect(page.getByRole("heading", { level: 1 })).toHaveText("BAR Settings");
         await expect(page.getByTestId("bar-settings-workspace")).toBeVisible();
-        await expect(
-                page.getByRole("heading", { name: "Edit saved BAR Settings" }),
-        ).toBeVisible();
-        await expect(
-                page.locator(".rebar-gpu-row", {
-                        hasText: "NVIDIA GeForce RTX 2080 SUPER",
-                }),
-        ).toContainText("BAR1 8 GiB");
         expect(await noHorizontalOverflow(page)).toBe(true);
-        await captureFromDocumentTop(
-                page,
-                `${evidence}/english-settings-expanded-1180x760.png`,
-        );
+        await page.screenshot({ path: `${evidence}/en-bar-settings-1180.png` });
 
         await page.getByLabel("Target PCI BAR size").selectOption("10");
-        await expect(
-                page.getByRole("heading", { name: "Changes ready to save" }),
-        ).toBeVisible();
-        await page.getByRole("button", { name: "Review & save" }).click();
+        await expect(page.getByRole("heading", { name: "Changes ready to save" })).toBeVisible();
+        await button(page, "Review & save").click();
         const dialog = page.getByRole("dialog");
         await expect(dialog).toContainText("Save these BAR Settings?");
         await dialog.getByRole("button", { name: "Save BAR Settings" }).click();
-        await expect(
-                page.getByText("BAR Settings saved", {
-                        exact: true,
-                }),
-        ).toBeVisible();
+        await expect(page.getByText("BAR Settings saved", { exact: true })).toBeVisible();
         await expect(page.getByText(/UEFI variable/)).toHaveCount(0);
-        await page.getByText("BAR Settings saved", { exact: true }).scrollIntoViewIfNeeded();
-        expect(await noHorizontalOverflow(page)).toBe(true);
-        await page.screenshot({
-                path: `${evidence}/english-settings-save-receipt-1180x760.png`,
-        });
-
-        await install.click();
-        await page.getByRole("button", { name: "Refresh system" }).click();
-        await expect(install).toHaveAttribute("aria-current", "page");
-        await expect(page.getByTestId("bar-settings-workspace")).toHaveCount(0);
+        await button(page, "Home").click();
+        await expect(page.getByRole("heading", { name: "Resizable BAR is on" })).toBeVisible();
 });
 
-test("mixed apertures open BAR Settings and stay usable at the minimum window in Korean", async ({
-        page,
-}) => {
-        await page.addInitScript(() =>
-                sessionStorage.setItem("nvstraps-preview-rebar-state", "mixed"),
-        );
+test("mixed apertures lead to BAR settings and stay usable at the minimum window in Korean", async ({ page }) => {
         await page.setViewportSize({ width: 900, height: 760 });
-        await page.goto("/");
-        await page.getByRole("navigation").getByRole("button", { name: (await page.evaluate(() => sessionStorage.getItem("nvstraps-preview-rebar-state"))) === "not-observed" ? "Install firmware" : "BAR Settings", exact: true }).click();
-        await page.getByTestId("language-select").selectOption("ko");
-
-        const settings = page.getByRole("button", { name: "BAR 설정", exact: true });
-        await expect(settings).toHaveAttribute("aria-current", "page");
-        await expect(page.getByRole("heading", { name: "저장된 BAR 설정 편집" })).toBeVisible();
-        await expect(page.locator(".rebar-gpu-row")).toHaveCount(2);
-        await expect(page.getByText("GPU마다 Resizable BAR 상태가 다름")).toBeVisible();
-        await captureFromDocumentTop(
-                page,
-                `${evidence}/korean-settings-mixed-top-900x760.png`,
-        );
+        await open(page, "mixed", "ko");
+        await expect(page.getByRole("heading", { name: "일부 GPU만 확장되어 있습니다" })).toBeVisible();
+        await button(page, "BAR 설정 열기").click();
+        await expect(page.getByTestId("bar-page")).toBeVisible();
         await page.getByLabel("대상 PCI BAR 크기").selectOption("10");
-        await expect(
-                page.getByRole("heading", { name: "변경 사항 저장 가능" }),
-        ).toBeVisible();
-        await page.getByRole("button", { name: "검토 후 저장" }).click();
-        await expect(page.getByRole("dialog")).toContainText(
-                "이 BAR 설정을 저장할까요?",
-        );
+        await expect(page.getByRole("heading", { name: "변경 사항 저장 가능" })).toBeVisible();
+        await button(page, "검토 후 저장").click();
+        await expect(page.getByRole("dialog")).toContainText("이 BAR 설정을 저장할까요?");
         await page.getByRole("button", { name: "BAR 설정 저장" }).click();
-        await expect(
-                page.getByText("BAR 설정 저장됨", {
-                        exact: true,
-                }),
-        ).toBeVisible();
-        await page
-                .getByText("BAR 설정 저장됨", { exact: true })
-                .scrollIntoViewIfNeeded();
+        await expect(page.getByText("BAR 설정 저장됨", { exact: true })).toBeVisible();
         expect(await noHorizontalOverflow(page)).toBe(true);
-        expect(await page.evaluate(() => window.__NVSTRAPS_I18N_MISSING__ ?? [])).toEqual([]);
-        await page.screenshot({
-                path: `${evidence}/korean-settings-mixed-900x760.png`,
-        });
+        expect(await missingMessages(page)).toEqual([]);
+        await page.screenshot({ path: `${evidence}/ko-bar-settings-mixed-900.png` });
 });
 
-test("a DXE driver not observed this boot opens Install firmware and keeps configuration editable", async ({
-        page,
-}) => {
-        await page.addInitScript(() =>
-                sessionStorage.setItem(
-                        "nvstraps-preview-rebar-state",
-                        "not-observed",
-                ),
-        );
-        await page.setViewportSize({ width: 900, height: 760 });
-        await page.goto("/");
-        await page.getByRole("navigation").getByRole("button", { name: (await page.evaluate(() => sessionStorage.getItem("nvstraps-preview-rebar-state"))) === "not-observed" ? "Install firmware" : "BAR Settings", exact: true }).click();
-        await page.getByTestId("language-select").selectOption("ko");
-
-        await expect(
-                page.getByRole("button", { name: "펌웨어 설치" }),
-        ).toHaveAttribute("aria-current", "page");
-        await expect(
-                page.getByRole("heading", {
-                        name: "메인보드 BIOS에 NvStraps 드라이버 넣기",
-                }),
-        ).toBeVisible();
-        await expect(page.getByRole("heading", { name: "메인보드 BIOS에 NvStraps 드라이버 넣기" })).toBeVisible();
-
-        const checklist = page.locator(".rail-note.bios-checklist");
-        await expect(checklist).toContainText("플래시 전 BIOS 설정에서");
-        await expect(checklist).toContainText("Above 4G Decoding 켜기");
-        await expect(checklist).toContainText("CSM 끄기");
-        await expect(checklist).toContainText(
-                "Resizable BAR 켜기 (이 보드는 자체 지원이 있음)",
-        );
-
-        const settings = page.getByRole("button", { name: "BAR 설정", exact: true });
-        await expect(settings).toBeEnabled();
-        await settings.click();
-        await expect(settings).toHaveAttribute("aria-current", "page");
-        await expect(page.getByTestId("bar-settings-workspace")).toHaveCount(0);
-        await expect(
-                page.getByRole("heading", {
-                        name: "다시 시작한 뒤 사용할 설정",
-                }),
-        ).toBeVisible();
-        expect(await noHorizontalOverflow(page)).toBe(true);
-        expect(await page.evaluate(() => window.__NVSTRAPS_I18N_MISSING__ ?? [])).toEqual([]);
-        await captureFromDocumentTop(
-                page,
-                `${evidence}/korean-settings-preinstall-900x760.png`,
-        );
+test("expanded Turing evidence without UEFI read access asks for administrator rights instead of inventing a draft", async ({ page }) => {
+        await openBarSettings(page, "expanded-no-access");
+        await expect(page.getByRole("heading", { name: "Load the saved configuration to edit" })).toBeVisible();
+        await expect(page.getByTestId("bar-page").getByRole("button", { name: "Restart as administrator" })).toBeVisible();
+        await expect(page.getByText("Resizable BAR expansion", { exact: true })).toHaveCount(0);
+        await expect(button(page, "Review & save")).toHaveCount(0);
 });
 
-test("expanded Turing evidence opens BAR Settings without inventing an editable draft when UEFI read access is missing", async ({
-        page,
-}) => {
-        await page.addInitScript(() =>
-                sessionStorage.setItem(
-                        "nvstraps-preview-rebar-state",
-                        "expanded-no-access",
-                ),
-        );
-        await page.setViewportSize({ width: 1180, height: 760 });
-        await page.goto("/");
-        await page.getByRole("navigation").getByRole("button", { name: (await page.evaluate(() => sessionStorage.getItem("nvstraps-preview-rebar-state"))) === "not-observed" ? "Install firmware" : "BAR Settings", exact: true }).click();
-
-        const settings = page.getByRole("button", { name: "BAR Settings", exact: true });
-        await expect(settings).toHaveAttribute("aria-current", "page");
-        await expect(
-                page.getByRole("heading", {
-                        name: "Load the saved configuration to edit",
-                }),
-        ).toBeVisible();
-        await expect(
-                page
-                        .getByTestId("bar-settings-workspace")
-                        .getByRole("main")
-                        .getByRole("button", {
-                                name: "Restart as administrator",
-                        }),
-        ).toBeVisible();
-        await expect(
-                page.getByText("Resizable BAR expansion", { exact: true }),
-        ).toHaveCount(0);
-        await expect(page.getByRole("button", { name: "Review & save" })).toHaveCount(0);
-        expect(await noHorizontalOverflow(page)).toBe(true);
-        await captureFromDocumentTop(
-                page,
-                `${evidence}/english-settings-expanded-no-access-1180x760.png`,
-        );
-});
-
-test("settings round-trip through a file: export confirms, import fills a reviewable draft", async ({
-        page,
-}) => {
-        await page.setViewportSize({ width: 1180, height: 760 });
-        await page.goto("/");
-        await page.getByRole("navigation").getByRole("button", { name: (await page.evaluate(() => sessionStorage.getItem("nvstraps-preview-rebar-state"))) === "not-observed" ? "Install firmware" : "BAR Settings", exact: true }).click();
-
+test("settings round-trip through a file: export confirms, import fills a reviewable draft", async ({ page }) => {
+        await openBarSettings(page);
         const fileSection = page.locator(".settings-file");
-        await expect(fileSection).toContainText("Settings file");
-        await fileSection
-                .getByRole("button", { name: "Save to file" })
-                .click();
-        await expect(
-                page.getByText("Settings saved to file", { exact: true }),
-        ).toBeVisible();
-
-        await fileSection
-                .getByRole("button", { name: "Load from file" })
-                .click();
-        await expect(
-                page.getByText("Settings loaded from file", { exact: true }),
-        ).toBeVisible();
-        await expect(
-                page.getByText("Review the loaded settings, then save."),
-        ).toBeVisible();
+        await fileSection.getByRole("button", { name: "Save to file" }).click();
+        await expect(page.getByText("Settings saved to file", { exact: true })).toBeVisible();
+        await fileSection.getByRole("button", { name: "Load from file" }).click();
+        await expect(page.getByText("Settings loaded from file", { exact: true })).toBeVisible();
         await expect(page.getByLabel("Target PCI BAR size")).toHaveValue("10");
-        await expect(
-                page.getByRole("heading", { name: "Changes ready to save" }),
-        ).toBeVisible();
-        await expect(
-                page.getByRole("button", { name: "Review & save" }),
-        ).toBeEnabled();
-
-        await page.getByTestId("language-select").selectOption("ko");
+        await expect(button(page, "Review & save")).toBeEnabled();
+        await chooseLanguage(page, "한국어");
         await expect(fileSection).toContainText("설정 파일");
-        await expect(
-                fileSection.getByRole("button", { name: "파일에서 불러오기" }),
-        ).toBeVisible();
-        expect(
-                await page.evaluate(() => window.__NVSTRAPS_I18N_MISSING__ ?? []),
-        ).toEqual([]);
+        await expect(page.getByLabel("대상 PCI BAR 크기")).toHaveValue("10");
+        expect(await missingMessages(page)).toEqual([]);
 });
 
-test("a safety-cleared driver explains why it is off and what to do next", async ({
-        page,
-}) => {
-        await page.addInitScript(() =>
-                sessionStorage.setItem(
-                        "nvstraps-preview-rebar-state",
-                        "driver-cleared",
-                ),
-        );
-        await page.setViewportSize({ width: 1180, height: 760 });
-        await page.goto("/");
-        await page.getByRole("navigation").getByRole("button", { name: (await page.evaluate(() => sessionStorage.getItem("nvstraps-preview-rebar-state"))) === "not-observed" ? "Install firmware" : "BAR Settings", exact: true }).click();
-
-        await expect(
-                page.getByText(
-                        "The driver switched itself off after a BIOS setup change or CMOS reset. Check your BIOS settings, then turn expansion back on and save.",
-                ),
-        ).toBeVisible();
-
-        await page.getByTestId("language-select").selectOption("ko");
-        await expect(
-                page.getByText(
-                        "BIOS 설정 변경이나 CMOS 리셋 때문에 드라이버가 스스로 꺼졌습니다. BIOS 설정을 확인한 뒤 확장을 다시 켜고 저장하세요.",
-                ),
-        ).toBeVisible();
-        expect(
-                await page.evaluate(() => window.__NVSTRAPS_I18N_MISSING__ ?? []),
-        ).toEqual([]);
+test("expansion turned off after a BIOS change explains what to do next", async ({ page }) => {
+        await open(page, "driver-cleared");
+        await expect(page.getByRole("heading", { name: "NvStrapsReBar is running, but expansion is off" })).toBeVisible();
+        await expect(page.getByText(/Changing BIOS settings or resetting CMOS turns expansion off/)).toBeVisible();
+        await button(page, "Open BAR settings").click();
+        await expect(page.getByText("NvStrapsReBar turned expansion off after a BIOS setup change or CMOS reset. Check your BIOS settings, then turn expansion back on and save.")).toBeVisible();
 });
 
-test("Settings presents a typed stale-configuration failure without false success", async ({
-        page,
-}) => {
-        await page.addInitScript(() =>
-                sessionStorage.setItem(
-                        "nvstraps-preview-bar-settings-error",
-                        "stale_configuration",
-                ),
-        );
-        await page.goto("/");
-        await page.getByRole("navigation").getByRole("button", { name: (await page.evaluate(() => sessionStorage.getItem("nvstraps-preview-rebar-state"))) === "not-observed" ? "Install firmware" : "BAR Settings", exact: true }).click();
+test("a stale configuration is a typed failure without false success", async ({ page }) => {
+        await page.addInitScript(() => sessionStorage.setItem("nvstraps-preview-bar-settings-error", "stale_configuration"));
+        await openBarSettings(page);
         await page.getByLabel("Target PCI BAR size").selectOption("10");
-        await page.getByRole("button", { name: "Review & save" }).click();
+        await button(page, "Review & save").click();
         await page.getByRole("button", { name: "Save BAR Settings" }).click();
-
-        await expect(page.getByRole("alert")).toContainText(
-                "The saved BAR configuration changed. Refresh the system before applying this draft.",
-        );
-        await expect(
-                page.getByText("BAR Settings saved", {
-                        exact: true,
-                }),
-        ).toHaveCount(0);
+        await expect(page.getByRole("alert")).toContainText("The saved BAR configuration changed. Refresh the system before applying this draft.");
+        await expect(page.getByText("BAR Settings saved", { exact: true })).toHaveCount(0);
 });

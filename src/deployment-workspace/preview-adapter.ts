@@ -18,6 +18,12 @@ const cursorKey = (profileId: string) =>
         `nvstraps-preview-fixture-cursor:${profileId}`;
 const savedConfigKey = (profileId: string) =>
         `nvstraps-preview-config-time:${profileId}`;
+const restartedKey = (profileId: string) =>
+        `nvstraps-preview-config-restarted:${profileId}`;
+/** Same key the preview system snapshot reads; a simulated restart changes what it reports. */
+const PREVIEW_SYSTEM_STATE_KEY = "nvstraps-preview-rebar-state";
+const PREVIEW_BOOTED_AT_KEY = "nvstraps-preview-booted-at";
+const simulateRestart = () => sessionStorage.setItem(PREVIEW_BOOTED_AT_KEY, String(Date.now() + 1));
 const firmware: FirmwareFingerprint = {
         fileName: "E7D25IMS.1N0",
         byteLength: 33554432,
@@ -860,6 +866,9 @@ export const previewDeploymentAdapter: DeploymentAdapter = {
         rebootToFirmwareSetup: async (preview, confirmed) => {
                 if (!confirmed)
                         throw new Error("Saved-work confirmation is required.");
+                // After the simulated BIOS install, the next snapshot sees the driver running.
+                sessionStorage.setItem(PREVIEW_SYSTEM_STATE_KEY, "driver-cleared");
+                simulateRestart();
                 return { profileId: preview.profileId, accepted: true };
         },
         previewManualDeploymentStep: async (profileId) => {
@@ -979,6 +988,7 @@ export const previewDeploymentAdapter: DeploymentAdapter = {
                         savedConfigKey(profileId),
                         savedAtUnixMs,
                 );
+                sessionStorage.removeItem(restartedKey(profileId));
                 saveCursor(profileId, "configured");
                 const next = planSnapshot(profile);
                 const receiptPlan = clone(next);
@@ -1016,6 +1026,10 @@ export const previewDeploymentAdapter: DeploymentAdapter = {
                         throw new Error(
                                 "The configuration reboot preview is stale.",
                         );
+                // The simulated restart applies the saved size.
+                sessionStorage.setItem(restartedKey(preview.profileId), "1");
+                sessionStorage.setItem(PREVIEW_SYSTEM_STATE_KEY, "expanded");
+                simulateRestart();
                 return {
                         profileId: preview.profileId,
                         accepted: true,
@@ -1027,6 +1041,10 @@ export const previewDeploymentAdapter: DeploymentAdapter = {
                 const saved = sessionStorage.getItem(
                         savedConfigKey(profileId),
                 )!;
+                if (!sessionStorage.getItem(restartedKey(profileId)))
+                        throw new Error(
+                                "Windows has not restarted since the configuration was saved.",
+                        );
                 const bootedAtUnixMs = String(Number(saved) + 1000);
                 saveCursor(profileId, "returned");
                 return {

@@ -42,6 +42,8 @@ export class DeploymentSessionActions {
                                 return this.firmwareDeployment.chooseDestination();
                         case "exportPackage":
                                 return this.firmwareDeployment.exportPackage();
+                        case "saveToUsb":
+                                return this.firmwareDeployment.saveToDestination();
                         case "previewFirmwareReboot":
                                 return this.firmwareDeployment.previewFirmwareReboot();
                         case "requestFirmwareReboot":
@@ -50,6 +52,17 @@ export class DeploymentSessionActions {
                                 return this.verification.openManual();
                         case "confirmManual":
                                 return this.verification.confirmManual();
+                        case "recordFirmwareHandoff":
+                                return this.verification.recordFirmwareHandoff(
+                                        intent.includeSetup,
+                                        intent.planRevision,
+                                );
+                        case "autoCheck":
+                                return this.verification.autoCheck();
+                        case "retryRecommendation":
+                                return this.runtime.loadRecommendation();
+                        case "saveRecommendedConfig":
+                                return this.verification.saveRecommendedConfig();
                         case "verifyDriver":
                                 return this.verification.verifyDriver();
                         case "saveGuardedConfig":
@@ -68,6 +81,8 @@ export class DeploymentSessionActions {
                                 return this.profileInspector.backup();
                         case "launchInspector":
                                 return this.profileInspector.launch();
+                        case "openInspector":
+                                return this.profileInspector.installAndLaunch();
                         default:
                                 return;
                 }
