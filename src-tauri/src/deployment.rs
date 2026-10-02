@@ -9,7 +9,8 @@ use nvstraps_deploy::{
     ArtifactKind, BoardPath, DeploymentPackageReceipt, DeploymentPlan, DeploymentStore,
     DeploymentWorkflow, FirmwareFingerprint, FirmwareInstallRoute, FirmwareTargetPolicy,
     LegacyPatchProfile, MachineIdentity, MachineProfile, ProfileDifference, ProfileError,
-    ProfileMatch, ProvisionedDeployment, RecoveryCapability, Sha256Digest, StepId, StoredArtifact,
+    ProfileMatch, ProvisionedDeployment, RecoveryCapability, RecoveryMethod, Sha256Digest, StepId,
+    StoredArtifact,
 };
 #[cfg(test)]
 use nvstraps_legacy::LegacyPatchCatalogView;
@@ -299,6 +300,12 @@ fn export_package_command(
                         .into(),
                 )
             })?;
+    // Only a documented USB flashback route on an exact catalog board gets a
+    // vendor-named recovery copy; every other route keeps the original inside
+    // the package only.
+    let recovery_shortcut = (exact.profile.recovery.method == RecoveryMethod::UsbFlashback)
+        .then(|| crate::hardware_support::flashback_recovery_file_name(&exact.profile.identity))
+        .flatten();
     exact
         .store
         .export_deployment_package(
@@ -306,6 +313,7 @@ fn export_package_command(
             &exact.plan,
             &injection_receipt_sha256,
             request.destination_root,
+            recovery_shortcut,
         )
         .map_err(BackendError::from)
 }
@@ -1751,9 +1759,10 @@ mod tests {
                 &prepared.plan,
                 &injection_receipt_sha256,
                 &destination,
+                None,
             )
             .unwrap();
-        assert_eq!(package.manifest.files.len(), 7);
+        assert_eq!(package.manifest.files.len(), 8);
         assert!(
             package
                 .package_path

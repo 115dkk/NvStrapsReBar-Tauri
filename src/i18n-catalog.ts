@@ -280,6 +280,8 @@ export const messages = {
         "ui.chooseFolder": { en: "Choose folder", ko: "폴더 선택" },
         "ui.exportPackage": { en: "Export package", ko: "패키지 내보내기" },
         "ui.packageExportedManualHandoffNext": { en: "Files exported — install the BIOS image next", ko: "파일 내보내기 완료 · 다음은 BIOS 이미지 설치" },
+        "ui.recoveryCopySavedAtDriveTop": { en: "Also saved the original BIOS for recovery at {path}.", ko: "복구용 원본 BIOS를 {path}에도 저장했습니다." },
+        "ui.recoveryCopySavedMoveToDriveTop": { en: "Also saved the original BIOS for recovery at {path}. Move {fileName} to the top of the USB drive before you need it.", ko: "복구용 원본 BIOS를 {path}에도 저장했습니다. 복구할 때 쓰려면 {fileName} 파일을 USB 맨 위로 옮기세요." },
         "ui.currentManualTask": { en: "Current manual task", ko: "지금 할 작업" },
         "ui.doThisNow": { en: "DO THIS NOW", ko: "지금 진행" },
         "ui.vendorFlashTaskTitle": { en: "Flash the prepared firmware", ko: "준비한 펌웨어 플래시" },
@@ -503,6 +505,8 @@ export type MessageParameters = {
         "ui.completionRecordedAt": { time: string };
         "ui.driverRawAndBootStepsRecorded": { raw: string };
         "ui.profileInspectorVersionInstalled": { version: string };
+        "ui.recoveryCopySavedAtDriveTop": { path: string; fileName: string };
+        "ui.recoveryCopySavedMoveToDriveTop": { path: string; fileName: string };
         "ui.fallbackRuleFact": { deviceId: string; selector: number | string };
         "ui.patchConfigurationState": { status: string };
         "ui.configurationSaved": { bytes: number; time: string };

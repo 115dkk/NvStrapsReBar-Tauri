@@ -832,6 +832,17 @@ export const previewDeploymentAdapter: DeploymentAdapter = {
                 },
                 manifestSha256: "b6".repeat(32),
                 checksumsSha256: "c7".repeat(32),
+                recoveryShortcut:
+                        loadProfiles().find((profile) => profile.profileId === profileId)
+                                ?.recovery.method === "usbFlashback"
+                                ? {
+                                          path: `${destinationRoot.replace(/\\$/, "")}\\MSI.ROM`,
+                                          fileName: "MSI.ROM",
+                                          byteLength: firmware.byteLength,
+                                          sha256: firmware.sha256,
+                                          atVolumeRoot: /^[A-Za-z]:\\?$/.test(destinationRoot),
+                                  }
+                                : null,
         }),
         previewFirmwareSetupReboot: async (profileId) => ({
                 profileId,

@@ -188,6 +188,19 @@ export const ArtifactJourney = () => {
                                                 <div className="artifact-receipt" role="status">
                                                         <strong>{t("ui.packageExportedManualHandoffNext")}</strong>
                                                         <span className="mono-wrap">{packageReceipt.packagePath}</span>
+                                                        {packageReceipt.recoveryShortcut && (
+                                                                <small>
+                                                                        {t(
+                                                                                packageReceipt.recoveryShortcut.atVolumeRoot
+                                                                                        ? "ui.recoveryCopySavedAtDriveTop"
+                                                                                        : "ui.recoveryCopySavedMoveToDriveTop",
+                                                                                {
+                                                                                        path: packageReceipt.recoveryShortcut.path,
+                                                                                        fileName: packageReceipt.recoveryShortcut.fileName,
+                                                                                },
+                                                                        )}
+                                                                </small>
+                                                        )}
                                                 </div>
                                         )}
                                 </section>
