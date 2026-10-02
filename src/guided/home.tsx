@@ -58,9 +58,9 @@ const HomeRows = () => {
 
 const HomeFrame = ({ children, bar }: { children: ReactNode; bar?: ReactNode }) => (
         <>
-                <div className="nv-home" data-testid="home">
+                <main className="nv-home" data-testid="home">
                         <div className="nv-task-body" style={{ paddingTop: 32, gap: 20 }}>{children}</div>
-                </div>
+                </main>
                 {bar}
         </>
 );
@@ -80,7 +80,7 @@ export const Home = ({ titleRef }: { titleRef: Ref<HTMLHeadingElement> }) => {
         const disabled = busy || Boolean(view.busyAction);
 
         if (state === "continue") {
-                const stage = view.plan ? stageFor(installScreen(view, snap, { startNew: false, catalogBoard: true, question: 1, claimedInstalled: false, savingAgain: false, showGuide: false, exported: true })) : 1;
+                const stage = view.plan ? stageFor(installScreen(view, snap, { startNew: false, catalogBoard: true, question: 1, claimedInstalled: false, savingAgain: false, showGuide: false, exported: true, restartedSinceSave: false })) : 1;
                 return (
                         <HomeFrame bar={<ActionBar center hint={t("ui.homeContinueHint")} primary={{ label: t("ui.continueSetup"), icon: "arrow", onClick: () => go("install"), disabled }} />}>
                                 {errorNotice}

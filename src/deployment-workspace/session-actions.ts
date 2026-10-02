@@ -55,9 +55,12 @@ export class DeploymentSessionActions {
                         case "recordFirmwareHandoff":
                                 return this.verification.recordFirmwareHandoff(
                                         intent.includeSetup,
+                                        intent.planRevision,
                                 );
                         case "autoCheck":
                                 return this.verification.autoCheck();
+                        case "retryRecommendation":
+                                return this.runtime.loadRecommendation();
                         case "saveRecommendedConfig":
                                 return this.verification.saveRecommendedConfig();
                         case "verifyDriver":

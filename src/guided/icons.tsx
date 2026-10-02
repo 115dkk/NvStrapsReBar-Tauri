@@ -21,6 +21,7 @@ const paths = {
         clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
         globe: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" /></>,
         power: <><path d="M12 3v8" /><path d="M6.3 7.3a8 8 0 1 0 11.4 0" /></>,
+        home: <><path d="M4 11l8-7 8 7" /><path d="M6 9.5V20h12V9.5" /></>,
         folder: <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />,
         game: <><rect x="2" y="7" width="20" height="11" rx="5" /><path d="M7 11v3M5.5 12.5h3M15 12h.01M17.5 14h.01" /></>,
         key: <><circle cx="8" cy="15" r="4" /><path d="M11 12l9-9M17 6l3 3" /></>,

@@ -16,7 +16,7 @@ for (const { state, title, chip, action } of cases) {
                 await expect(page.getByRole("heading", { level: 1 })).toHaveText(title);
                 await expect(page.getByRole("banner").getByRole("status")).toHaveText(chip);
                 if (action) await expect(button(page, action)).toBeVisible();
-                await expect(page.getByRole("navigation", { name: "Setup progress" })).toHaveCount(0);
+                await expect(page.getByRole("complementary", { name: "Setup progress" })).toHaveCount(0);
                 expect(await noHorizontalOverflow(page)).toBe(true);
                 await page.screenshot({ path: `${evidence}/en-home-${state}-1180.png` });
         });

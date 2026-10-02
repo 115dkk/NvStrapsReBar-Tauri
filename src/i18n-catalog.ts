@@ -706,6 +706,7 @@ export const messages = {
         "ui.saveHint": { en: "The app saves an NvStrapsReBar folder to the drive you choose.", ko: "고른 USB에 NvStrapsReBar 폴더를 저장합니다." },
         "ui.saveHintWithRecovery": { en: "The app saves an NvStrapsReBar folder and MSI.ROM to the drive you choose.", ko: "고른 USB에 NvStrapsReBar 폴더와 MSI.ROM을 저장합니다." },
         "ui.saveToUsb": { en: "Save to USB", ko: "USB에 저장" },
+        "ui.packageAlreadyExists": { en: "This location already has the NvStrapsReBar folder for this BIOS file. Choose another drive or folder, or delete that folder first.", ko: "이 위치에 같은 BIOS 파일의 NvStrapsReBar 폴더가 이미 있습니다. 다른 드라이브나 폴더를 고르거나, 그 폴더를 지운 뒤 다시 저장하세요." },
         "ui.saveFileMade": { en: "The install BIOS file is ready", ko: "설치용 BIOS 파일이 준비됐습니다" },
         "ui.saveFileMadeDetail": { en: "NvStrapsReBar was added to {file} and the file passed the check.", ko: "{file}에 NvStrapsReBar를 넣고 검사를 통과했습니다." },
         "ui.saveFilesTitle": { en: "Files saved to the USB drive", ko: "USB에 함께 저장하는 파일" },
@@ -751,7 +752,7 @@ export const messages = {
         "ui.cautionVendorRecovery": { en: "Follow the maker's recovery steps with the original in the recovery folder.", ko: "recovery 폴더의 원본으로 제조사 복구 순서를 따르세요." },
         "ui.cautionSpi": { en: "Write the original from the recovery folder to the BIOS chip with the SPI programmer.", ko: "SPI 프로그래머로 recovery 폴더의 원본을 BIOS 칩에 쓰세요." },
         "ui.returnTitle": { en: "Record what you did in BIOS setup", ko: "BIOS 화면에서 한 일을 기록하세요" },
-        "ui.returnHint": { en: "After recording, the app continues to step 3.", ko: "기록하면 3단계로 넘어갑니다." },
+        "ui.returnHint": { en: "After recording, the next step opens.", ko: "기록하면 다음 단계로 넘어갑니다." },
         "ui.observedThisBoot": { en: "Checked in this boot", ko: "이번 부팅 확인 결과" },
         "ui.driverRanThisBoot": { en: "NvStrapsReBar in the BIOS ran", ko: "BIOS에 넣은 NvStrapsReBar가 실행됨" },
         "ui.returnRecordBoth": { en: "You confirm that you did these two things", ko: "아래 두 가지를 마쳤다고 기록합니다" },
@@ -783,6 +784,8 @@ export const messages = {
         "ui.adminNeededLead": { en: "Reopen the app as administrator to check whether NvStrapsReBar in the BIOS ran.", ko: "관리자 권한으로 다시 열면 BIOS의 NvStrapsReBar 실행 여부를 확인합니다." },
         "ui.statusUnreadableTitle": { en: "Check the installation again", ko: "설치 결과를 다시 확인하세요" },
         "ui.statusUnreadableLead": { en: "The NvStrapsReBar status for this boot could not be read. Read this PC again.", ko: "이번 부팅의 NvStrapsReBar 실행 상태를 읽지 못했습니다. PC 상태를 다시 읽으세요." },
+        "ui.checkFailedLead": { en: "NvStrapsReBar ran in this boot, but the check was not recorded.", ko: "이번 부팅에서 NvStrapsReBar가 실행됐지만 확인 결과가 기록되지 않았습니다." },
+        "ui.checkFailedHint": { en: "If the graphics card or motherboard changed, compare this PC with the record.", ko: "그래픽 카드나 메인보드를 바꿨다면 이 PC를 기록과 비교하세요." },
         "ui.noNeedToReflash": { en: "No BIOS reinstall needed", ko: "BIOS 재설치 필요 없음" },
         "ui.noNeedToReflashDetail": { en: "Reopen the app as administrator to check.", ko: "관리자 권한으로 다시 열어 확인하세요." },
         "ui.noNeedToReflashRefresh": { en: "Read this PC again to check.", ko: "PC 상태를 다시 읽어 확인하세요." },
@@ -798,11 +801,13 @@ export const messages = {
         "ui.driverRunConfirmedDetail": { en: "The BIOS installation and settings are recorded.", ko: "BIOS 설치와 설정을 기록했습니다." },
         "ui.turnOnSizesTitle": { en: "These sizes are used", ko: "이 크기로 켭니다" },
         "ui.turnOnRegistryRule": { en: "These models are known to the app, so the recommended size is used. You can change it later in BAR settings.", ko: "앱에 등록된 모델이라 권장 크기를 씁니다. 크기는 나중에 BAR 설정에서 바꿀 수 있습니다." },
-        "ui.turnOnFallbackRule": { en: "GPUs the app does not list get 2 GiB at their current slot. You can change it later in BAR settings.", ko: "앱 목록에 없는 GPU는 지금 슬롯에서 2 GiB로 켭니다. 크기는 나중에 BAR 설정에서 바꿀 수 있습니다." },
+        "ui.turnOnFallbackRule": { en: "GPUs the app does not list are set at their current slot with the size above. You can change it later in BAR settings.", ko: "앱 목록에 없는 GPU는 지금 슬롯에 위 크기로 설정합니다. 크기는 나중에 BAR 설정에서 바꿀 수 있습니다." },
+        "ui.gpuAtPciLocation": { en: "GPU at PCI {location}", ko: "PCI {location}의 GPU" },
         "ui.turnOnAppliesAfterRestart": { en: "Saved settings apply after a restart. You can turn them off later in BAR settings.", ko: "저장한 설정은 다시 시작하면 적용됩니다. 나중에 BAR 설정에서 끌 수도 있습니다." },
         "ui.saveTheseSettings": { en: "Save these settings", ko: "이 설정으로 저장" },
         "ui.loadingRecommendation": { en: "Reading the recommended settings", ko: "권장 설정을 읽는 중" },
         "ui.recommendationFailed": { en: "Read the recommended settings again", ko: "권장 설정을 다시 읽으세요" },
+        "ui.readRecommendationAgain": { en: "Read again", ko: "다시 읽기" },
         "ui.restartTitle": { en: "Restart to turn it on", ko: "다시 시작하면 켜집니다" },
         "ui.settingsSavedTitle": { en: "Settings saved", ko: "설정 저장됨" },
         "ui.settingsSavedDetail": { en: "The app saved the settings and read them back.", ko: "설정을 저장하고 다시 읽어 확인했습니다." },
@@ -861,7 +866,7 @@ export const messages = {
         "ui.restartDialogBiosTitle": { en: "Restart into BIOS setup now", ko: "지금 BIOS 화면으로 다시 시작" },
         "ui.restartDialogTitle": { en: "Restart now", ko: "지금 다시 시작" },
         "ui.restartDialogSaveWork": { en: "Windows restarts right away. Save your work in other open programs first.", ko: "Windows가 바로 다시 시작됩니다. 열려 있는 프로그램의 작업을 저장한 뒤 누르세요." },
-        "ui.restartDialogBiosDetail": { en: "After installing, return to Windows and open this app again. The installation is checked automatically.", ko: "설치를 마치고 Windows로 돌아오면 이 앱을 다시 여세요. 설치 결과를 자동으로 확인합니다." },
+        "ui.restartDialogBiosDetail": { en: "When you are back in Windows after BIOS setup, open this app again. The result is checked automatically.", ko: "BIOS 화면에서 작업을 마치고 Windows로 돌아오면 이 앱을 다시 여세요. 결과를 자동으로 확인합니다." },
         "ui.restartDialogConfigurationDetail": { en: "When Windows starts, open this app again. The new size is checked automatically.", ko: "Windows가 켜지면 이 앱을 다시 여세요. 켜진 크기를 자동으로 확인합니다." },
 } as const;
 
@@ -898,13 +903,15 @@ export type MessageParameters = {
                 requiredBytes: number;
         };
         "ui.configureOperationFailed": { detail: string };
-        "ui.saveReceiptSummary": { bytes: number; state: string };        "ui.chipOnWithSize": { size: string };
+        "ui.saveReceiptSummary": { bytes: number; state: string };
+        "ui.chipOnWithSize": { size: string };
         "ui.chipOffWithSize": { size: string };
         "ui.nowWithGpu": { gpu: string };
         "ui.compareNowAndOn": { size: string };
         "ui.compareBeforeAndNow": { size: string };
         "ui.stageLabelPrepareQuestion": { number: number | string };
         "ui.homeEyebrowGpu": { gpu: string };
+        "ui.gpuAtPciLocation": { location: string };
         "ui.homeStartLead": { size: string };
         "ui.homeContinueLead": { stage: string };
         "ui.homeMetaDriver": { version: string };

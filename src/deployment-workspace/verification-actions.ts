@@ -70,13 +70,18 @@ export class VerificationActions {
         /**
          * Records the vendor flash and, when asked, the firmware setup values
          * from one explicit confirmation. Each step still loads its own
-         * preview and confirmation token before it is recorded.
+         * preview and confirmation token before it is recorded. The
+         * confirmation is bound to the plan revision the user reviewed.
          */
-        recordFirmwareHandoff(includeSetup: boolean) {
+        recordFirmwareHandoff(includeSetup: boolean, planRevision: number) {
                 const targets: StepId[] = includeSetup
                         ? ["flashWithVendorRoute", "configureFirmwareSetup"]
                         : ["flashWithVendorRoute"];
                 return this.runtime.run("manual-confirm", async (tx) => {
+                        if (this.runtime.state().plan?.revision !== planRevision)
+                                throw new Error(
+                                        "The installation record changed after it was shown. Review the screen again.",
+                                );
                         let recorded = 0;
                         for (const stepId of targets) {
                                 const before = this.runtime.state().plan!;

@@ -6,7 +6,7 @@ import type {
         DeploymentWorkspaceState,
 } from "./session-contract";
 
-const MSI_MANUAL =
+export const MSI_MANUAL =
         "https://download.msi.com/archive/mnu_exe/mb/PROZ690-AWIFIDDR4_PROZ690-ADDR4100x150.pdf";
 
 const legacyReset = {
@@ -51,6 +51,7 @@ export const createInitialDeploymentState = (
                 ...legacyReset,
                 profiles: [],
                 profilesLoaded: false,
+                profileCreations: 0,
                 selectedProfileId: "",
                 plan: null,
                 preflightExact: null,

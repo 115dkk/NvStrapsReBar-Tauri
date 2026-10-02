@@ -3,6 +3,7 @@ import type { FirmwareInstallMethod, RecoveryMethod } from "../deployment-worksp
 import { isBootIndependentRecoveryMethod } from "../deployment-workspace/machine-profile-draft";
 import { catalogLabelIds, legacyRuleBlockedReasonId, legacyRuleDescriptionId, riskLabelIds } from "../deployment-workspace/messages";
 import { legacyRuleKey } from "../deployment-workspace/session-projection";
+import { MSI_MANUAL } from "../deployment-workspace/session-state";
 import { messages, type StaticMessageId } from "../i18n-catalog";
 import { translateMessage } from "../i18n";
 import { Icon } from "./icons";
@@ -214,11 +215,24 @@ const AdvancedPolicy = ({ ctx }: { ctx: InstallContext }) => {
         );
 };
 
-/** Fills empty handoff notes from the chosen methods, confirms the route, then creates the record. */
+/**
+ * Records the routes the screen showed, confirms them, then creates the record. The guided
+ * screens do not edit handoff notes, so the notes always follow the methods: the catalog
+ * routes on the Routes screen, otherwise the answered methods. Local intents apply in order
+ * before createProfile reads the session.
+ */
 const confirmAndCreate = (ctx: InstallContext) => {
         const { view, commands } = ctx;
-        if (!view.installNote.trim()) commands.setInstallNote(messages[installMethodIds[view.installMethod].title].en);
-        if (!view.recoveryNote.trim()) commands.setRecoveryNote(messages[recoveryMethodIds[view.recoveryMethod].title].en);
+        if (ctx.routing.catalogBoard) {
+                commands.setInstallMethod("firmwareSetupUtility");
+                commands.setRecoveryMethod("usbFlashback");
+                commands.setInstructionsUrl(MSI_MANUAL);
+                commands.setInstallNote(messages["ui.useMFlashToSelectTheExportedVendorFormatImage"].en);
+                commands.setRecoveryNote(messages["ui.msiFlashBiosButtonRecoveryMsiRomAtUsbRootRearFlashBiosPortPhysicalButton"].en);
+        } else {
+                commands.setInstallNote(messages[installMethodIds[view.installMethod].title].en);
+                commands.setRecoveryNote(messages[recoveryMethodIds[view.recoveryMethod].title].en);
+        }
         if (!view.displayName.trim()) commands.setDisplayName(ctx.boardName || view.firmware?.fileName || "NvStrapsReBar");
         commands.setRouteConfirmed(true);
         commands.createProfile();

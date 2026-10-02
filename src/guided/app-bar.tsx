@@ -71,6 +71,9 @@ export const AppBar = () => {
                         event.preventDefault();
                         const next = event.key === "ArrowDown" ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
                         items[next]?.focus();
+                } else if (event.key === "Home" || event.key === "End") {
+                        event.preventDefault();
+                        (event.key === "Home" ? items[0] : items.at(-1))?.focus();
                 } else if (event.key === "Tab") {
                         setOpen(false);
                 }
@@ -99,13 +102,14 @@ export const AppBar = () => {
                         </button>
                         {open && (
                                 <div ref={menu} className="nv-menu" role="menu" aria-label={t("ui.menu")} onKeyDown={onMenuKey}>
+                                        {navigation.page !== "home" && <button type="button" role="menuitem" onClick={() => choose(() => navigation.go("home"))}><Icon name="home" />{t("ui.home")}</button>}
                                         <button type="button" role="menuitem" onClick={() => choose(() => void load(true))}><Icon name="restart" />{t("ui.menuRefresh")}</button>
                                         <button type="button" role="menuitem" disabled={!hasRecord} onClick={() => choose(() => navigation.go("record"))}><Icon name="clock" />{t("ui.menuInstallRecord")}</button>
                                         <button type="button" role="menuitem" onClick={() => choose(navigation.startNewPreparation)}><Icon name="file" />{t("ui.menuNewPreparation")}</button>
                                         <button type="button" role="menuitem" disabled={view.profiles.length < 2} onClick={() => choose(() => navigation.go("profiles"))}><Icon name="folder" />{t("ui.menuOpenPreparation")}</button>
                                         <hr />
-                                        <p className="nv-menu-label" id="menu-language">{t("ui.language")}</p>
-                                        <div role="group" aria-labelledby="menu-language">
+                                        <div role="group" aria-label={t("ui.language")}>
+                                                <div className="nv-menu-label" aria-hidden="true">{t("ui.language")}</div>
                                                 {([["en", "English"], ["ko", "한국어"]] as const).map(([value, label]) => (
                                                         <button key={value} type="button" role="menuitemradio" aria-checked={locale === value} lang={value} onClick={() => choose(() => setLocale(value))}>
                                                                 <Icon name={locale === value ? "check" : "globe"} />{label}

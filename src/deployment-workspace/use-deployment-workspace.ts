@@ -9,13 +9,22 @@ import type {
         RecoveryMethod,
 } from "./contract";
 import {
+        recallSelectedProfile,
+        rememberSelectedProfile,
+} from "./profile-memory";
+import {
         createDeploymentWorkspaceSession,
         type DeploymentWorkspaceIntent,
 } from "./session";
 
 export const useDeploymentWorkspace = (snapshot: SystemSnapshot) => {
         const session = useMemo(
-                () => createDeploymentWorkspaceSession(snapshot),
+                () =>
+                        createDeploymentWorkspaceSession(
+                                snapshot,
+                                undefined,
+                                recallSelectedProfile(),
+                        ),
                 [snapshot],
         );
         useEffect(() => () => session.dispose(), [session]);
@@ -24,8 +33,16 @@ export const useDeploymentWorkspace = (snapshot: SystemSnapshot) => {
                 session.view,
                 session.view,
         );
+        useEffect(() => {
+                rememberSelectedProfile(view.selectedProfileId);
+        }, [view.selectedProfileId]);
         const rebootDialog = useRef<HTMLDivElement>(null);
         const rebootButton = useRef<HTMLButtonElement>(null);
+        // The control that opened a dialog; the dialog's own autofocus runs before the effect below.
+        const opener = useRef<HTMLElement | null>(null);
+        const rememberOpener = () => {
+                opener.current = document.activeElement as HTMLElement | null;
+        };
 
         useEffect(() => {
                 if (
@@ -70,7 +87,13 @@ export const useDeploymentWorkspace = (snapshot: SystemSnapshot) => {
                 addEventListener("keydown", keydown);
                 return () => {
                         removeEventListener("keydown", keydown);
-                        (rebootButton.current ?? previous)?.focus();
+                        const target = [
+                                opener.current,
+                                rebootButton.current,
+                                previous,
+                        ].find((element) => element?.isConnected);
+                        opener.current = null;
+                        target?.focus();
                 };
         }, [
                 session,
@@ -128,21 +151,37 @@ export const useDeploymentWorkspace = (snapshot: SystemSnapshot) => {
                 prepare: () => send({ type: "prepare" }),
                 chooseDestination: () => send({ type: "chooseDestination" }),
                 exportPackage: () => send({ type: "exportPackage" }),
-                previewReboot: () => send({ type: "previewFirmwareReboot" }),
+                previewReboot: () => {
+                        rememberOpener();
+                        send({ type: "previewFirmwareReboot" });
+                },
                 reboot: () => send({ type: "requestFirmwareReboot" }),
-                openManualConfirmation: () => send({ type: "openManual" }),
+                openManualConfirmation: () => {
+                        rememberOpener();
+                        send({ type: "openManual" });
+                },
                 confirmManual: () => send({ type: "confirmManual" }),
-                recordFirmwareHandoff: (includeSetup: boolean) =>
-                        send({ type: "recordFirmwareHandoff", includeSetup }),
+                recordFirmwareHandoff: (
+                        includeSetup: boolean,
+                        planRevision: number,
+                ) =>
+                        send({
+                                type: "recordFirmwareHandoff",
+                                includeSetup,
+                                planRevision,
+                        }),
                 autoCheck: () => send({ type: "autoCheck" }),
+                retryRecommendation: () => send({ type: "retryRecommendation" }),
                 saveToUsb: () => send({ type: "saveToUsb" }),
                 openInspector: () => send({ type: "openInspector" }),
                 saveRecommendedConfig: () =>
                         send({ type: "saveRecommendedConfig" }),
                 verifyDriver: () => send({ type: "verifyDriver" }),
                 saveGuardedConfig: () => send({ type: "saveGuardedConfig" }),
-                openConfigurationReboot: () =>
-                        send({ type: "openConfigurationReboot" }),
+                openConfigurationReboot: () => {
+                        rememberOpener();
+                        send({ type: "openConfigurationReboot" });
+                },
                 requestConfigurationReboot: () =>
                         send({ type: "requestConfigurationReboot" }),
                 verifyConfigurationBoot: () =>

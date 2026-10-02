@@ -7,7 +7,7 @@ import { stepKindIds, stepStateIds, stepTitleIds } from "../deployment-workspace
 import { translateMessage, useI18n } from "../i18n";
 import { recallExport } from "./export-memory";
 import { Icon } from "./icons";
-import { useGuidedNavigation } from "./navigation";
+import { initialInstallUi, useGuidedNavigation } from "./navigation";
 import { OPTIONAL_FINAL_STEP } from "./routing";
 import { ActionBar, type ActionBarProps, Crumb, Fact, Facts, FileCard, Notice, Result, Step, Steps, TaskHead } from "./ui";
 
@@ -24,13 +24,13 @@ const SubPage = ({ here, title, lead, titleRef, children, bar, wide = false, tes
         const { go } = useGuidedNavigation();
         return (
                 <>
-                        <div className="nv-home" data-testid={testId}>
+                        <main className="nv-home" data-testid={testId}>
                                 <div className={wide ? "nv-task-body wide" : "nv-task-body"} style={{ paddingTop: 32, gap: 24 }}>
                                         <Crumb here={here} onHome={() => go("home")} />
                                         <TaskHead title={title} lead={lead} titleRef={titleRef} />
                                         {children}
                                 </div>
-                        </div>
+                        </main>
                         {bar && <ActionBar center {...bar} />}
                 </>
         );
@@ -46,7 +46,7 @@ export const BarPage = ({ titleRef }: { titleRef: Ref<HTMLHeadingElement> }) => 
                                 {snap.barSettings.settingsAvailable ? (
                                         <BarSettingsWorkspace embedded />
                                 ) : (
-                                        <div className="workspace"><main className="content"><ConfigurationIntro /><AutomaticPolicyPanel /><GpuRulesPanel /><FirmwareBehaviorPanel /><ConfigurationReview savePath="configure" /></main></div>
+                                        <div className="workspace"><div className="content"><ConfigurationIntro /><AutomaticPolicyPanel /><GpuRulesPanel /><FirmwareBehaviorPanel /><ConfigurationReview savePath="configure" /></div></div>
                                 )}
                         </div>
                 </SubPage>
@@ -177,7 +177,7 @@ export const ProfilesPage = ({ titleRef }: { titleRef: Ref<HTMLHeadingElement> }
                                                         disabled={Boolean(view.busyAction)}
                                                         onClick={() => {
                                                                 if (profile.profileId !== view.selectedProfileId) commands.setSelectedProfileId(profile.profileId);
-                                                                setInstallUi({ startNew: false });
+                                                                setInstallUi({ ...initialInstallUi });
                                                                 go("install");
                                                         }}
                                                 >

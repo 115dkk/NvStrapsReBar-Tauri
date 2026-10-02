@@ -38,9 +38,9 @@ export const GuidedApp = ({ snapshot }: { snapshot: SystemSnapshot }) => {
         const startNewPreparation = useCallback(() => {
                 commands.setFirmwarePath("");
                 commands.setRouteConfirmed(false);
-                setInstallUiState({ ...initialInstallUi, startNew: true, startNewFrom: view.selectedProfileId });
+                setInstallUiState({ ...initialInstallUi, startNew: true, startNewCreations: view.profileCreations });
                 setChosenPage("install");
-        }, [commands, view.selectedProfileId]);
+        }, [commands, view.profileCreations]);
         const navigation = useMemo<GuidedNavigation>(
                 () => ({ page, go, installUi, setInstallUi, startNewPreparation }),
                 [page, go, installUi, setInstallUi, startNewPreparation],
@@ -50,6 +50,14 @@ export const GuidedApp = ({ snapshot }: { snapshot: SystemSnapshot }) => {
         useEffect(() => {
                 requestAnimationFrame(() => titleRef.current?.focus({ preventScroll: true }));
         }, [page, screen]);
+        // A refresh can remove the focused control without changing the screen; keep focus on the page.
+        useEffect(() => {
+                requestAnimationFrame(() => {
+                        if (document.activeElement === document.body) titleRef.current?.focus({ preventScroll: true });
+                });
+        }, [snapshot, view.profilesLoaded]);
+        // Until the records are read, the first page is unknown; a record switch also waits.
+        const loading = !view.profilesLoaded && (chosenPage === null || page === "install");
         const onScreen = useCallback((next: InstallScreen) => setScreen(next), []);
 
         return (
@@ -58,7 +66,7 @@ export const GuidedApp = ({ snapshot }: { snapshot: SystemSnapshot }) => {
                                 <div className="nv-app nv-root" lang={locale} data-page={page}>
                                         {previewMode && <div className="nv-preview-band" role="status">{t("ui.previewDataBrowserFixture")}</div>}
                                         <AppBar />
-                                        {page === "install" && !view.profilesLoaded ? <div className="nv-loading" role="status"><span className="nv-spinner" aria-hidden="true" /></div>
+                                        {loading ? <div className="nv-loading" role="status"><span className="nv-spinner" aria-hidden="true" /><span className="nv-visually-hidden">{t("ui.chipChecking")}</span></div>
                                                 : page === "install" ? <InstallPage titleRef={titleRef} onScreen={onScreen} />
                                                 : page === "bar" ? <BarPage titleRef={titleRef} />
                                                         : page === "games" ? <GamesPage titleRef={titleRef} />

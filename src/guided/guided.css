@@ -227,6 +227,8 @@
 .nv-app .nv-notice > .nv-fact-text > span, .nv-app .nv-caution > .nv-fact-text > span { overflow-wrap: anywhere; }
 .nv-app .nv-dialog { max-height: calc(100dvh - 48px); overflow: auto; }
 .nv-app .nv-dialog .nv-facts { gap: 8px; }
+.nv-app .nv-dialog-body { display: flex; flex-direction: column; gap: 16px; }
+.nv-app .nv-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .nv-app .nv-field > span { font-size: 13px; line-height: 18px; font-weight: 550; color: var(--muted); }
 .nv-app .nv-input { width: 100%; }
 .nv-app .nv-textarea { min-height: 72px; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--control-line); background: var(--surface); color: var(--ink); resize: vertical; }

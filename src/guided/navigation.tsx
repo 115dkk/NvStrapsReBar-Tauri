@@ -1,13 +1,13 @@
 import { createContext, useContext, type ReactNode } from "react";
 import type { GuidedPage, InstallUiState } from "./routing";
 
-export type InstallUi = Omit<InstallUiState, "catalogBoard" | "exported"> & {
+export type InstallUi = Omit<InstallUiState, "catalogBoard" | "exported" | "restartedSinceSave"> & {
         /** The user chose to answer the route questions on a catalog board. */
         customRoutes: boolean;
         /** The user reviewed the legacy patch selection and moved on. */
         legacyAccepted: boolean;
-        /** Record that was selected when a new preparation started. */
-        startNewFrom: string;
+        /** Profile creations counted when a new preparation started; one more ends it. */
+        startNewCreations: number;
 };
 
 export const initialInstallUi: InstallUi = {
@@ -18,7 +18,7 @@ export const initialInstallUi: InstallUi = {
         showGuide: false,
         customRoutes: false,
         legacyAccepted: false,
-        startNewFrom: "",
+        startNewCreations: 0,
 };
 
 export type GuidedNavigation = {

@@ -15,9 +15,9 @@ const Dialog = ({ id, title, children, close, confirm, confirmDisabled }: {
         const { rebootDialog } = useDeploymentWorkspaceController();
         return (
                 <div className="nv-scrim" role="presentation">
-                        <div ref={rebootDialog} className="nv-dialog" role="dialog" aria-modal="true" aria-labelledby={id}>
+                        <div ref={rebootDialog} className="nv-dialog" role="dialog" aria-modal="true" aria-labelledby={id} aria-describedby={`${id}-description`}>
                                 <h2 id={id}>{title}</h2>
-                                {children}
+                                <div id={`${id}-description`} className="nv-dialog-body">{children}</div>
                                 <div className="nv-dialog-actions">
                                         <button type="button" className="nv-btn nv-btn-quiet" autoFocus onClick={close}>{t("ui.close")}</button>
                                         <button type="button" className="nv-btn nv-btn-primary" disabled={confirmDisabled} onClick={confirm.onClick}>{confirm.label}</button>

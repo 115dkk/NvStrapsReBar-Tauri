@@ -135,6 +135,9 @@ export class ProfileSourceActions {
                                 selectedProfileId: bundle.profile.profileId,
                                 plan: bundle.plan,
                                 preflightExact: true,
+                                profileCreations:
+                                        this.runtime.state().profileCreations +
+                                        1,
                         });
                         const selectionCount = view.selectedLegacyEntries.length;
                         const successMessage =

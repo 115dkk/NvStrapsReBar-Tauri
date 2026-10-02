@@ -24,7 +24,7 @@ const stageIds = [
 export const StageTracker = ({ current, note }: { current: StageNumber; note?: ReactNode }) => {
         const { t } = useI18n();
         return (
-                <nav className="nv-stages" aria-label={t("ui.setupProgress")}>
+                <aside className="nv-stages" aria-label={t("ui.setupProgress")}>
                         <ol>
                                 {stageIds.map(([nameId, detailId], index) => {
                                         const number = index + 1;
@@ -41,7 +41,7 @@ export const StageTracker = ({ current, note }: { current: StageNumber; note?: R
                                 })}
                         </ol>
                         <p className="nv-stages-note"><Icon name="info" /><span>{note ?? t("ui.closeAndContinueLater")}</span></p>
-                </nav>
+                </aside>
         );
 };
 

@@ -3,6 +3,7 @@ import { rememberExport } from "./export-memory";
 import { useInstallContext } from "./install-context";
 import {
         AdminNeeded,
+        CheckFailed,
         CheckingDriver,
         CheckingResult,
         Done,
@@ -43,11 +44,11 @@ export const InstallPage = ({ titleRef, onScreen }: { titleRef: Ref<HTMLHeadingE
                 }
         }, [view.packageReceipt]);
 
-        // A newly created record ends "prepare another file" mode.
+        // A created record ends "prepare another file" mode, also when it matches an earlier one.
         useEffect(() => {
-                if (navigation.installUi.startNew && view.plan && view.selectedProfileId !== navigation.installUi.startNewFrom)
+                if (navigation.installUi.startNew && view.plan && view.profileCreations > navigation.installUi.startNewCreations)
                         navigation.setInstallUi({ startNew: false, question: 1, legacyAccepted: false, claimedInstalled: false, savingAgain: false, showGuide: false });
-        }, [view.selectedProfileId, view.plan]);
+        }, [view.profileCreations, view.plan]);
 
         // "I finished in BIOS setup" only applies to the step it was pressed on.
         const activeId = view.activeStep?.id;
@@ -81,6 +82,7 @@ export const InstallPage = ({ titleRef, onScreen }: { titleRef: Ref<HTMLHeadingE
                         case "checkingDriver": return <CheckingDriver ctx={ctx} />;
                         case "missing": return <Missing ctx={ctx} />;
                         case "admin": return <AdminNeeded ctx={ctx} />;
+                        case "checkFailed": return <CheckFailed ctx={ctx} />;
                         case "mismatch": return <Mismatch ctx={ctx} />;
                         case "turnOn": return <TurnOn ctx={ctx} />;
                         case "restart": return <RestartAfterSave ctx={ctx} />;

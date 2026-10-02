@@ -126,7 +126,7 @@ describe("guided session actions", () => {
         it("records the vendor flash and BIOS settings with one token per step", async () => {
                 const manual = manualAdapter();
                 const session = await start("flashWithVendorRoute", manual.overrides);
-                await session.dispatch({ type: "recordFirmwareHandoff", includeSetup: true });
+                await session.dispatch({ type: "recordFirmwareHandoff", includeSetup: true, planRevision: 2 });
                 expect(manual.previews).toEqual(["token-flashWithVendorRoute-2", "token-configureFirmwareSetup-3"]);
                 expect(manual.confirmations).toEqual(manual.previews);
                 expect(session.view().activeStep?.id).toBe("rebootAfterFirmware");
@@ -136,7 +136,7 @@ describe("guided session actions", () => {
         it("records only the flash when asked, leaving the settings step active", async () => {
                 const manual = manualAdapter();
                 const session = await start("flashWithVendorRoute", manual.overrides);
-                await session.dispatch({ type: "recordFirmwareHandoff", includeSetup: false });
+                await session.dispatch({ type: "recordFirmwareHandoff", includeSetup: false, planRevision: 2 });
                 expect(manual.confirmations).toEqual(["token-flashWithVendorRoute-2"]);
                 expect(session.view().activeStep?.id).toBe("configureFirmwareSetup");
         });
@@ -144,9 +144,19 @@ describe("guided session actions", () => {
         it("refuses to record the handoff once another step is active", async () => {
                 const confirm = vi.fn();
                 const session = await start("writeNvstrapsConfiguration", { confirmManualDeploymentStep: confirm });
-                await session.dispatch({ type: "recordFirmwareHandoff", includeSetup: true });
+                await session.dispatch({ type: "recordFirmwareHandoff", includeSetup: true, planRevision: 6 });
                 expect(confirm).not.toHaveBeenCalled();
                 expect(session.view().activity?.tone).toBe("error");
+        });
+
+        it("refuses to record against a plan revision the screen did not show", async () => {
+                const manual = manualAdapter();
+                const session = await start("flashWithVendorRoute", manual.overrides);
+                await session.dispatch({ type: "recordFirmwareHandoff", includeSetup: true, planRevision: 1 });
+                expect(manual.previews).toEqual([]);
+                expect(manual.confirmations).toEqual([]);
+                expect(session.view().activity?.tone).toBe("error");
+                expect(session.view().activeStep?.id).toBe("flashWithVendorRoute");
         });
 
         it("keeps a failed restart check on the step instead of raising an error notice", async () => {
@@ -209,6 +219,42 @@ describe("guided session actions", () => {
                 await session.dispatch({ type: "saveToUsb" });
                 expect(exportPackage).toHaveBeenCalledWith(owner.profileId, "E:\\");
                 expect(session.view().packageReceipt?.packagePath).toBe("E:\\\\NvStrapsReBar-x");
+        });
+
+        it("resumes the record the user last worked on instead of the first stored one", async () => {
+                const other: MachineProfile = { ...owner, profileId: "nvstraps-other", displayName: "other" };
+                const loaded: string[] = [];
+                const session = createDeploymentWorkspaceSession(
+                        snapshot,
+                        adapter({
+                                listMachineProfiles: async () => [owner, other],
+                                getNvidiaProfileInspectorInstallation: async () => null,
+                                getDeploymentPlan: async (profileId) => {
+                                        loaded.push(profileId);
+                                        return { ...planAt("flashWithVendorRoute"), profileId };
+                                },
+                        }),
+                        "nvstraps-other",
+                );
+                await tick();
+                expect(session.view().selectedProfileId).toBe("nvstraps-other");
+                expect(loaded).toEqual(["nvstraps-other"]);
+                expect(session.view().profilesLoaded).toBe(true);
+        });
+
+        it("counts each created record, also when it matches an earlier one", async () => {
+                const firmware = { fileName: "firmware.bin", byteLength: 1, sha256: "a".repeat(64) };
+                const session = await start("verifyProfile", {
+                        listMachineProfiles: async () => [],
+                        selectFirmwareImage: async () => "C:\\Firmware\\firmware.bin",
+                        inspectFirmwareImage: async () => firmware,
+                        createMachineProfile: async () => ({ profile: owner, plan: planAt("verifyProfile"), originalFirmwarePath: "original.bin" }),
+                });
+                await session.dispatch({ type: "chooseFirmware" });
+                await session.dispatch({ type: "createProfile" });
+                await session.dispatch({ type: "createProfile" });
+                expect(session.view().profileCreations).toBe(2);
+                expect(session.view().selectedProfileId).toBe(owner.profileId);
         });
 
         it("marks a failed legacy analysis as an error so it can run again", async () => {

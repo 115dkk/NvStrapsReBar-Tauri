@@ -46,6 +46,7 @@ const ui = (patch: Partial<InstallUiState> = {}): InstallUiState => ({
         savingAgain: false,
         showGuide: false,
         exported: true,
+        restartedSinceSave: false,
         ...patch,
 });
 
@@ -115,10 +116,23 @@ describe("install screen", () => {
                 expect(installScreen(viewAt("flashWithVendorRoute"), snapshot(), ui({ exported: false }))).toBe("save");
                 expect(installScreen(viewAt("flashWithVendorRoute"), snapshot(), ui({ savingAgain: true }))).toBe("save");
                 expect(installScreen(viewAt("flashWithVendorRoute"), snapshot(), ui())).toBe("guide");
-                expect(installScreen(viewAt("flashWithVendorRoute"), snapshot(true, "observedThisBoot"), ui())).toBe("returnRecord");
+                expect(installScreen(viewAt("flashWithVendorRoute"), snapshot(true, "observedThisBoot"), ui({ restartedSinceSave: true }))).toBe("returnRecord");
                 expect(installScreen(viewAt("configureFirmwareSetup"), snapshot(true, "observedThisBoot"), ui())).toBe("returnRecord");
-                // An earlier NvStrapsReBar may already run; the steps stay one press away.
-                expect(installScreen(viewAt("flashWithVendorRoute"), snapshot(true, "observedThisBoot"), ui({ showGuide: true }))).toBe("guide");
+                // The steps stay one press away.
+                expect(installScreen(viewAt("flashWithVendorRoute"), snapshot(true, "observedThisBoot"), ui({ restartedSinceSave: true, showGuide: true }))).toBe("guide");
+        });
+
+        it("shows the guide while only an earlier NvStrapsReBar runs", () => {
+                // Running before any restart since the save: it is the old install, not this file.
+                expect(installScreen(viewAt("flashWithVendorRoute"), snapshot(true, "observedThisBoot"), ui())).toBe("guide");
+                // The user says the BIOS work is done: they record it themselves.
+                expect(installScreen(viewAt("flashWithVendorRoute"), snapshot(true, "observedThisBoot"), ui({ claimedInstalled: true }))).toBe("returnRecord");
+        });
+
+        it("keeps the BIOS settings step reachable without a remembered save", () => {
+                expect(installScreen(viewAt("configureFirmwareSetup"), snapshot(), ui({ exported: false }))).toBe("guide");
+                expect(installScreen(viewAt("configureFirmwareSetup"), snapshot(), ui({ exported: false, claimedInstalled: true }))).toBe("missing");
+                expect(installScreen(viewAt("configureFirmwareSetup"), snapshot(true, "observedThisBoot"), ui({ exported: false }))).toBe("returnRecord");
         });
 
         it("separates a missing driver from a status that needs administrator rights", () => {
@@ -129,6 +143,8 @@ describe("install screen", () => {
                 const failed = viewAt("rebootAfterFirmware", { autoCheck: { stepId: "rebootAfterFirmware", status: "failed", message: null } });
                 expect(installScreen(failed, snapshot(), ui())).toBe("missing");
                 expect(installScreen(failed, limited, ui())).toBe("admin");
+                // NvStrapsReBar ran; only recording the check failed.
+                expect(installScreen(failed, snapshot(true, "observedThisBoot"), ui())).toBe("checkFailed");
                 expect(installScreen(viewAt("rebootAfterFirmware"), snapshot(), ui())).toBe("checkingDriver");
         });
 

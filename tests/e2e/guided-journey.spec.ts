@@ -10,7 +10,7 @@ test("the guided install runs from home to the observed size, one task per scree
         await expect(page.getByText("This PC · RTX 2080 SUPER · this boot")).toBeVisible();
         await expect(page.getByRole("img", { name: "Now 256 MiB, 8 GiB when on" })).toBeVisible();
         await expect(page.getByRole("heading", { name: "Your steps" })).toBeVisible();
-        await expect(page.getByRole("navigation", { name: "Setup progress" })).toHaveCount(0);
+        await expect(page.getByRole("complementary", { name: "Setup progress" })).toHaveCount(0);
         await page.screenshot({ path: `${evidence}/en-01-home-start-1180.png` });
 
         await button(page, "Get started").click();

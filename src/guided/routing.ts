@@ -65,6 +65,7 @@ export type InstallScreen =
         | "returnRecord"
         | "missing"
         | "admin"
+        | "checkFailed"
         | "checkingDriver"
         | "mismatch"
         | "turnOn"
@@ -86,6 +87,11 @@ export type InstallUiState = {
         showGuide: boolean;
         /** Whether a package for the selected profile was exported (this run or earlier). */
         exported: boolean;
+        /**
+         * Windows booted after the package was saved. A running NvStrapsReBar seen before that
+         * comes from an earlier install, not from the file the user is about to flash.
+         */
+        restartedSinceSave: boolean;
 };
 
 type InstallView = Pick<
@@ -114,15 +120,24 @@ export const installScreen = (
         if (!step || step === OPTIONAL_FINAL_STEP) return "done";
         if (PREPARE_STEPS.includes(step)) return "making";
         if (step === "flashWithVendorRoute" || step === "configureFirmwareSetup") {
-                if (!ui.exported || ui.savingAgain) return step === "flashWithVendorRoute" ? "save" : "guide";
-                if (snapshot.barSettings.currentBootDxeState === "observedThisBoot" && !ui.showGuide) return "returnRecord";
+                const flash = step === "flashWithVendorRoute";
+                if (flash && (!ui.exported || ui.savingAgain)) return "save";
+                const observed = snapshot.barSettings.currentBootDxeState === "observedThisBoot";
+                // Before the flash is recorded, a running driver counts only after a restart since
+                // the save, or when the user says the BIOS work is done.
+                const observedForThisFile = observed && (!flash || ui.restartedSinceSave || ui.claimedInstalled);
+                if (observedForThisFile && !ui.showGuide) return "returnRecord";
                 if (ui.claimedInstalled)
                         return snapshot.platform.elevated && snapshot.barSettings.currentBootDxeState === "notObservedThisBoot" ? "missing" : "admin";
                 return "guide";
         }
         if (step === "rebootAfterFirmware" || step === "verifyDriverLoaded") {
-                if (view.autoCheck?.stepId === step && view.autoCheck.status === "failed")
-                        return snapshot.platform.elevated && snapshot.barSettings.currentBootDxeState !== "indeterminate" ? "missing" : "admin";
+                if (view.autoCheck?.stepId === step && view.autoCheck.status === "failed") {
+                        const dxe = snapshot.barSettings.currentBootDxeState;
+                        if (!snapshot.platform.elevated || dxe === "indeterminate") return "admin";
+                        // NvStrapsReBar ran, so the failure is in recording it, not in the BIOS install.
+                        return dxe === "observedThisBoot" ? "checkFailed" : "missing";
+                }
                 return "checkingDriver";
         }
         if (step === "writeNvstrapsConfiguration") return "turnOn";
@@ -146,6 +161,7 @@ export const stageFor = (screen: InstallScreen): 1 | 2 | 3 | 4 | 5 => {
                 case "returnRecord":
                 case "missing":
                 case "admin":
+                case "checkFailed":
                 case "checkingDriver":
                 case "mismatch":
                         return 2;

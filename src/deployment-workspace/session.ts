@@ -52,6 +52,7 @@ class Session implements DeploymentWorkspaceSession {
         constructor(
                 snapshot: SystemSnapshot,
                 private adapter: DeploymentAdapter,
+                private preferredProfileId: string | null = null,
         ) {
                 this.state = createInitialDeploymentState(snapshot);
                 this.actions = new DeploymentSessionActions({
@@ -119,16 +120,24 @@ class Session implements DeploymentWorkspaceSession {
                         ]);
                         if (this.disposed || generation !== this.generation)
                                 return;
+                        // Resume the record the user last worked on; storage order is arbitrary.
+                        const selected =
+                                profiles.find(
+                                        (profile) =>
+                                                profile.profileId ===
+                                                this.preferredProfileId,
+                                ) ?? profiles[0];
                         this.patch({
                                 profiles,
                                 installation,
-                                selectedProfileId: profiles[0]?.profileId ?? "",
+                                selectedProfileId: selected?.profileId ?? "",
                         });
-                        if (profiles[0])
+                        if (selected)
                                 await this.loadPlan(
-                                        profiles[0].profileId,
+                                        selected.profileId,
                                         generation,
                                 );
+                        // A record chosen meanwhile reports its own load.
                         if (generation === this.generation)
                                 this.patch({ profilesLoaded: true });
                 } catch (error) {
@@ -146,10 +155,15 @@ class Session implements DeploymentWorkspaceSession {
         }
 
         private async selectProfile(profileId: string) {
-                this.generation += 1;
+                const generation = ++this.generation;
                 this.inflight = null;
-                this.patch(resetProfileProjection(profileId));
-                await this.loadPlan(profileId, this.generation);
+                this.patch({
+                        ...resetProfileProjection(profileId),
+                        profilesLoaded: false,
+                });
+                await this.loadPlan(profileId, generation);
+                if (generation === this.generation)
+                        this.patch({ profilesLoaded: true });
         }
 
         private async loadPlan(
@@ -308,4 +322,6 @@ export const createDeploymentWorkspaceSession = (
         adapter: DeploymentAdapter = isTauri()
                 ? tauriDeploymentAdapter
                 : previewDeploymentAdapter,
-): DeploymentWorkspaceSession => new Session(snapshot, adapter);
+        preferredProfileId: string | null = null,
+): DeploymentWorkspaceSession =>
+        new Session(snapshot, adapter, preferredProfileId);

@@ -1,8 +1,10 @@
 import { useEffect, useRef } from "react";
-import { formatBytes } from "../configuration-workspace/model";
+import { formatBytes, pciTargetSizes } from "../configuration-workspace/model";
 import type { StepId } from "../deployment-workspace/contract";
 import { translateMessage } from "../i18n";
 import type { StaticMessageId } from "../i18n-catalog";
+import type { GpuRule } from "../types";
+import { Icon } from "./icons";
 import type { InstallContext } from "./install-context";
 import {
         ActionBar,
@@ -62,7 +64,7 @@ export const Making = ({ ctx }: { ctx: InstallContext }) => {
                                 label={t("ui.stageLabelPrepare")}
                                 title={t("ui.makingFailedTitle")}
                                 titleRef={ctx.titleRef}
-                                bar={<ActionBar hint={t("ui.makingFailedHint")} primary={{ label: t("ui.chooseAnotherFile"), icon: "folder", disabled: busy, onClick: () => { navigation.setInstallUi({ startNew: true }); commands.chooseFirmware(); } }} />}
+                                bar={<ActionBar hint={t("ui.makingFailedHint")} primary={{ label: t("ui.chooseAnotherFile"), icon: "folder", disabled: busy, onClick: () => { navigation.startNewPreparation(); commands.chooseFirmware(); } }} />}
                         >
                                 {view.firmware && <FileCard name={view.firmware.fileName} />}
                                 <Notice title={translateMessage(locale, view.activity!.message)}>{t("ui.makingFailedDetail")}</Notice>
@@ -170,7 +172,9 @@ export const Guide = ({ ctx }: { ctx: InstallContext }) => {
         const flashActive = view.activeStep?.id === "flashWithVendorRoute";
         const savedDetail = shortcut?.atVolumeRoot
                 ? t("ui.guideSavedWithRecovery", { file: shortcut.fileName })
-                : t("ui.guideSavedAt", { path: remembered?.packagePath ?? "" });
+                : remembered?.packagePath
+                  ? t("ui.guideSavedAt", { path: remembered.packagePath })
+                  : undefined;
         return (
                 <TaskPanel
                         label={t("ui.stageLabelInstall")}
@@ -207,6 +211,7 @@ export const ReturnRecord = ({ ctx }: { ctx: InstallContext }) => {
         const flashActive = view.activeStep?.id === "flashWithVendorRoute";
         const native = (view.selectedProfile?.boardPath ?? view.boardPath) === "nativeResizableBar";
         const recording = view.busyAction === "manual-confirm";
+        const revision = view.plan?.revision ?? -1;
         return (
                 <TaskPanel
                         label={t("ui.stageLabelInstall")}
@@ -217,9 +222,9 @@ export const ReturnRecord = ({ ctx }: { ctx: InstallContext }) => {
                                         hint={t("ui.returnHint")}
                                         secondary={[
                                                 { label: t("ui.showInstallSteps"), onClick: () => navigation.setInstallUi({ showGuide: true }), disabled: busy },
-                                                ...(flashActive ? [{ label: t("ui.recordInstallOnly"), onClick: () => commands.recordFirmwareHandoff(false), disabled: busy }] : []),
+                                                ...(flashActive ? [{ label: t("ui.recordInstallOnly"), onClick: () => commands.recordFirmwareHandoff(false, revision), disabled: busy }] : []),
                                         ]}
-                                        primary={{ label: t(flashActive ? "ui.recordInstallAndSettings" : "ui.recordSettings"), busy: recording, disabled: busy, onClick: () => commands.recordFirmwareHandoff(true) }}
+                                        primary={{ label: t(flashActive ? "ui.recordInstallAndSettings" : "ui.recordSettings"), busy: recording, disabled: busy, onClick: () => commands.recordFirmwareHandoff(true, revision) }}
                                 />
                         }
                 >
@@ -319,6 +324,30 @@ export const AdminNeeded = ({ ctx }: { ctx: InstallContext }) => {
         );
 };
 
+/** NvStrapsReBar ran in this boot, but recording the check failed (a changed PC, a moved plan). */
+export const CheckFailed = ({ ctx }: { ctx: InstallContext }) => {
+        const { t, locale, view, commands, busy } = ctx;
+        return (
+                <TaskPanel
+                        label={t("ui.stageLabelInstall")}
+                        title={t("ui.statusUnreadableTitle")}
+                        lead={t("ui.checkFailedLead")}
+                        titleRef={ctx.titleRef}
+                        bar={
+                                <ActionBar
+                                        hint={t("ui.checkFailedHint")}
+                                        secondary={[{ label: t("ui.compareWithThisPc"), onClick: commands.compare, disabled: busy }]}
+                                        primary={{ label: t("ui.checkAgainNow"), icon: "restart", busy: view.busyAction === "auto-check", disabled: busy, onClick: commands.autoCheck }}
+                                />
+                        }
+                >
+                        <ActivityNotice ctx={ctx} />
+                        <ul className="nv-checklist"><Check state="done" label={t("ui.driverRanThisBoot")} word={t("ui.checkWordConfirmed")} /></ul>
+                        {view.autoCheck?.status === "failed" && view.autoCheck.message && <Notice title={t("ui.taskDidNotFinish")}>{translateMessage(locale, view.autoCheck.message)}</Notice>}
+                </TaskPanel>
+        );
+};
+
 export const Mismatch = ({ ctx }: { ctx: InstallContext }) => {
         const { t, commands, busy, navigation } = ctx;
         return (
@@ -341,16 +370,50 @@ export const Mismatch = ({ ctx }: { ctx: InstallContext }) => {
         );
 };
 
+const pciLocation = (rule: Pick<GpuRule, "bus" | "device" | "function">) =>
+        `${rule.bus.toString(16).padStart(2, "0")}:${rule.device.toString(16).padStart(2, "0")}.${rule.function}`;
+
+/** The draft rule written for a GPU, matched by its PCI location ("00000000:01:00.0"). */
+const ruleAt = (rules: GpuRule[], pciBusId: string) => {
+        const match = /([0-9a-f]+):([0-9a-f]+)\.([0-7])$/i.exec(pciBusId);
+        if (!match) return null;
+        const [bus, device, fn] = match.slice(1).map((value) => Number.parseInt(value, 16));
+        return rules.find((rule) => rule.bus === bus && rule.device === device && rule.function === fn) ?? null;
+};
+
+const RuleSize = ({ rule, legacy }: { rule: GpuRule; legacy: boolean }) => (
+        <>
+                {legacy && <><span className="nv-size legacy">256 MiB</span><span className="nv-muted"><Icon name="arrow" /></span></>}
+                <span className="nv-size target">{rule.barSizeSelector === null ? "?" : (pciTargetSizes[rule.barSizeSelector] ?? "?")}</span>
+        </>
+);
+
+/**
+ * What the save button writes: registry-managed GPUs keep their recommended size, every other
+ * Turing GPU gets the location rule from the draft, shown with the draft's own size.
+ */
 const RecommendedSizes = ({ ctx }: { ctx: InstallContext }) => {
         const { t, config, view } = ctx;
-        const rules = view.configRecommendation?.value.draft.rules ?? [];
+        const recommendation = view.configRecommendation?.value;
+        const rules = recommendation?.draft.rules ?? [];
+        const shown = new Set<GpuRule>();
         return (
                 <section className="nv-group" aria-labelledby="recommended">
                         <h2 className="nv-section" id="recommended">{t("ui.turnOnSizesTitle")}</h2>
-                        {config.rebarStatus.gpus.map((row) => (
-                                <GpuRow key={row.gpu.pciBusId} name={row.gpu.productName}><GpuSizes row={row} /></GpuRow>
+                        {config.rebarStatus.gpus.map((row) => {
+                                const rule = ruleAt(rules, row.gpu.pciBusId);
+                                if (rule) shown.add(rule);
+                                return (
+                                        <GpuRow key={row.gpu.pciBusId} name={row.gpu.productName}>
+                                                {rule ? <RuleSize rule={rule} legacy={row.gpu.state === "legacy256MiB"} /> : <GpuSizes row={row} />}
+                                        </GpuRow>
+                                );
+                        })}
+                        {rules.filter((rule) => !shown.has(rule)).map((rule) => (
+                                <GpuRow key={pciLocation(rule)} name={t("ui.gpuAtPciLocation", { location: pciLocation(rule) })}><RuleSize rule={rule} legacy={false} /></GpuRow>
                         ))}
-                        <p className="nv-supporting">{t(rules.length ? "ui.turnOnFallbackRule" : "ui.turnOnRegistryRule")}</p>
+                        {recommendation && recommendation.registryManagedGpuCount > 0 && <p className="nv-supporting">{t("ui.turnOnRegistryRule")}</p>}
+                        {rules.length > 0 && <p className="nv-supporting">{t("ui.turnOnFallbackRule")}</p>}
                 </section>
         );
 };
@@ -358,6 +421,7 @@ const RecommendedSizes = ({ ctx }: { ctx: InstallContext }) => {
 export const TurnOn = ({ ctx }: { ctx: InstallContext }) => {
         const { t, locale, view, commands, busy } = ctx;
         const ready = view.recommendationStatus === "ready" && Boolean(view.configRecommendation);
+        const failed = view.recommendationStatus === "error";
         return (
                 <TaskPanel
                         label={t("ui.stageLabelTurnOn")}
@@ -366,7 +430,9 @@ export const TurnOn = ({ ctx }: { ctx: InstallContext }) => {
                         bar={
                                 <ActionBar
                                         hint={t("ui.turnOnHint")}
-                                        primary={{ label: t(view.recommendationStatus === "pending" ? "ui.loadingRecommendation" : "ui.saveTheseSettings"), busy: view.busyAction === "deployment-config" || view.recommendationStatus === "pending", disabled: busy || !ready, onClick: commands.saveRecommendedConfig }}
+                                        primary={failed
+                                                ? { label: t("ui.readRecommendationAgain"), icon: "restart", disabled: busy, onClick: commands.retryRecommendation }
+                                                : { label: t(view.recommendationStatus === "pending" ? "ui.loadingRecommendation" : "ui.saveTheseSettings"), busy: view.busyAction === "deployment-config" || view.recommendationStatus === "pending", disabled: busy || !ready, onClick: commands.saveRecommendedConfig }}
                                 />
                         }
                 >
