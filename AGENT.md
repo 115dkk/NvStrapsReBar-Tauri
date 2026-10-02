@@ -20,8 +20,9 @@ authoritative. Keep RIIR, deployment automation, and physical-machine proof as s
 - Keep `/f` out of every Windows restart command. Require saved-work confirmation immediately
   before a real restart request.
 - Keep vendor flash, firmware settings, physical recovery, hardware changes, and NVIDIA
-  per-application policy as visible manual gates. Automate only evidence the owning system can
-  actually prove.
+  per-application policy as manual gates. Present each gate as the user's next action (what to do,
+  where, and how to record it), never as a disclaimer about what the app cannot do. Automate only
+  evidence the owning system can actually prove.
 - Browser preview, Playwright, compilation, OVMF, and QEMU evidence must state their target. None
   of them proves a real vendor image, native dialog, WebView2 lifecycle, flash, reboot, or GPU.
 
@@ -55,6 +56,11 @@ authoritative. Keep RIIR, deployment automation, and physical-machine proof as s
 - Explicitly activate and follow `superloopy:superloopy-frontend` for frontend work. The main
   agent reads the skill, constrains the Rust contract, reviews the result, runs final gates, and
   owns commits; a delegated Sol agent does not commit.
+- User-facing copy says what the user does next and what the app just did for them. Do not list
+  what the app does not do, cannot do, or has not verified. Those boundaries are enforced in Rust
+  and documented for developers in this file, `CONTEXT.md`, and the README. Turn a limit into an
+  action ("Install it with M-FLASH", "Prepare the recovery USB first") and state a real risk once,
+  at the step where the user can act on it.
 - Any Korean UI copy must also follow `superloopy:humanize-korean`. Preserve technical facts and
   protected tokens, run its file-backed audit, and keep the resulting evidence with the frontend
   run receipt. When delegating, pass this requirement explicitly to the Sol frontend owner.

@@ -10,6 +10,9 @@ struct NativeResizableBarBoard {
     manufacturer: &'static str,
     product: &'static str,
     version: &'static str,
+    /// File name the board's USB flashback recovery button reads from the root
+    /// of a USB drive, when the vendor documents one.
+    flashback_recovery_file_name: Option<&'static str>,
 }
 
 const NATIVE_RESIZABLE_BAR_BOARDS: &[NativeResizableBarBoard] = &[NativeResizableBarBoard {
@@ -17,6 +20,7 @@ const NATIVE_RESIZABLE_BAR_BOARDS: &[NativeResizableBarBoard] = &[NativeResizabl
     manufacturer: "Micro-Star International Co., Ltd.",
     product: "PRO Z690-A DDR4(MS-7D25)",
     version: "1.0",
+    flashback_recovery_file_name: Some("MSI.ROM"),
 }];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -78,6 +82,21 @@ pub fn determine_hardware_support(
     }
 }
 
+/// The file name the exact catalog board's USB flashback recovery button expects
+/// at the root of a USB drive. Unknown boards have none: the app never guesses a
+/// vendor recovery file name.
+pub fn flashback_recovery_file_name(identity: &MachineIdentity) -> Option<&'static str> {
+    catalog_board(identity).and_then(|board| board.flashback_recovery_file_name)
+}
+
+fn catalog_board(identity: &MachineIdentity) -> Option<&'static NativeResizableBarBoard> {
+    NATIVE_RESIZABLE_BAR_BOARDS.iter().find(|board| {
+        identity.board_manufacturer == board.manufacturer
+            && identity.board_product == board.product
+            && identity.board_version == board.version
+    })
+}
+
 fn determine_motherboard_support(identity: Option<&MachineIdentity>) -> MotherboardSupportFinding {
     let Some(identity) = identity else {
         return MotherboardSupportFinding {
@@ -86,12 +105,7 @@ fn determine_motherboard_support(identity: Option<&MachineIdentity>) -> Motherbo
             catalog_id: None,
         };
     };
-    let catalog_match = NATIVE_RESIZABLE_BAR_BOARDS.iter().find(|board| {
-        identity.board_manufacturer == board.manufacturer
-            && identity.board_product == board.product
-            && identity.board_version == board.version
-    });
-    if let Some(board) = catalog_match {
+    if let Some(board) = catalog_board(identity) {
         MotherboardSupportFinding {
             state: HardwareSupportState::Supported,
             reason_code: HardwareSupportReasonCode::ExactMotherboardCatalogMatch,
@@ -219,6 +233,15 @@ mod tests {
             HardwareSupportReasonCode::ExactMotherboardCatalogMatch
         );
         assert_eq!(result.catalog_id, Some("msi-pro-z690-a-ddr4-ms-7d25"));
+    }
+
+    #[test]
+    fn only_the_exact_catalog_board_names_a_flashback_recovery_file() {
+        assert_eq!(
+            flashback_recovery_file_name(&identity("1.0")),
+            Some("MSI.ROM")
+        );
+        assert_eq!(flashback_recovery_file_name(&identity("2.0")), None);
     }
 
     #[test]

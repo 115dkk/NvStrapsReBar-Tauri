@@ -7,8 +7,10 @@ second theme implementation.
 ## Purpose and hierarchy
 
 NvStrapsReBar prepares a motherboard BIOS image containing the NvStrapsReBar driver, guides
-the manual installation, and manages Resizable BAR settings for NVIDIA Turing GPUs. It is
-not a one-click BIOS flasher or a guaranteed performance boost.
+the manual installation, and manages Resizable BAR settings for NVIDIA Turing GPUs.
+
+Copy tells the user what to do next and what the app just did. It never lists what the app does
+not do; a manual step appears as the user's action at the moment it is needed.
 
 - Start on Overview: purpose, observed PC state, next action, then the installation outline.
 - Keep Overview, Install firmware and BAR Settings in one persistent left navigation.

@@ -263,6 +263,14 @@ export type DeploymentPackageReceipt = {
         };
         manifestSha256: string;
         checksumsSha256: string;
+        /** Copy of the original BIOS under the board's flashback file name, beside the package. */
+        recoveryShortcut: {
+                path: string;
+                fileName: string;
+                byteLength: number;
+                sha256: string;
+                atVolumeRoot: boolean;
+        } | null;
 };
 export type FirmwareSetupRebootPreview = {
         profileId: string;

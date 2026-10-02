@@ -124,7 +124,7 @@ default draft encodes as deletion of the saved operational configuration.
 | `get_deployment_plan` | `{ profileId }` | Newest validated revision from the append-only plan history |
 | `compare_machine_profile` | `{ request: { profileId, firmwarePath? } }` | Fresh identity comparison against the newest pinned boot observation (or initial profile), plus optional preserved source-image comparison |
 | `prepare_firmware_artifact` | `{ profileId }` | Verified Rust FFS, optional legacy-patch receipt, injected output, and advanced plan revision; never a flash |
-| `export_deployment_package` | `{ request: { profileId, destinationRoot } }` | No-overwrite package receipt covering artifact, original, manifests, instructions, and checksums |
+| `export_deployment_package` | `{ request: { profileId, destinationRoot } }` | No-overwrite package receipt covering artifact, original, manifests, English and Korean instructions (`DEPLOYMENT.txt`, `DEPLOYMENT.ko.txt`), and checksums; `recoveryShortcut` reports the write-once vendor-named copy of the original (for example `MSI.ROM`) saved beside the package for a catalog board's USB flashback route, else `null` |
 
 `CreateProfileRequest` contains `displayName`, `boardPath`, `firmwarePath`, the mandatory
 `expectedFirmware` fingerprint returned by inspection, `recovery`, `firmwareInstall`, and optional

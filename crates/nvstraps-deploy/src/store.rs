@@ -9,9 +9,9 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use thiserror::Error;
 
 use crate::{
-    BoardPath, DeploymentPlan, DeploymentWorkflow, FirmwareFingerprint, FirmwareInstallRoute,
-    MachineIdentity, MachineProfile, PlanError, ProfileError, RecoveryCapability, Sha256Digest,
-    StepId,
+    BoardPath, DeploymentPlan, DeploymentWorkflow, FirmwareFingerprint, FirmwareInstallMethod,
+    FirmwareInstallRoute, MachineIdentity, MachineProfile, PlanError, ProfileError,
+    RecoveryCapability, RecoveryMethod, Sha256Digest, StepId,
 };
 
 static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
@@ -103,6 +103,23 @@ pub struct DeploymentPackageReceipt {
     pub manifest: DeploymentPackageManifest,
     pub manifest_sha256: Sha256Digest,
     pub checksums_sha256: Sha256Digest,
+    pub recovery_shortcut: Option<RecoveryShortcut>,
+}
+
+/// A byte-identical copy of the preserved original firmware written next to the
+/// package under the vendor's recovery file name (for example `MSI.ROM` for the
+/// MSI Flash BIOS Button). It is not part of the package manifest because it
+/// lives outside the package folder; its bytes equal `recovery/original-firmware.bin`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecoveryShortcut {
+    pub path: PathBuf,
+    pub file_name: String,
+    pub byte_length: u64,
+    pub sha256: Sha256Digest,
+    /// True when the export destination is the root of a volume, where vendor
+    /// recovery buttons look for the file.
+    pub at_volume_root: bool,
 }
 
 impl DeploymentStore {
@@ -331,7 +348,11 @@ impl DeploymentStore {
         plan: &DeploymentPlan,
         expected_injection_receipt_sha256: &Sha256Digest,
         destination_root: impl AsRef<Path>,
+        recovery_shortcut_file_name: Option<&str>,
     ) -> Result<DeploymentPackageReceipt, StoreError> {
+        if let Some(file_name) = recovery_shortcut_file_name {
+            validate_recovery_shortcut_name(file_name)?;
+        }
         profile.validate()?;
         plan.validate_for(profile)?;
         let firmware_install = profile
@@ -413,6 +434,17 @@ impl DeploymentStore {
         if package_path.exists() {
             return Err(StoreError::PackageAlreadyExists(package_path));
         }
+        let shortcut_path =
+            recovery_shortcut_file_name.map(|file_name| destination_root.join(file_name));
+        if let Some(path) = shortcut_path.as_ref().filter(|path| path.exists()) {
+            let existing = fs::read(path).map_err(|source| StoreError::Io {
+                path: path.clone(),
+                source,
+            })?;
+            if existing != original_bytes {
+                return Err(StoreError::RecoveryShortcutConflict(path.clone()));
+            }
+        }
         let staging_path = destination_root.join(format!(
             ".NvStrapsReBar-{}-{}-{}.tmp",
             profile_suffix,
@@ -471,12 +503,28 @@ impl DeploymentStore {
             }
 
             let manual_gates = manual_gates(profile);
-            let instructions = operator_instructions(profile, &firmware_install, &manual_gates);
+            let instructions = operator_instructions(
+                profile,
+                &firmware_install,
+                &manual_gates,
+                recovery_shortcut_file_name,
+            );
             files.push(write_package_file(
                 &staging_path,
                 "DEPLOYMENT.txt",
                 PackageFilePurpose::OperatorInstructions,
                 instructions.as_bytes(),
+            )?);
+            let korean_instructions = korean_operator_instructions(
+                profile,
+                &firmware_install,
+                recovery_shortcut_file_name,
+            );
+            files.push(write_package_file(
+                &staging_path,
+                "DEPLOYMENT.ko.txt",
+                PackageFilePurpose::OperatorInstructions,
+                korean_instructions.as_bytes(),
             )?);
             files.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
 
@@ -521,6 +569,18 @@ impl DeploymentStore {
                 &manifest_sha256,
                 &checksums_sha256,
             )?;
+            // Written before the package is published: a failure here leaves no
+            // package behind, and a later rename failure leaves only a copy whose
+            // bytes equal the original image, which a retry accepts as identical.
+            let recovery_shortcut = match (recovery_shortcut_file_name, shortcut_path.as_ref()) {
+                (Some(file_name), Some(path)) => Some(write_recovery_shortcut(
+                    path,
+                    file_name,
+                    &original_bytes,
+                    destination_root.parent().is_none(),
+                )?),
+                _ => None,
+            };
             fs::rename(&staging_path, &package_path).map_err(|source| StoreError::Io {
                 path: package_path.clone(),
                 source,
@@ -530,6 +590,7 @@ impl DeploymentStore {
                 manifest,
                 manifest_sha256,
                 checksums_sha256,
+                recovery_shortcut,
             })
         })();
 
@@ -634,6 +695,7 @@ fn operator_instructions(
     profile: &MachineProfile,
     firmware_install: &FirmwareInstallRoute,
     manual_gates: &[String],
+    recovery_shortcut_file_name: Option<&str>,
 ) -> String {
     let mut output = format!(
         "NvStrapsReBar verified deployment package\n\nProfile: {}\nBoard: {} {}\nBIOS: {} {} ({})\nPatched image: flash/{}\nInstall method: {:?}\nOfficial instructions: {}\nInstall note: {}\nRecovery method: {:?}\nRecovery image: recovery/original-firmware.bin\nRecovery note: {}\n\nVerify every file with SHA256SUMS.txt before use.\n\nManual gates:\n",
@@ -650,12 +712,161 @@ fn operator_instructions(
         profile.recovery.method,
         profile.recovery.note,
     );
+    if let Some(file_name) = recovery_shortcut_file_name {
+        use std::fmt::Write as _;
+        writeln!(
+            output,
+            "Recovery copy: ../{file_name} (same bytes as recovery/original-firmware.bin)\n"
+        )
+        .expect("writing instructions to a string cannot fail");
+    }
     for (index, gate) in manual_gates.iter().enumerate() {
         use std::fmt::Write as _;
         writeln!(output, "{}. {gate}", index + 1)
             .expect("writing instructions to a string cannot fail");
     }
     output
+}
+
+fn korean_install_method(method: FirmwareInstallMethod) -> &'static str {
+    match method {
+        FirmwareInstallMethod::FirmwareSetupUtility => "BIOS 화면의 BIOS 업데이트 도구",
+        FirmwareInstallMethod::UsbFlashback => "USB Flashback 버튼",
+        FirmwareInstallMethod::VendorWindowsUtility => "Windows용 제조사 프로그램",
+        FirmwareInstallMethod::ExternalSpiProgrammer => "외부 SPI 프로그래머",
+    }
+}
+
+fn korean_recovery_method(method: RecoveryMethod) -> &'static str {
+    match method {
+        RecoveryMethod::DualBios => "듀얼 BIOS",
+        RecoveryMethod::UsbFlashback => "USB Flashback 버튼",
+        RecoveryMethod::VendorRecovery => "제조사 복구 기능",
+        RecoveryMethod::ExternalSpiProgrammer => "외부 SPI 프로그래머",
+        RecoveryMethod::None => "없음",
+    }
+}
+
+/// Korean operator instructions for reading away from the app (on a phone or
+/// another PC) while the vendor tool owns the screen. Steps are written as the
+/// reader's actions, in 합니다체 with -세요 instructions.
+fn korean_operator_instructions(
+    profile: &MachineProfile,
+    firmware_install: &FirmwareInstallRoute,
+    recovery_shortcut_file_name: Option<&str>,
+) -> String {
+    use std::fmt::Write as _;
+    let identity = &profile.identity;
+    let artifact = &firmware_install.artifact_file_name;
+    let mut output = String::new();
+    let mut line = |text: String| {
+        writeln!(output, "{text}").expect("writing instructions to a string cannot fail");
+    };
+    line("NvStrapsReBar 설치 안내".into());
+    line(String::new());
+    line("이 폴더의 파일은 아래 PC에서만 쓰세요.".into());
+    line(format!(
+        "메인보드: {} {}",
+        identity.board_manufacturer, identity.board_product
+    ));
+    line(format!(
+        "BIOS: {} {} ({})",
+        identity.bios_vendor, identity.bios_version, identity.bios_release_date
+    ));
+    line(format!("이 PC 기록: {}", profile.profile_id));
+    line(String::new());
+    line("폴더 안의 파일".into());
+    line(format!("- flash/{artifact}: 설치할 BIOS 파일입니다."));
+    line("- recovery/original-firmware.bin: 원본 BIOS 파일입니다. 문제가 생겼을 때 되돌리는 데 씁니다.".into());
+    if let Some(file_name) = recovery_shortcut_file_name {
+        line(format!(
+            "- ../{file_name}: 이 폴더 바깥에 저장한 원본 BIOS 사본입니다. 내용은 recovery/original-firmware.bin과 같습니다."
+        ));
+    }
+    line("- SHA256SUMS.txt: 파일이 손상되지 않았는지 확인하는 값입니다.".into());
+    line(String::new());
+    line(format!(
+        "설치 방법: {}",
+        korean_install_method(firmware_install.method)
+    ));
+    line(format!(
+        "제조사 안내서: {}",
+        firmware_install.official_instructions_url
+    ));
+    line(format!("설치 메모: {}", firmware_install.note));
+    line(format!(
+        "복구 방법: {}",
+        korean_recovery_method(profile.recovery.method)
+    ));
+    line(format!("복구 메모: {}", profile.recovery.note));
+    line(String::new());
+    line("순서".into());
+    line(match recovery_shortcut_file_name {
+        Some(file_name) => format!(
+            "1. 복구 수단을 먼저 준비하세요. {file_name} 파일이 USB 맨 위에 있는지 확인하세요."
+        ),
+        None => "1. 복구 수단을 먼저 준비하세요. 복구 메모에 따라 recovery/original-firmware.bin을 준비하세요.".into(),
+    });
+    line("2. 이 PC의 메인보드와 BIOS가 위에 적힌 것과 같은지 확인하세요.".into());
+    line(format!(
+        "3. 설치 방법({})에 따라 flash 폴더의 BIOS 파일({artifact})을 설치하세요. 제조사 도구가 서명이나 무결성 검사에서 이 파일을 거부하면 설치를 멈추세요.",
+        korean_install_method(firmware_install.method)
+    ));
+    line("4. 설치가 끝날 때까지 전원을 끄지 마세요.".into());
+    line(match profile.board_path {
+        BoardPath::NativeResizableBar => {
+            "5. BIOS 설정에서 Above 4G Decoding과 Re-Size BAR를 켜고 CSM을 끈 뒤 저장하세요.".into()
+        }
+        BoardPath::LegacyAbove4g => {
+            "5. BIOS 설정에서 Above 4G Decoding을 켜고 CSM을 끈 뒤 저장하세요.".into()
+        }
+    });
+    line(
+        "6. Windows로 돌아오면 NvStrapsReBar 앱을 다시 여세요. 앱이 설치 결과를 확인합니다.".into(),
+    );
+    output
+}
+
+fn validate_recovery_shortcut_name(file_name: &str) -> Result<(), StoreError> {
+    let valid = !file_name.is_empty()
+        && file_name.len() <= 64
+        && !file_name.starts_with('.')
+        && file_name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'));
+    if valid {
+        Ok(())
+    } else {
+        Err(StoreError::InvalidRecoveryShortcutName(
+            file_name.to_owned(),
+        ))
+    }
+}
+
+fn write_recovery_shortcut(
+    path: &Path,
+    file_name: &str,
+    original_bytes: &[u8],
+    at_volume_root: bool,
+) -> Result<RecoveryShortcut, StoreError> {
+    write_bytes_once(path, original_bytes).map_err(|error| match error {
+        StoreError::ImmutableConflict(path) => StoreError::RecoveryShortcutConflict(path),
+        other => other,
+    })?;
+    let persisted = fs::read(path).map_err(|source| StoreError::Io {
+        path: path.to_owned(),
+        source,
+    })?;
+    if persisted != original_bytes {
+        return Err(StoreError::PackageVerificationFailed(file_name.to_owned()));
+    }
+    Ok(RecoveryShortcut {
+        path: path.to_owned(),
+        file_name: file_name.to_owned(),
+        byte_length: persisted.len() as u64,
+        sha256: Sha256Digest::from_bytes(&persisted),
+        at_volume_root,
+    })
 }
 
 fn verify_package_files(
@@ -735,6 +946,12 @@ pub enum StoreError {
     InvalidPackageRelativePath(String),
     #[error("deployment package file failed read-back verification: {0}")]
     PackageVerificationFailed(String),
+    #[error("recovery copy file name is unsafe: {0}")]
+    InvalidRecoveryShortcutName(String),
+    #[error(
+        "a different file already uses the recovery copy name and will not be overwritten: {0}"
+    )]
+    RecoveryShortcutConflict(PathBuf),
     #[error("failed to access {path}: {source}")]
     Io {
         path: PathBuf,
@@ -1167,6 +1384,7 @@ mod tests {
                 &plan,
                 &Sha256Digest::from_bytes(b"stale validated receipt"),
                 &destination,
+                None,
             ),
             Err(StoreError::FirmwareInjectionReceiptChanged)
         ));
@@ -1176,6 +1394,7 @@ mod tests {
                 &plan,
                 &persisted_firmware_injection_receipt.sha256,
                 &destination,
+                None,
             )
             .unwrap();
         assert_eq!(
@@ -1191,7 +1410,8 @@ mod tests {
         )
         .unwrap();
         assert_eq!(persisted_manifest, receipt.manifest);
-        assert_eq!(persisted_manifest.files.len(), 6);
+        assert_eq!(persisted_manifest.files.len(), 7);
+        assert_eq!(receipt.recovery_shortcut, None);
         assert_eq!(
             fs::read(
                 receipt
@@ -1214,15 +1434,156 @@ mod tests {
         );
         assert!(receipt.package_path.join("SHA256SUMS.txt").is_file());
         assert!(receipt.package_path.join("DEPLOYMENT.txt").is_file());
+        let korean = fs::read_to_string(receipt.package_path.join("DEPLOYMENT.ko.txt")).unwrap();
+        assert!(korean.starts_with("NvStrapsReBar 설치 안내\n"));
+        assert!(korean.contains("- flash/vendor-bios.bin: 설치할 BIOS 파일입니다."));
+        assert!(korean.contains("설치 방법: BIOS 화면의 BIOS 업데이트 도구"));
+        assert!(korean.contains("복구 방법: USB Flashback 버튼"));
+        assert!(korean.contains("Above 4G Decoding"));
+        assert!(persisted_manifest.files.iter().any(|file| {
+            file.relative_path == "DEPLOYMENT.ko.txt"
+                && file.purpose == PackageFilePurpose::OperatorInstructions
+                && file.sha256 == Sha256Digest::from_bytes(korean.as_bytes())
+        }));
+        assert!(
+            fs::read_to_string(receipt.package_path.join("SHA256SUMS.txt"))
+                .unwrap()
+                .contains(" *DEPLOYMENT.ko.txt\n")
+        );
         assert!(matches!(
             store.export_deployment_package(
                 &profile,
                 &plan,
                 &persisted_firmware_injection_receipt.sha256,
                 &destination,
+                None,
             ),
             Err(StoreError::PackageAlreadyExists(_))
         ));
+    }
+
+    #[test]
+    fn package_export_writes_a_recovery_copy_without_overwriting_another_file() {
+        let directory = TestDirectory::new();
+        let source = directory.0.join("vendor-bios.bin");
+        fs::write(&source, b"known vendor firmware image").unwrap();
+        let profile = profile(FirmwareFingerprint::inspect(&source).unwrap());
+        let store = DeploymentStore::new(directory.0.join("store"));
+        let mut plan = store.provision_profile(&profile, &source).unwrap().plan;
+        let driver = store
+            .preserve_artifact(&profile, ArtifactKind::RustDriverFfs, b"verified Rust FFS")
+            .unwrap();
+        plan.complete(
+            StepId::PrepareRustDriver,
+            StepEvidence::new(EvidenceKind::RustDriverSha256, driver.sha256.to_string()).unwrap(),
+        )
+        .unwrap();
+        let patched = store
+            .preserve_artifact(&profile, ArtifactKind::PatchedFirmware, b"patched image")
+            .unwrap();
+        plan.complete(
+            StepId::VerifyPatchedArtifact,
+            StepEvidence::new(
+                EvidenceKind::PatchedFirmwareSha256,
+                patched.sha256.to_string(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        store.save_plan(&profile, &plan).unwrap();
+        let injection_receipt = store
+            .preserve_artifact(
+                &profile,
+                ArtifactKind::FirmwareInjectionReceipt,
+                br#"{"schemaVersion":1}"#,
+            )
+            .unwrap();
+
+        let unsafe_name = directory.0.join("unsafe-name");
+        fs::create_dir(&unsafe_name).unwrap();
+        for name in ["../MSI.ROM", "", ".MSI.ROM", "MSI ROM", "MSI/ROM"] {
+            assert!(matches!(
+                store.export_deployment_package(
+                    &profile,
+                    &plan,
+                    &injection_receipt.sha256,
+                    &unsafe_name,
+                    Some(name),
+                ),
+                Err(StoreError::InvalidRecoveryShortcutName(_))
+            ));
+        }
+        assert_eq!(fs::read_dir(&unsafe_name).unwrap().count(), 0);
+
+        let conflicting = directory.0.join("conflicting-usb");
+        fs::create_dir(&conflicting).unwrap();
+        fs::write(conflicting.join("MSI.ROM"), b"a different BIOS image").unwrap();
+        assert!(matches!(
+            store.export_deployment_package(
+                &profile,
+                &plan,
+                &injection_receipt.sha256,
+                &conflicting,
+                Some("MSI.ROM"),
+            ),
+            Err(StoreError::RecoveryShortcutConflict(_))
+        ));
+        assert_eq!(
+            fs::read(conflicting.join("MSI.ROM")).unwrap(),
+            b"a different BIOS image"
+        );
+        assert_eq!(fs::read_dir(&conflicting).unwrap().count(), 1);
+
+        let usb = directory.0.join("usb");
+        fs::create_dir(&usb).unwrap();
+        let receipt = store
+            .export_deployment_package(
+                &profile,
+                &plan,
+                &injection_receipt.sha256,
+                &usb,
+                Some("MSI.ROM"),
+            )
+            .unwrap();
+        let shortcut = receipt.recovery_shortcut.as_ref().unwrap();
+        assert_eq!(shortcut.file_name, "MSI.ROM");
+        assert_eq!(
+            shortcut.path,
+            fs::canonicalize(&usb).unwrap().join("MSI.ROM")
+        );
+        assert!(!shortcut.at_volume_root);
+        assert_eq!(
+            fs::read(&shortcut.path).unwrap(),
+            fs::read(receipt.package_path.join("recovery/original-firmware.bin")).unwrap()
+        );
+        assert_eq!(shortcut.sha256, profile.original_firmware.sha256);
+        assert!(
+            receipt
+                .manifest
+                .files
+                .iter()
+                .all(|file| file.relative_path != "MSI.ROM")
+        );
+        let korean = fs::read_to_string(receipt.package_path.join("DEPLOYMENT.ko.txt")).unwrap();
+        assert!(korean.contains("MSI.ROM 파일이 USB 맨 위에 있는지 확인하세요."));
+        let english = fs::read_to_string(receipt.package_path.join("DEPLOYMENT.txt")).unwrap();
+        assert!(english.contains("Recovery copy: ../MSI.ROM"));
+
+        // An identical copy left by an earlier export is accepted, not rewritten.
+        fs::remove_dir_all(&receipt.package_path).unwrap();
+        let again = store
+            .export_deployment_package(
+                &profile,
+                &plan,
+                &injection_receipt.sha256,
+                &usb,
+                Some("MSI.ROM"),
+            )
+            .unwrap();
+        assert_eq!(
+            again.recovery_shortcut.as_ref().unwrap().sha256,
+            shortcut.sha256
+        );
     }
 
     #[test]
@@ -1242,6 +1603,7 @@ mod tests {
                 &plan,
                 &Sha256Digest::from_bytes(b"missing receipt"),
                 &directory.0,
+                None,
             ),
             Err(StoreError::PatchedArtifactNotVerified)
         ));
@@ -1276,6 +1638,7 @@ mod tests {
                 &verified,
                 &Sha256Digest::from_bytes(b"missing receipt"),
                 &directory.0,
+                None,
             ),
             Err(StoreError::MissingFirmwareInjectionReceipt)
         ));
@@ -1292,6 +1655,7 @@ mod tests {
                 &verified,
                 &injection_receipt.sha256,
                 "relative-usb",
+                None,
             ),
             Err(StoreError::PackageDestinationMustBeAbsolute)
         ));

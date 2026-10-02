@@ -20,9 +20,10 @@ The app presents the whole journey as two steps, in the order you meet them:
 1. **Install firmware** — pick the official BIOS image for your exact motherboard. The app
    fingerprints it, adds the NvStrapsReBar DXE driver (plus, for older boards, any BIOS patches
    you select from the pinned catalogs), and exports a package: the new image, the untouched
-   original, checksums, and step-by-step instructions. You then flash the new image with your
-   vendor's own tool — M-FLASH, a flashback button, whatever your board uses. The app does not
-   flash; that stays in your hands.
+   original, checksums, and step-by-step instructions in English and Korean. On a board whose
+   flashback recovery file name the app knows (`MSI.ROM` on the MSI PRO Z690-A DDR4), it also
+   saves a copy of the original under that name next to the package. You then flash the new image
+   yourself with your vendor's own tool: M-FLASH, a flashback button, whatever your board uses.
 2. **BAR Settings** — once the new BIOS has booted, the app talks to the driver through a UEFI
    variable. Turn Resizable BAR expansion on or off, set per-GPU sizes or exclusions, and set a
    motherboard-side BAR limit for boards that need one. Saving asks for one confirmation and
