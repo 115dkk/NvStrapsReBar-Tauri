@@ -166,6 +166,7 @@ const DRS_ENUM_APPLICATIONS: u32 = 0x7FA2_173A;
 const DRS_GET_SETTING: u32 = 0x73BF_8338;
 const DRS_SET_SETTING: u32 = 0x577D_D202;
 const DRS_DELETE_PROFILE_SETTING: u32 = 0xE4A2_6362;
+const DRS_RESTORE_PROFILE_DEFAULT_SETTING: u32 = 0x53F0_381E;
 
 // Since R445 the public accessors refuse some undocumented settings (NVAPI_SETTING_NOT_FOUND).
 // NVIDIA Profile Inspector resolves the driver's own accessors first and falls back to the
@@ -173,6 +174,7 @@ const DRS_DELETE_PROFILE_SETTING: u32 = 0xE4A2_6362;
 const DRS_GET_SETTING_EX: u32 = 0xEA99_498D;
 const DRS_SET_SETTING_EX: u32 = 0x8A2C_F5F5;
 const DRS_DELETE_PROFILE_SETTING_EX: u32 = 0xD20D_29DF;
+const DRS_RESTORE_PROFILE_DEFAULT_SETTING_EX: u32 = 0x7DD5_B261;
 
 #[derive(Clone, Copy)]
 enum GetSetting {
@@ -203,6 +205,7 @@ pub struct NvApi {
     get_setting: GetSetting,
     set_setting: SetSetting,
     delete_profile_setting: DeleteSettingFn,
+    restore_profile_default_setting: DeleteSettingFn,
     /// Which setting accessors resolved, for the log.
     accessors: String,
 }
@@ -279,8 +282,23 @@ impl NvApi {
                     DRS_DELETE_PROFILE_SETTING,
                 ),
             };
+        // SAFETY: as above; both IDs take a session, a profile, and a setting ID.
+        let (restore_profile_default_setting, restore_id) =
+            match unsafe { resolve_optional(query, DRS_RESTORE_PROFILE_DEFAULT_SETTING_EX) } {
+                Some(function) => (function, DRS_RESTORE_PROFILE_DEFAULT_SETTING_EX),
+                None => (
+                    unsafe {
+                        resolve_function(
+                            query,
+                            DRS_RESTORE_PROFILE_DEFAULT_SETTING,
+                            "NvAPI_DRS_RestoreProfileDefaultSetting",
+                        )?
+                    },
+                    DRS_RESTORE_PROFILE_DEFAULT_SETTING,
+                ),
+            };
         let accessors = format!(
-            "get_setting={get_id:#010x} set_setting={set_id:#010x} delete_setting={delete_id:#010x}"
+            "get_setting={get_id:#010x} set_setting={set_id:#010x} delete_setting={delete_id:#010x} restore_setting={restore_id:#010x}"
         );
         // SAFETY: each ID is paired with the signature nvapi.h declares for it.
         unsafe {
@@ -344,6 +362,7 @@ impl NvApi {
                 get_setting,
                 set_setting,
                 delete_profile_setting,
+                restore_profile_default_setting,
                 accessors,
             })
         }
@@ -669,6 +688,13 @@ impl DrsSession for NvapiSession<'_> {
         }
     }
 
+    fn restore_setting(&mut self, profile: ProfileHandle, id: u32) -> DrsResult<()> {
+        // SAFETY: the session is live.
+        let status =
+            unsafe { (self.api.restore_profile_default_setting)(self.handle, handle(profile), id) };
+        check("NvAPI_DRS_RestoreProfileDefaultSetting", status)
+    }
+
     fn save(&mut self) -> DrsResult<()> {
         // SAFETY: the session is live.
         check("NvAPI_DRS_SaveSettings", unsafe {
@@ -933,12 +959,28 @@ mod tests {
         NVAPI_OK
     }
     unsafe extern "C" fn delete_setting(session: Handle, profile: Handle, id: u32) -> i32 {
-        match with_session(session, |db| {
-            db.profiles[profile_index(profile)].user.remove(&id)
-        }) {
-            Some(_) => NVAPI_OK,
-            None => NVAPI_SETTING_NOT_FOUND,
+        let removed = with_session(session, |db| {
+            let profile = &mut db.profiles[profile_index(profile)];
+            let user = profile.user.remove(&id).is_some();
+            let nvidia = profile.nvidia.contains_key(&id) && !profile.removed_nvidia.contains(&id);
+            if nvidia {
+                profile.removed_nvidia.insert(id);
+            }
+            user || nvidia
+        });
+        if removed {
+            NVAPI_OK
+        } else {
+            NVAPI_SETTING_NOT_FOUND
         }
+    }
+    unsafe extern "C" fn restore_setting(session: Handle, profile: Handle, id: u32) -> i32 {
+        with_session(session, |db| {
+            let profile = &mut db.profiles[profile_index(profile)];
+            profile.user.remove(&id);
+            profile.removed_nvidia.remove(&id);
+        });
+        NVAPI_OK
     }
 
     unsafe extern "C" fn get_setting_ex(
@@ -971,6 +1013,9 @@ mod tests {
             DRS_GET_SETTING_EX => get_setting_ex as GetSettingExFn as *mut c_void,
             DRS_SET_SETTING_EX => set_setting_ex as SetSettingExFn as *mut c_void,
             DRS_DELETE_PROFILE_SETTING_EX => delete_setting as DeleteSettingFn as *mut c_void,
+            DRS_RESTORE_PROFILE_DEFAULT_SETTING_EX => {
+                restore_setting as DeleteSettingFn as *mut c_void
+            }
             // SAFETY: the public table below answers every other ID.
             _ => unsafe { public_query(id) },
         }
@@ -994,6 +1039,9 @@ mod tests {
             DRS_GET_SETTING => get_setting as GetSettingFn as *mut c_void,
             DRS_SET_SETTING => set_setting as SetSettingFn as *mut c_void,
             DRS_DELETE_PROFILE_SETTING => delete_setting as DeleteSettingFn as *mut c_void,
+            DRS_RESTORE_PROFILE_DEFAULT_SETTING => {
+                restore_setting as DeleteSettingFn as *mut c_void
+            }
             _ => ptr::null_mut(),
         }
     }
@@ -1007,13 +1055,13 @@ mod tests {
     fn the_drivers_own_accessors_come_first_and_the_public_ones_are_the_fallback() {
         assert_eq!(
             api().accessors(),
-            "get_setting=0xea99498d set_setting=0x8a2cf5f5 delete_setting=0xd20d29df"
+            "get_setting=0xea99498d set_setting=0x8a2cf5f5 delete_setting=0xd20d29df restore_setting=0x7dd5b261"
         );
         // SAFETY: `public_query` pairs every public ID with a stand-in of the declared signature.
         let public = unsafe { NvApi::resolve(public_query) }.expect("public functions resolve");
         assert_eq!(
             public.accessors(),
-            "get_setting=0x73bf8338 set_setting=0x577dd202 delete_setting=0xe4a26362"
+            "get_setting=0x73bf8338 set_setting=0x577dd202 delete_setting=0xe4a26362 restore_setting=0x53f0381e"
         );
         let driver = NvapiDriver::new(&public);
         let mut session = driver.open().unwrap();
@@ -1062,8 +1110,16 @@ mod tests {
         assert_eq!(settings.size_limit.unwrap().value, Value::Qword(1 << 30));
         assert_eq!(settings.enable.unwrap().value, Value::Binary(vec![1, 2, 3]));
         assert!(session.delete_setting(game, ENABLE_ID).unwrap());
+        assert_eq!(
+            session.setting(game, ENABLE_ID).unwrap().unwrap().value,
+            Value::Dword(0)
+        );
         // Deleting again finds nothing to delete, which is not an error.
         assert!(!session.delete_setting(game, ENABLE_ID).unwrap());
+        session.restore_setting(game, ENABLE_ID).unwrap();
+        let restored = session.setting(game, ENABLE_ID).unwrap().unwrap();
+        assert_eq!(restored.value, Value::Dword(1));
+        assert!(restored.current_predefined);
         assert!(session.find_profile("Missing game").unwrap().is_none());
     }
 

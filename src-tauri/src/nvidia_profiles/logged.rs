@@ -186,6 +186,15 @@ impl<S: DrsSession> DrsSession for LoggedSession<'_, S> {
         result
     }
 
+    fn restore_setting(&mut self, profile: ProfileHandle, id: u32) -> DrsResult<()> {
+        changed(
+            self.journal,
+            "drs.restore_setting",
+            format_args!("profile={:#x} id={id:#010x}", profile.0),
+            self.inner.restore_setting(profile, id),
+        )
+    }
+
     fn save(&mut self) -> DrsResult<()> {
         changed(
             self.journal,

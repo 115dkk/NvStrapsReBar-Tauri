@@ -11,6 +11,8 @@ mod fake;
 mod journal;
 mod logged;
 mod nvapi;
+#[cfg(all(test, windows))]
+mod on_pc;
 mod policy;
 mod undo;
 
@@ -394,6 +396,7 @@ fn describe_writes(writes: &[Write]) -> String {
         .map(|write| match write {
             Write::Set { id, value } => format!("set {id:#010x}={value:?}"),
             Write::Delete { id } => format!("delete {id:#010x}"),
+            Write::Restore { id } => format!("restore {id:#010x}"),
         })
         .collect::<Vec<_>>()
         .join(", ")
@@ -560,6 +563,7 @@ fn apply<S: DrsSession>(
                     );
                 }
             }
+            Write::Restore { id } => session.restore_setting(profile, *id)?,
         }
     }
     Ok(())
@@ -981,12 +985,23 @@ mod tests {
         assert!(!off.state.on && !off.state.changed);
         assert_eq!(driver.system.borrow().profiles[2].user.len(), 0);
 
+        let store = Store::under(&directory.0);
+        let journal = Journal::memory();
+        let on = change(
+            &driver,
+            Target::Game("Cyberpunk 2077"),
+            true,
+            &store,
+            &journal,
+        )
+        .unwrap();
+        assert!(on.state.on && on.state.changed);
         let cyberpunk = change(
             &driver,
             Target::Game("Cyberpunk 2077"),
             false,
-            &Store::under(&directory.0),
-            &Journal::memory(),
+            &store,
+            &journal,
         )
         .unwrap();
         assert!(!cyberpunk.state.on && cyberpunk.state.changed);
@@ -996,6 +1011,26 @@ mod tests {
             system.profiles[1].user.keys().copied().collect::<Vec<_>>(),
             [APP_SETTING_ID, ENABLE_ID]
         );
+        let enable = system.setting(1, ENABLE_ID).unwrap();
+        assert_eq!(enable.value, Value::Dword(0));
+        assert!(!enable.current_predefined);
+        assert!(enable.predefined);
+        drop(system);
+        assert!(journal.lines().iter().any(|line| {
+            line.contains("turn on: set 0x000bfa21=Dword(2), set 0x000f00ba=Dword(1)")
+        }));
+        assert!(
+            journal
+                .lines()
+                .iter()
+                .any(|line| { line.contains("clear: delete 0x000bfa21, restore 0x000f00ba") })
+        );
+
+        let summary = undo_summary(&directory);
+        undo::undo(&driver, &store.originals, &summary.revision, &journal).unwrap();
+        let restored = driver.system.borrow().setting(1, ENABLE_ID).unwrap();
+        assert_eq!(restored.value, Value::Dword(1));
+        assert!(restored.current_predefined);
     }
 
     #[test]
@@ -1138,6 +1173,35 @@ mod tests {
     fn undo_summary(directory: &TestDirectory) -> undo::UndoSummary {
         undo::summary(&Store::under(&directory.0).originals, &Journal::memory())
             .expect("changes were recorded")
+    }
+
+    #[test]
+    fn undo_restores_cyberpunks_nvidia_enable_value() {
+        let driver = FakeDriver::new(sample_db(), DRIVER);
+        let directory = TestDirectory::new();
+        let store = Store::under(&directory.0);
+        let journal = Journal::memory();
+        change(
+            &driver,
+            Target::Game("Cyberpunk 2077"),
+            false,
+            &store,
+            &journal,
+        )
+        .unwrap();
+
+        let summary = undo_summary(&directory);
+        undo::undo(&driver, &store.originals, &summary.revision, &journal).unwrap();
+
+        let setting = driver.system.borrow().setting(1, ENABLE_ID).unwrap();
+        assert_eq!(setting.value, Value::Dword(1));
+        assert!(setting.current_predefined);
+        assert!(setting.predefined);
+        let catalog = load_catalog(&driver, &store, &journal).unwrap();
+        let cyberpunk = game(&catalog, "Cyberpunk 2077");
+        assert!(cyberpunk.state.on);
+        assert_eq!(cyberpunk.state.source, RebarSource::Nvidia);
+        assert!(!cyberpunk.state.changed);
     }
 
     #[test]

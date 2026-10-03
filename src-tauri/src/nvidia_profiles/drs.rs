@@ -71,9 +71,14 @@ pub trait DrsSession {
     fn global_profile(&mut self) -> DrsResult<ProfileHandle>;
     fn setting(&mut self, profile: ProfileHandle, id: u32) -> DrsResult<Option<Setting>>;
     fn set_setting(&mut self, profile: ProfileHandle, id: u32, value: &Value) -> DrsResult<()>;
-    /// Removes the value written on this PC; a predefined value comes back. `false` means the
-    /// profile had no value of its own to remove.
+    /// Removes the profile's value and NVIDIA's predefined value with it. Callers use
+    /// `restore_setting` instead when the setting has a predefined value. `false` means the
+    /// profile had neither kind of value to remove.
     fn delete_setting(&mut self, profile: ProfileHandle, id: u32) -> DrsResult<bool>;
+    /// Returns the setting to NVIDIA's predefined value for this profile, dropping the value
+    /// written on this PC. A delete would drop NVIDIA's value too, so a setting with a
+    /// predefined value is restored, never deleted.
+    fn restore_setting(&mut self, profile: ProfileHandle, id: u32) -> DrsResult<()>;
     fn save(&mut self) -> DrsResult<()>;
     fn save_to_file(&mut self, path: &Path) -> DrsResult<()>;
 

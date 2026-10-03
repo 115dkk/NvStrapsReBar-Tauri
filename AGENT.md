@@ -135,6 +135,8 @@ host contracts and the real volatile BAR1 MMIO read/write boundary. Target-only 
 callbacks and Windows system FFI remain covered by compilation, Clippy, native tests, and QEMU;
 Miri cannot execute those external firmware or operating-system calls.
 
-`npm run test:qemu` is the isolated Linux/OVMF smoke path when QEMU and OVMF are available. The two
+`npm run test:qemu` is the isolated Linux/OVMF smoke path when QEMU and OVMF are available. The
 ignored Rust smoke tests require real NVIDIA hardware or network access and must remain explicit,
-opt-in evidence rather than silently joining ordinary validation.
+opt-in evidence rather than silently joining ordinary validation. `nvidia_profiles::on_pc` runs the
+driver settings handoff against the installed driver; its write tests change real driver profiles,
+need administrator rights and `NVSTRAPS_DRIVER_WRITE=1`, and end with the undo.

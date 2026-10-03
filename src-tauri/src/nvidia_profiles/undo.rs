@@ -17,7 +17,7 @@ use super::{
     drs::{DrsDriver, DrsSession, driver_version_text},
     io_error,
     journal::Journal,
-    policy::{REBAR_SETTING_IDS, RebarSettings, Value},
+    policy::{Location, REBAR_SETTING_IDS, RebarSettings, Setting, Value},
     unix_timestamp_ms,
 };
 use crate::error::{BackendError, BackendResult};
@@ -65,6 +65,9 @@ struct OriginalProfile {
     /// Per setting ID: the value written on this PC before the app's first change, or `None`
     /// when the profile had no value of its own (NVIDIA's or the inherited value applied).
     values: BTreeMap<String, Option<StoredValue>>,
+    /// Settings for which the profile carried NVIDIA's predefined value when recorded.
+    #[serde(default)]
+    nvidia: Vec<String>,
     /// Settings whose earlier value the app cannot write back (a text value).
     #[serde(default)]
     unrestorable: Vec<String>,
@@ -110,6 +113,11 @@ fn read(path: &Path) -> Result<(Originals, Option<String>), String> {
         originals,
         Some(Sha256Digest::from_bytes(&bytes).as_str().to_owned()),
     ))
+}
+
+/// The profile itself carries NVIDIA's predefined value; an inherited value is not restored here.
+fn nvidia_value(setting: &Setting) -> bool {
+    setting.location == Location::Profile && setting.predefined
 }
 
 pub fn summary(path: &Path, journal: &Journal) -> Option<UndoSummary> {
@@ -167,8 +175,12 @@ pub fn record(
         return Ok(());
     }
     let mut values = BTreeMap::new();
+    let mut nvidia = Vec::new();
     let mut unrestorable = Vec::new();
     for id in REBAR_SETTING_IDS {
+        if settings.get(id).is_some_and(nvidia_value) {
+            nvidia.push(key(id));
+        }
         let own = settings.get(id).filter(|setting| setting.user_set());
         match own.map(|setting| StoredValue::of(&setting.value)) {
             Some(Some(value)) => {
@@ -186,6 +198,7 @@ pub fn record(
         driver_version: driver_version_text(version),
         recorded_at_unix_ms: unix_timestamp_ms(),
         values,
+        nvidia,
         unrestorable: unrestorable.clone(),
     });
     write(path, &originals)?;
@@ -262,8 +275,16 @@ pub fn undo<D: DrsDriver>(
                 );
                 continue;
             }
-            match original.values.get(&key(id)).cloned().flatten() {
+            let setting_key = key(id);
+            match original.values.get(&setting_key).cloned().flatten() {
                 Some(value) => session.set_setting(profile, id, &value.value())?,
+                None if original.nvidia.contains(&setting_key)
+                    || session
+                        .setting(profile, id)?
+                        .is_some_and(|setting| nvidia_value(&setting)) =>
+                {
+                    session.restore_setting(profile, id)?;
+                }
                 None => {
                     session.delete_setting(profile, id)?;
                 }
@@ -283,13 +304,19 @@ pub fn undo<D: DrsDriver>(
         };
         let settings = fresh.rebar_settings(profile)?;
         let matches = REBAR_SETTING_IDS.iter().all(|id| {
-            original.unrestorable.contains(&key(*id)) || {
-                let expected = original.values.get(&key(*id)).cloned().flatten();
+            let setting_key = key(*id);
+            original.unrestorable.contains(&setting_key) || {
+                let expected = original.values.get(&setting_key).cloned().flatten();
                 let actual = settings
                     .get(*id)
                     .filter(|setting| setting.user_set())
                     .and_then(|setting| StoredValue::of(&setting.value));
-                expected == actual
+                let nvidia_matches = expected.is_some()
+                    || !original.nvidia.contains(&setting_key)
+                    || settings
+                        .get(*id)
+                        .is_some_and(|setting| setting.current_predefined);
+                expected == actual && nvidia_matches
             }
         });
         let line = format!(
@@ -312,4 +339,63 @@ pub fn undo<D: DrsDriver>(
     }
     journal.info("undo.done", format_args!("revision={current}"));
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::nvidia_profiles::{
+        fake::{FakeDriver, sample_db},
+        policy::{ENABLE_ID, Location},
+    };
+
+    const DRIVER: u32 = 61_664;
+
+    #[test]
+    fn legacy_record_without_nvidia_still_parses_and_undoes() {
+        static SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let root = std::env::temp_dir().join(format!(
+            "nvstraps-legacy-originals-{}-{}-{}",
+            std::process::id(),
+            unix_timestamp_ms(),
+            SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("originals.json");
+        fs::write(
+            &path,
+            r#"{
+  "schemaVersion": 1,
+  "profiles": [
+    {
+      "name": "Elden Ring",
+      "allPrograms": false,
+      "driverVersion": "616.64",
+      "recordedAtUnixMs": "0",
+      "values": {
+        "0x000bfa21": null,
+        "0x000f00ba": null,
+        "0x000f00bb": null,
+        "0x000f00ff": null
+      },
+      "unrestorable": []
+    }
+  ]
+}"#,
+        )
+        .unwrap();
+        let mut db = sample_db();
+        db.profiles[2].user.insert(ENABLE_ID, Value::Dword(0));
+        let driver = FakeDriver::new(db, DRIVER);
+        let revision = summary(&path, &Journal::memory()).unwrap().revision;
+
+        undo(&driver, &path, &revision, &Journal::memory()).unwrap();
+
+        let setting = driver.system.borrow().setting(2, ENABLE_ID).unwrap();
+        assert_eq!(setting.location, Location::Default);
+        assert_eq!(setting.value, Value::Dword(0));
+        assert!(!setting.current_predefined);
+        assert!(!setting.predefined);
+        fs::remove_dir_all(root).unwrap();
+    }
 }

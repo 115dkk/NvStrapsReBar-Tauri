@@ -222,9 +222,18 @@ list and counted (`skippedProfiles`); fifty refusals in a row end the read with 
 errors carry the log path in their message. A panic hook writes `<local data>/logs/panic.log`
 before the release build aborts.
 
-The setting accessors are the driver's own (`0xEA99498D`, `0x8A2CF5F5`, `0xD20D29DF`) when it
-exports them, as NVIDIA Profile Inspector does, because the public ones refuse some undocumented
-settings; the public IDs are the fallback, and the log names which resolved. DRS sessions do not
+The setting accessors are the driver's own (`0xEA99498D`, `0x8A2CF5F5`, `0xD20D29DF`, and
+`0x7DD5B261` for `RestoreProfileDefaultSetting`) when it exports them, as NVIDIA Profile
+Inspector does, because the public ones refuse some undocumented settings; the public IDs are the
+fallback, and the log names which resolved.
+
+A delete removes NVIDIA's predefined value along with the profile's own value, and
+`RestoreProfileDefaultSetting` cannot bring it back afterwards (driver 616.64 answers
+`NVAPI_SETTING_NOT_FOUND`). So a value on a setting that carries NVIDIA's predefined value is
+always restored, never deleted: when a game is turned off, and in the undo. The undo record lists
+those settings (`nvidia`), and the undo's read-back checks that NVIDIA's value is current again.
+
+DRS sessions do not
 merge: an NVIDIA app or control panel save between a command's load and save is overwritten, so
 close those tools while switching games.
 
