@@ -17,6 +17,7 @@
 //! it did before the test.
 
 use std::{
+    collections::BTreeMap,
     env,
     panic::{self, AssertUnwindSafe},
     path::PathBuf,
@@ -28,10 +29,10 @@ use super::{
     describe_state,
     drs::{DrsDriver, DrsSession},
     load_catalog,
-    nvapi::{self, NvapiDriver},
+    nvapi::{self, NvapiDriver, NvapiSession},
     policy::{
-        APP_ON, APP_SETTING_ID, ENABLE_ID, OPTIONS_ID, OPTIONS_ON, RebarSettings, SIZE_LIMIT_ID,
-        SIZE_LIMIT_ON, Value,
+        APP_ON, APP_SETTING_ID, ENABLE_ID, OPTIONS_ID, OPTIONS_ON, REBAR_SETTING_IDS,
+        RebarSettings, SIZE_LIMIT_ID, SIZE_LIMIT_ON, Value,
     },
     undo, with_driver,
 };
@@ -168,6 +169,130 @@ fn the_installed_driver_gives_nvidia_values_back() {
             "{id:#010x} holds a value written on this PC"
         );
     }
+}
+
+/// Profiles by name: the Resizable BAR values and the other values written on this PC.
+type Profiles = BTreeMap<String, (RebarSettings, Vec<(u32, Value)>)>;
+
+/// Every profile in the session.
+fn profiles(session: &mut NvapiSession<'_>) -> Profiles {
+    let mut profiles = BTreeMap::new();
+    for index in 0.. {
+        let Some(profile) = session.profile(index).expect("the profile list answers") else {
+            break;
+        };
+        let name = session
+            .profile_info(profile)
+            .expect("the profile reads")
+            .name;
+        let rebar = session.rebar_settings(profile).expect("the values read");
+        let others = session
+            .values_written_here(profile)
+            .expect("the profile's settings read")
+            .into_iter()
+            .filter(|(id, _)| !REBAR_SETTING_IDS.contains(id))
+            .map(|(id, setting)| (id, setting.value))
+            .collect();
+        profiles.insert(name, (rebar, others));
+    }
+    profiles
+}
+
+/// Profiles whose Resizable BAR values differ, and profiles that differ in anything else.
+fn differences(left: &Profiles, right: &Profiles) -> (Vec<String>, Vec<String>) {
+    let (mut rebar, mut others) = (Vec::new(), Vec::new());
+    for name in left
+        .keys()
+        .chain(right.keys().filter(|name| !left.contains_key(*name)))
+    {
+        match (left.get(name), right.get(name)) {
+            (Some((left_rebar, left_others)), Some((right_rebar, right_others))) => {
+                if left_rebar != right_rebar {
+                    rebar.push(format!(
+                        "{name:?}: {} -> {}",
+                        describe_settings(left_rebar),
+                        describe_settings(right_rebar)
+                    ));
+                }
+                if left_others != right_others {
+                    others.push(format!("{name:?}: {left_others:?} -> {right_others:?}"));
+                }
+            }
+            (Some(_), None) => others.push(format!("{name:?} only in the system settings")),
+            (None, _) => others.push(format!("{name:?} only in the copy")),
+        }
+    }
+    (rebar, others)
+}
+
+/// Compares the full copy saved before the app's first change with the system settings. With
+/// `NVSTRAPS_LOAD_BACKUP=1`, elevated, the same driver version, and no difference outside the
+/// Resizable BAR values, it saves the copy as the system settings, which brings back NVIDIA values
+/// a delete removed; neither `RestoreProfileDefaultSetting` nor `RestoreProfileDefault` does.
+#[test]
+#[ignore = "needs a Windows PC with an NVIDIA driver; loading the copy needs administrator rights"]
+fn the_installed_driver_compares_the_backup() {
+    let paths = paths();
+    let journal = Journal::file(paths.log.clone());
+    let backup = super::read_backup(&paths.store.backups, &journal)
+        .expect("the backups read")
+        .expect("a backup exists");
+    let api = nvapi::system_api().expect("NVAPI loads");
+    let driver = NvapiDriver::new(api);
+    let version = super::driver_version_text(driver.driver_version().expect("the version reads"));
+    println!(
+        "backup: {} driver {} (installed {version})",
+        backup.path.display(),
+        backup.driver_version
+    );
+    let started = Instant::now();
+    let system = profiles(&mut driver.open().expect("a driver session opens"));
+    let mut copy_session = driver.open_file(&backup.path).expect("the copy loads");
+    let copy = profiles(&mut copy_session);
+    let (rebar, others) = differences(&system, &copy);
+    println!(
+        "profiles: system {} copy {} ms={}",
+        system.len(),
+        copy.len(),
+        started.elapsed().as_millis()
+    );
+    println!("Resizable BAR differences: {}", rebar.len());
+    rebar.iter().take(40).for_each(|line| println!("  {line}"));
+    println!("other differences: {}", others.len());
+    others.iter().take(40).for_each(|line| println!("  {line}"));
+    journal.info(
+        "backup.compare",
+        format_args!("rebar={rebar:?} others={others:?}"),
+    );
+
+    if env::var("NVSTRAPS_LOAD_BACKUP").as_deref() != Ok("1") {
+        return;
+    }
+    assert!(inspect_access().is_elevated, "run elevated");
+    assert_eq!(
+        backup.driver_version, version,
+        "the copy is from this driver"
+    );
+    assert!(others.is_empty(), "the copy would undo other changes");
+    copy_session
+        .save()
+        .expect("the copy saves as the system settings");
+    drop(copy_session);
+    journal.info(
+        "backup.loaded",
+        format_args!("path={}", backup.path.display()),
+    );
+    let reloaded = profiles(&mut driver.open().expect("a driver session opens"));
+    let (rebar, others) = differences(&reloaded, &copy);
+    println!(
+        "after loading: Resizable BAR differences {} other differences {}",
+        rebar.len(),
+        others.len()
+    );
+    assert!(
+        rebar.is_empty() && others.is_empty(),
+        "the system settings match the copy"
+    );
 }
 
 #[test]

@@ -711,6 +711,126 @@ impl DrsSession for NvapiSession<'_> {
     }
 }
 
+// Whole-profile calls the app does not make, for the on-PC repair test (`on_pc`). The driver's
+// own EnumSettings comes first, as in NVIDIA Profile Inspector's NvapiDrsWrapper.cs.
+#[cfg(all(test, windows, target_arch = "x86_64"))]
+const DRS_ENUM_SETTINGS: u32 = 0xAE30_39DA;
+#[cfg(all(test, windows, target_arch = "x86_64"))]
+const DRS_ENUM_SETTINGS_EX: u32 = 0xCFD6_983E;
+#[cfg(all(test, windows, target_arch = "x86_64"))]
+type EnumSettingsFn = unsafe extern "C" fn(Handle, Handle, u32, *mut u32, *mut NvdrsSetting) -> i32;
+#[cfg(all(test, windows, target_arch = "x86_64"))]
+const DRS_LOAD_SETTINGS_FROM_FILE: u32 = 0xD3ED_E889;
+
+#[cfg(all(test, windows, target_arch = "x86_64"))]
+impl NvapiDriver<'_> {
+    /// A session with the settings of a file saved by `NvAPI_DRS_SaveSettingsToFile`; saving
+    /// it replaces the system settings with the file's.
+    pub fn open_file(&self, path: &Path) -> DrsResult<NvapiSession<'_>> {
+        let query = loaded_query()?;
+        // SAFETY: nvapi.h declares this ID as taking a session and a NUL-terminated path.
+        let load: SessionFileFn = unsafe {
+            resolve_function(
+                query,
+                DRS_LOAD_SETTINGS_FROM_FILE,
+                "NvAPI_DRS_LoadSettingsFromFile",
+            )?
+        };
+        let session = self.open_empty()?;
+        let path = unicode_path(path, "NvAPI_DRS_LoadSettingsFromFile")?;
+        // SAFETY: the session is live and the path is a NUL-terminated NvAPI_UnicodeString.
+        check("NvAPI_DRS_LoadSettingsFromFile", unsafe {
+            load(session.handle, path.as_ptr())
+        })?;
+        Ok(session)
+    }
+}
+
+/// `nvapi_QueryInterface` of the NVAPI `system_api` loaded.
+#[cfg(all(test, windows, target_arch = "x86_64"))]
+fn loaded_query() -> DrsResult<QueryInterface> {
+    use windows_sys::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
+
+    use super::drs::NVAPI_LIBRARY_NOT_FOUND;
+
+    let library: Vec<u16> = "nvapi64.dll\0".encode_utf16().collect();
+    // SAFETY: the name is NUL-terminated; the handle is not freed.
+    let module = unsafe { GetModuleHandleW(library.as_ptr()) };
+    if module.is_null() {
+        return Err(DrsError::new(
+            "GetModuleHandleW(nvapi64.dll)",
+            NVAPI_LIBRARY_NOT_FOUND,
+        ));
+    }
+    // SAFETY: the module is loaded and the export name is NUL-terminated.
+    let query = unsafe { GetProcAddress(module, c"nvapi_QueryInterface".as_ptr().cast()) }.ok_or(
+        DrsError::new("nvapi_QueryInterface", NVAPI_LIBRARY_NOT_FOUND),
+    )?;
+    // SAFETY: as in `system_api`.
+    Ok(unsafe {
+        std::mem::transmute::<unsafe extern "system" fn() -> isize, QueryInterface>(query)
+    })
+}
+
+#[cfg(all(test, windows, target_arch = "x86_64"))]
+impl NvapiSession<'_> {
+    /// The settings in `profile` whose current value was written on this PC.
+    pub fn values_written_here(
+        &mut self,
+        profile: ProfileHandle,
+    ) -> DrsResult<Vec<(u32, Setting)>> {
+        let query = loaded_query()?;
+        // SAFETY: both IDs take a session, a profile, a start index, a count, and a settings array
+        // (nvapi.h; Profile Inspector for the driver's own ID).
+        let enum_settings: EnumSettingsFn =
+            match unsafe { resolve_optional(query, DRS_ENUM_SETTINGS_EX) } {
+                Some(function) => function,
+                None => unsafe {
+                    resolve_function(query, DRS_ENUM_SETTINGS, "NvAPI_DRS_EnumSettings")?
+                },
+            };
+        let mut info = NvdrsProfile::empty();
+        // SAFETY: the session is live and the versioned output struct is writable.
+        check("NvAPI_DRS_GetProfileInfo", unsafe {
+            (self.api.profile_info)(self.handle, handle(profile), &mut *info)
+        })?;
+        let count = info.num_of_settings.min(MAX_APPLICATIONS);
+        if count == 0 {
+            return Ok(Vec::new());
+        }
+        let capacity = (BINARY_DATA_MAX as u32).to_le_bytes();
+        let mut settings: Vec<NvdrsSetting> = (0..count)
+            .map(|_| {
+                let mut setting = *NvdrsSetting::empty();
+                setting.predefined_value[..4].copy_from_slice(&capacity);
+                setting.current_value[..4].copy_from_slice(&capacity);
+                setting
+            })
+            .collect();
+        let mut returned = count;
+        // SAFETY: the array holds `count` versioned structs and `returned` says so.
+        let status = unsafe {
+            enum_settings(
+                self.handle,
+                handle(profile),
+                0,
+                &mut returned,
+                settings.as_mut_ptr(),
+            )
+        };
+        match status {
+            NVAPI_OK => Ok(settings
+                .iter()
+                .take(returned.min(count) as usize)
+                .map(|raw| (raw.setting_id, read_setting(raw)))
+                .filter(|(_, setting)| setting.user_set())
+                .collect()),
+            NVAPI_END_ENUMERATION => Ok(Vec::new()),
+            status => Err(DrsError::new("NvAPI_DRS_EnumSettings", status)),
+        }
+    }
+}
+
 /// The NVAPI the installed NVIDIA driver provides, loaded and initialized once per process.
 /// Only 64-bit Windows: the cast below relies on the x86-64 calling convention.
 #[cfg(all(windows, target_arch = "x86_64"))]
