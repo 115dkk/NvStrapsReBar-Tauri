@@ -590,41 +590,41 @@ pub fn system_api() -> DrsResult<&'static NvApi> {
 
     use super::drs::NVAPI_LIBRARY_NOT_FOUND;
 
-    static API: OnceLock<DrsResult<NvApi>> = OnceLock::new();
-    API.get_or_init(|| {
-        let library: Vec<u16> = "nvapi64.dll\0".encode_utf16().collect();
-        // SAFETY: the name is NUL-terminated. The search covers only System32, where the
-        // driver installs NVAPI. The library stays loaded for the life of the process.
-        let module = unsafe {
-            LoadLibraryExW(
-                library.as_ptr(),
-                ptr::null_mut(),
-                LOAD_LIBRARY_SEARCH_SYSTEM32,
-            )
-        };
-        if module.is_null() {
-            return Err(DrsError::new(
-                "LoadLibraryExW(nvapi64.dll)",
-                NVAPI_LIBRARY_NOT_FOUND,
-            ));
-        }
-        // SAFETY: the module is loaded and the export name is NUL-terminated.
-        let query =
-            unsafe { GetProcAddress(module, c"nvapi_QueryInterface".as_ptr().cast()) }.ok_or(
-                DrsError::new("nvapi_QueryInterface", NVAPI_LIBRARY_NOT_FOUND),
-            )?;
-        // SAFETY: nvapi_QueryInterface takes an interface ID and returns a function pointer;
-        // on x86-64 the C and system calling conventions are the same.
-        let query = unsafe {
-            std::mem::transmute::<unsafe extern "system" fn() -> isize, QueryInterface>(query)
-        };
-        // SAFETY: `query` is NVAPI's own resolver.
-        let api = unsafe { NvApi::resolve(query) }?;
-        api.initialize()?;
-        Ok(api)
-    })
-    .as_ref()
-    .map_err(Clone::clone)
+    // Only a working NVAPI is kept; a failure (no driver yet, a driver update in progress) is
+    // retried on the next read.
+    static API: OnceLock<NvApi> = OnceLock::new();
+    if let Some(api) = API.get() {
+        return Ok(api);
+    }
+    let library: Vec<u16> = "nvapi64.dll\0".encode_utf16().collect();
+    // SAFETY: the name is NUL-terminated. The search covers only System32, where the driver
+    // installs NVAPI. The library stays loaded for the life of the process.
+    let module = unsafe {
+        LoadLibraryExW(
+            library.as_ptr(),
+            ptr::null_mut(),
+            LOAD_LIBRARY_SEARCH_SYSTEM32,
+        )
+    };
+    if module.is_null() {
+        return Err(DrsError::new(
+            "LoadLibraryExW(nvapi64.dll)",
+            NVAPI_LIBRARY_NOT_FOUND,
+        ));
+    }
+    // SAFETY: the module is loaded and the export name is NUL-terminated.
+    let query = unsafe { GetProcAddress(module, c"nvapi_QueryInterface".as_ptr().cast()) }.ok_or(
+        DrsError::new("nvapi_QueryInterface", NVAPI_LIBRARY_NOT_FOUND),
+    )?;
+    // SAFETY: nvapi_QueryInterface takes an interface ID and returns a function pointer; on
+    // x86-64 the C and system calling conventions are the same.
+    let query = unsafe {
+        std::mem::transmute::<unsafe extern "system" fn() -> isize, QueryInterface>(query)
+    };
+    // SAFETY: `query` is NVAPI's own resolver.
+    let api = unsafe { NvApi::resolve(query) }?;
+    api.initialize()?;
+    Ok(API.get_or_init(|| api))
 }
 
 #[cfg(not(windows))]
