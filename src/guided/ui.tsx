@@ -1,4 +1,4 @@
-import type { ReactNode, Ref } from "react";
+import { useId, type ReactNode, type Ref } from "react";
 import { useI18n } from "../i18n";
 import { Icon, type IconName } from "./icons";
 
@@ -247,5 +247,38 @@ export const Crumb = ({ here, onHome }: { here: ReactNode; onHome: () => void })
                         <span className="nv-muted" aria-hidden="true">›</span>
                         <span className="nv-muted">{here}</span>
                 </nav>
+        );
+};
+
+/** A setting row that describes its on state, with a switch at the right. While a change runs the switch shows the requested state and a spinner. */
+export const SwitchRow = ({ title, detail, checked, disabled, busy = false, onChange, card = false }: {
+        title: ReactNode;
+        detail?: ReactNode;
+        checked: boolean;
+        disabled?: boolean;
+        busy?: boolean;
+        onChange: (checked: boolean) => void;
+        card?: boolean;
+}) => {
+        const id = useId();
+        return (
+                <div className={card ? "nv-card nv-switch-row" : "nv-switch-row"}>
+                        <div className="nv-fact-text">
+                                <span className="nv-strong" id={`${id}-title`}>{title}</span>
+                                {detail && <span className="nv-supporting" id={`${id}-detail`}>{detail}</span>}
+                        </div>
+                        {busy && <span className="nv-spinner nv-switch-busy" aria-hidden="true" />}
+                        <button
+                                type="button"
+                                className="nv-switch"
+                                role="switch"
+                                aria-checked={checked}
+                                aria-busy={busy || undefined}
+                                aria-labelledby={`${id}-title`}
+                                aria-describedby={detail ? `${id}-detail` : undefined}
+                                disabled={disabled || busy}
+                                onClick={() => onChange(!checked)}
+                        />
+                </div>
         );
 };

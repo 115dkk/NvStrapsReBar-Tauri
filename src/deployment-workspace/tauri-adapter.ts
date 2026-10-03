@@ -106,16 +106,6 @@ export const createTauriDeploymentAdapter = (
                 invokeCommand("verify_configuration_reboot", { profileId }),
         collectNvidiaSmiEvidence: (profileId) =>
                 invokeCommand("collect_nvidia_smi_evidence", { profileId }),
-        installNvidiaProfileInspector: () =>
-                invokeCommand("install_nvidia_profile_inspector"),
-        getNvidiaProfileInspectorInstallation: () =>
-                invokeCommand("get_nvidia_profile_inspector_installation"),
-        backupNvidiaProfiles: (profileId) =>
-                invokeCommand("backup_nvidia_profiles", { profileId }),
-        launchNvidiaProfileInspector: (profileId) =>
-                invokeCommand("launch_nvidia_profile_inspector", {
-                        request: { profileId },
-                }),
 });
 
 export const tauriDeploymentAdapter = createTauriDeploymentAdapter();

@@ -264,3 +264,11 @@
 .nv-app .nv-savebar-text { flex: 1; min-width: 0; }
 .nv-app .nv-disclosure > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-sm); }
 .nv-app .nv-select, .nv-app .nv-input { font-weight: 400; }
+
+/* Games page: switch rows on one surface, aligned with the All games card and separated by hairlines. */
+.nv-app .nv-games { display: flex; flex-direction: column; padding: 4px 20px; border-radius: var(--radius-lg); background: var(--surface); }
+.nv-app .nv-games > li { padding: 12px 0; }
+.nv-app .nv-games > li + li { box-shadow: inset 0 1px 0 var(--line); }
+.nv-app .nv-switch-row > .nv-switch-busy { color: var(--muted); }
+.nv-app .nv-games-loading { display: flex; align-items: center; gap: 10px; min-height: 56px; color: var(--muted); }
+.nv-app input[type="search"].nv-input { appearance: none; }

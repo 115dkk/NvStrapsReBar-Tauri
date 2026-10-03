@@ -1,5 +1,4 @@
 import { FirmwareDeploymentActions } from "./firmware-deployment-actions";
-import { ProfileInspectorActions } from "./profile-inspector-actions";
 import { ProfileSourceActions } from "./profile-source-actions";
 import type { DeploymentSessionRuntime } from "./session-action-runtime";
 import type { DeploymentWorkspaceIntent } from "./session-contract";
@@ -10,7 +9,6 @@ export class DeploymentSessionActions {
         private profileSource: ProfileSourceActions;
         private firmwareDeployment: FirmwareDeploymentActions;
         private verification: VerificationActions;
-        private profileInspector: ProfileInspectorActions;
 
         constructor(private runtime: DeploymentSessionRuntime) {
                 this.profileSource = new ProfileSourceActions(runtime);
@@ -18,7 +16,6 @@ export class DeploymentSessionActions {
                         runtime,
                 );
                 this.verification = new VerificationActions(runtime);
-                this.profileInspector = new ProfileInspectorActions(runtime);
         }
 
         dispatch = async (intent: DeploymentWorkspaceIntent): Promise<void> => {
@@ -75,14 +72,6 @@ export class DeploymentSessionActions {
                                 return this.verification.verifyConfigurationBoot();
                         case "collectBar":
                                 return this.verification.collectBar();
-                        case "installInspector":
-                                return this.profileInspector.install();
-                        case "backupProfiles":
-                                return this.profileInspector.backup();
-                        case "launchInspector":
-                                return this.profileInspector.launch();
-                        case "openInspector":
-                                return this.profileInspector.installAndLaunch();
                         default:
                                 return;
                 }

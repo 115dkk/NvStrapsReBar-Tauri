@@ -43,15 +43,6 @@ test("home rows reach every page and each page returns home", async ({ page }) =
         }
 });
 
-test("the per-game page opens Profile Inspector after a backup and keeps the step optional", async ({ page }) => {
-        await open(page, "expanded");
-        await page.getByRole("button", { name: "Turn on for each game" }).click();
-        await expect(page.getByText("Under 5 - Common, set rBAR - Feature to Enabled.")).toBeVisible();
-        await expect(page.getByText("Install NVIDIA Profile Inspector from its GitHub page and follow the same steps.")).toBeVisible();
-        await expect(button(page, "Open Profile Inspector")).toHaveCount(0);
-        await page.screenshot({ path: `${evidence}/en-games-without-record-1180.png` });
-});
-
 test("the menu is keyboard-operable and switches language in place", async ({ page }) => {
         await open(page, "expanded");
         const menuButton = page.getByRole("button", { name: "Menu" });

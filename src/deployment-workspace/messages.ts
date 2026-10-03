@@ -67,8 +67,8 @@ export const manualWarningIds = (
                 ];
         if (stepId === "configureNvidiaApplications")
                 return [
-                        "ui.applyAndReviewTheIntendedPerApplicationRebarPolicy",
-                        "ui.returnAfterEditingThePolicyAndRecordTheResult",
+                        "ui.gamesRecordCheck",
+                        "ui.gamesRecordRestart",
                 ];
         return [];
 };

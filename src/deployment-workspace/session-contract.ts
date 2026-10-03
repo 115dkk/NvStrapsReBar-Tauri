@@ -15,10 +15,7 @@ import type {
         LegacyPatchRisk,
         MachineProfile,
         ManualDeploymentStepPreview,
-        NvidiaProfileBackupReceipt,
         NvidiaSmiEvidence,
-        ProfileInspectorInstallation,
-        ProfileInspectorLaunch,
         RecoveryMethod,
         StepId,
 } from "./contract";
@@ -98,9 +95,6 @@ export interface DeploymentWorkspaceView {
                 detail: MessageDescriptor;
         } | null;
         barEvidence: NvidiaSmiEvidence | null;
-        installation: ProfileInspectorInstallation | null;
-        backup: NvidiaProfileBackupReceipt | null;
-        launch: ProfileInspectorLaunch | null;
         busyAction: string;
         activity: DeploymentWorkspaceActivity;
         /** A read-only check the guided screens run on their own after a restart. */
@@ -170,12 +164,8 @@ export type DeploymentWorkspaceIntent =
                           | "requestConfigurationReboot"
                           | "verifyConfigurationBoot"
                           | "collectBar"
-                          | "installInspector"
-                          | "backupProfiles"
-                          | "launchInspector"
                           | "autoCheck"
                           | "saveToUsb"
-                          | "openInspector"
                           | "saveRecommendedConfig"
                           | "closeModals";
           };

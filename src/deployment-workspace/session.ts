@@ -114,10 +114,7 @@ class Session implements DeploymentWorkspaceSession {
         private async initialize() {
                 const generation = ++this.generation;
                 try {
-                        const [profiles, installation] = await Promise.all([
-                                this.adapter.listMachineProfiles(),
-                                this.adapter.getNvidiaProfileInspectorInstallation(),
-                        ]);
+                        const profiles = await this.adapter.listMachineProfiles();
                         if (this.disposed || generation !== this.generation)
                                 return;
                         // Resume the record the user last worked on; storage order is arbitrary.
@@ -129,7 +126,6 @@ class Session implements DeploymentWorkspaceSession {
                                 ) ?? profiles[0];
                         this.patch({
                                 profiles,
-                                installation,
                                 selectedProfileId: selected?.profileId ?? "",
                         });
                         if (selected)
