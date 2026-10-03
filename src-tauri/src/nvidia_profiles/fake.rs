@@ -3,7 +3,7 @@
 
 use std::{
     cell::{Cell, RefCell},
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::Path,
 };
@@ -23,6 +23,8 @@ pub struct FakeProfile {
     pub apps: Vec<String>,
     /// NVIDIA's predefined values.
     pub nvidia: BTreeMap<u32, Value>,
+    /// NVIDIA values removed by a delete.
+    pub removed_nvidia: BTreeSet<u32>,
     /// Values written on this PC.
     pub user: BTreeMap<u32, Value>,
 }
@@ -43,7 +45,9 @@ impl FakeDb {
 
     pub fn setting(&self, index: usize, id: u32) -> Option<Setting> {
         let profile = &self.profiles[index];
-        let predefined = profile.nvidia.get(&id);
+        let predefined = (!profile.removed_nvidia.contains(&id))
+            .then(|| profile.nvidia.get(&id))
+            .flatten();
         if let Some(value) = profile.user.get(&id) {
             return Some(Setting {
                 location: Location::Profile,
@@ -61,8 +65,11 @@ impl FakeDb {
             });
         }
         let global = &self.profiles[self.global];
+        let inherited_nvidia = (!global.removed_nvidia.contains(&id))
+            .then(|| global.nvidia.get(&id))
+            .flatten();
         let inherited = (index != self.global)
-            .then(|| global.user.get(&id).or_else(|| global.nvidia.get(&id)))
+            .then(|| global.user.get(&id).or(inherited_nvidia))
             .flatten();
         if let Some(value) = inherited {
             return Some(Setting {
@@ -87,6 +94,7 @@ fn game(name: &str, apps: &[&str], nvidia: &[(u32, Value)]) -> FakeProfile {
         predefined: true,
         apps: apps.iter().map(|app| (*app).into()).collect(),
         nvidia: nvidia.iter().cloned().collect(),
+        removed_nvidia: BTreeSet::new(),
         user: BTreeMap::new(),
     }
 }
@@ -231,7 +239,20 @@ impl DrsSession for FakeSession<'_> {
     }
 
     fn delete_setting(&mut self, profile: ProfileHandle, id: u32) -> DrsResult<bool> {
-        Ok(self.db.profiles[index(profile)].user.remove(&id).is_some())
+        let profile = &mut self.db.profiles[index(profile)];
+        let user = profile.user.remove(&id).is_some();
+        let nvidia = profile.nvidia.contains_key(&id) && !profile.removed_nvidia.contains(&id);
+        if nvidia {
+            profile.removed_nvidia.insert(id);
+        }
+        Ok(user || nvidia)
+    }
+
+    fn restore_setting(&mut self, profile: ProfileHandle, id: u32) -> DrsResult<()> {
+        let profile = &mut self.db.profiles[index(profile)];
+        profile.user.remove(&id);
+        profile.removed_nvidia.remove(&id);
+        Ok(())
     }
 
     fn save(&mut self) -> DrsResult<()> {
@@ -250,5 +271,38 @@ impl DrsSession for FakeSession<'_> {
     fn save_to_file(&mut self, path: &Path) -> DrsResult<()> {
         fs::write(path, format!("{:?}", self.db))
             .map_err(|_| DrsError::new("NvAPI_DRS_SaveSettingsToFile", NVAPI_ERROR))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const DRIVER: u32 = 61_664;
+
+    #[test]
+    fn delete_hides_nvidia_value_and_restore_brings_it_back() {
+        let driver = FakeDriver::new(sample_db(), DRIVER);
+        let mut session = driver.open().unwrap();
+        let profile = session
+            .find_profile("Cyberpunk 2077")
+            .unwrap()
+            .expect("sample profile");
+        session
+            .set_setting(profile, ENABLE_ID, &Value::Dword(0))
+            .unwrap();
+
+        assert!(session.delete_setting(profile, ENABLE_ID).unwrap());
+        let deleted = session.setting(profile, ENABLE_ID).unwrap().unwrap();
+        assert_eq!(deleted.location, Location::Default);
+        assert_eq!(deleted.value, Value::Dword(0));
+        assert!(!deleted.predefined);
+
+        session.restore_setting(profile, ENABLE_ID).unwrap();
+        let restored = session.setting(profile, ENABLE_ID).unwrap().unwrap();
+        assert_eq!(restored.location, Location::Profile);
+        assert_eq!(restored.value, Value::Dword(1));
+        assert!(restored.current_predefined);
+        assert!(restored.predefined);
     }
 }

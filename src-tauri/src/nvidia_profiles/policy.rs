@@ -170,6 +170,7 @@ fn state(on: bool, setting: &Setting, changed: bool) -> RebarState {
 pub enum Write {
     Set { id: u32, value: Value },
     Delete { id: u32 },
+    Restore { id: u32 },
 }
 
 /// Turns Resizable BAR on in one profile. Options and the size limit are written only when the
@@ -211,29 +212,38 @@ fn size_limit_value(inherited: Option<&Setting>, driver_version: u32) -> Option<
 }
 
 /// Removes the on/off values written on this PC, and the options and size limit only when they
-/// still hold the values `turn_on` writes.
+/// still hold the values `turn_on` writes. A setting that carries an NVIDIA predefined value is
+/// restored so that value remains in the profile.
 pub fn clear(settings: &RebarSettings) -> Vec<Write> {
     let mut writes = Vec::new();
     for id in [APP_SETTING_ID, ENABLE_ID] {
-        if settings.get(id).is_some_and(Setting::user_set) {
-            writes.push(Write::Delete { id });
+        if let Some(setting) = settings.get(id).filter(|setting| setting.user_set()) {
+            writes.push(clear_write(id, setting));
         }
     }
-    if settings
+    if let Some(setting) = settings
         .options
         .as_ref()
-        .is_some_and(|setting| setting.user_set() && setting.value == Value::Dword(OPTIONS_ON))
+        .filter(|setting| setting.user_set() && setting.value == Value::Dword(OPTIONS_ON))
     {
-        writes.push(Write::Delete { id: OPTIONS_ID });
+        writes.push(clear_write(OPTIONS_ID, setting));
     }
-    if settings
+    if let Some(setting) = settings
         .size_limit
         .as_ref()
-        .is_some_and(|setting| setting.user_set() && is_size_limit_on(&setting.value))
+        .filter(|setting| setting.user_set() && is_size_limit_on(&setting.value))
     {
-        writes.push(Write::Delete { id: SIZE_LIMIT_ID });
+        writes.push(clear_write(SIZE_LIMIT_ID, setting));
     }
     writes
+}
+
+fn clear_write(id: u32, setting: &Setting) -> Write {
+    if setting.predefined {
+        Write::Restore { id }
+    } else {
+        Write::Delete { id }
+    }
 }
 
 fn is_size_limit_on(value: &Value) -> bool {
@@ -346,6 +356,10 @@ mod tests {
             match write {
                 Write::Set { id, value } => next.set(*id, Some(user(value.clone()))),
                 Write::Delete { id } => next.set(*id, None),
+                Write::Restore { id } => {
+                    let restored = next.get(*id).filter(|setting| setting.predefined).cloned();
+                    next.set(*id, restored);
+                }
             }
         }
         next
@@ -492,6 +506,27 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(clear(&settings), vec![Write::Delete { id: ENABLE_ID }]);
+    }
+
+    #[test]
+    fn clear_restores_user_values_with_nvidia_defaults_and_deletes_others() {
+        let settings = RebarSettings {
+            enable: Some(Setting {
+                location: Location::Profile,
+                current_predefined: false,
+                predefined: true,
+                value: Value::Dword(0),
+            }),
+            app: Some(user(Value::Dword(APP_OFF))),
+            ..Default::default()
+        };
+        assert_eq!(
+            clear(&settings),
+            vec![
+                Write::Delete { id: APP_SETTING_ID },
+                Write::Restore { id: ENABLE_ID },
+            ]
+        );
     }
 
     #[test]
