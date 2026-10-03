@@ -35,6 +35,14 @@ pub enum BackendError {
     Elevation(String),
     #[error("settings snapshot failed: {0}")]
     SettingsSnapshot(String),
+    #[error("administrator rights are required to {0}")]
+    AdministratorRequired(&'static str),
+    #[error("NVIDIA driver settings are unavailable: {0}")]
+    NvidiaDriverUnavailable(String),
+    #[error("NVIDIA driver settings failed: {0}")]
+    NvidiaDriverSettings(String),
+    #[error("the NVIDIA driver did not keep the requested Resizable BAR value")]
+    NvidiaDriverReadback,
 }
 
 impl BackendError {
@@ -253,6 +261,10 @@ impl From<BackendError> for ApiError {
             BackendError::StatePoisoned => ("state_unavailable", false, None),
             BackendError::Elevation(_) => ("elevation_failed", true, None),
             BackendError::SettingsSnapshot(_) => ("settings_snapshot_failed", true, None),
+            BackendError::AdministratorRequired(_) => ("administrator_required", true, None),
+            BackendError::NvidiaDriverUnavailable(_) => ("nvidia_driver_unavailable", true, None),
+            BackendError::NvidiaDriverSettings(_) => ("nvidia_driver_settings_failed", true, None),
+            BackendError::NvidiaDriverReadback => ("nvidia_driver_readback_mismatch", true, None),
         };
 
         Self {

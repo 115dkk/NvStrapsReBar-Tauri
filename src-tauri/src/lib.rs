@@ -9,7 +9,7 @@ mod error;
 mod firmware;
 mod hardware_support;
 mod machine;
-mod profile_inspector;
+mod nvidia_profiles;
 mod reboot;
 mod resizable_bar;
 mod resizable_bar_commands;
@@ -49,10 +49,10 @@ pub fn run() {
             reboot::reboot_after_configuration,
             resizable_bar_commands::inspect_resizable_bar_status,
             resizable_bar_commands::collect_nvidia_smi_evidence,
-            profile_inspector::install_nvidia_profile_inspector,
-            profile_inspector::get_nvidia_profile_inspector_installation,
-            profile_inspector::launch_nvidia_profile_inspector,
-            profile_inspector::backup_nvidia_profiles,
+            nvidia_profiles::load_nvidia_game_settings,
+            nvidia_profiles::set_nvidia_game_rebar,
+            nvidia_profiles::set_nvidia_all_games_rebar,
+            nvidia_profiles::restore_nvidia_driver_settings,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run NvStrapsReBar");
