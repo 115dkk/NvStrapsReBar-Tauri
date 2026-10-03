@@ -9,7 +9,8 @@ import { GuidedDialogs } from "./dialogs";
 import { Home } from "./home";
 import { InstallPage } from "./install";
 import { GuidedNavigationProvider, initialInstallUi, type GuidedNavigation, type InstallUi } from "./navigation";
-import { BarPage, ChangesPage, GamesPage, ProfilesPage, RecordPage } from "./pages";
+import { GamesPage } from "./games";
+import { BarPage, ChangesPage, ProfilesPage, RecordPage } from "./pages";
 import { installInProgress, type GuidedPage, type InstallScreen } from "./routing";
 
 /**

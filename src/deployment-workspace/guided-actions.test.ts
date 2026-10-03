@@ -89,7 +89,6 @@ const start = async (active: StepId, overrides: Partial<DeploymentAdapter>) => {
                 snapshot,
                 adapter({
                         listMachineProfiles: async () => [owner],
-                        getNvidiaProfileInspectorInstallation: async () => null,
                         getDeploymentPlan: async () => planAt(active),
                         ...overrides,
                 }),
@@ -228,8 +227,7 @@ describe("guided session actions", () => {
                         snapshot,
                         adapter({
                                 listMachineProfiles: async () => [owner, other],
-                                getNvidiaProfileInspectorInstallation: async () => null,
-                                getDeploymentPlan: async (profileId) => {
+                                        getDeploymentPlan: async (profileId) => {
                                         loaded.push(profileId);
                                         return { ...planAt("flashWithVendorRoute"), profileId };
                                 },
@@ -272,18 +270,5 @@ describe("guided session actions", () => {
                 expect(session.view().legacyAnalysisError).toContain("fingerprint changed");
                 expect(session.view().legacyReady).toBe(false);
                 expect(session.view().legacyNextAction).toMatchObject({ id: "ui.analysisFailedRetryImage" });
-        });
-
-        it("installs Profile Inspector only when missing before launching it", async () => {
-                const backup = { backupPath: "b", manifestPath: "m", manifest: { profileId: owner.profileId, toolVersion: "1", nipSha256: "a", nipByteLength: 1, profileCount: 1, executableCount: 1, settingCount: 1 }, manifestSha256: "b" };
-                const install = vi.fn(async () => ({ installPath: "i", executablePath: "e", manifest: { version: "1", sourceCommit: "c", releaseUrl: "u", assetSha256: "a" }, manifestSha256: "m", installedNow: true }));
-                const launch = vi.fn(async () => ({ profileId: owner.profileId, processId: 1, executablePath: "e", executableSha256: "s", elevated: true, backup, warnings: [] }));
-                const session = await start("configureNvidiaApplications", { installNvidiaProfileInspector: install, launchNvidiaProfileInspector: launch });
-                await session.dispatch({ type: "openInspector" });
-                await session.dispatch({ type: "openInspector" });
-                expect(install).toHaveBeenCalledTimes(1);
-                expect(launch).toHaveBeenCalledTimes(2);
-                expect(session.view().backup?.backupPath).toBe("b");
-                expect(session.view().activeStep?.id).toBe("configureNvidiaApplications");
         });
 });

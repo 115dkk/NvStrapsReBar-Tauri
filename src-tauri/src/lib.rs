@@ -1,3 +1,5 @@
+use tauri::Manager;
+
 mod app;
 mod bar_settings;
 mod bar_settings_commands;
@@ -9,7 +11,7 @@ mod error;
 mod firmware;
 mod hardware_support;
 mod machine;
-mod profile_inspector;
+mod nvidia_profiles;
 mod reboot;
 mod resizable_bar;
 mod resizable_bar_commands;
@@ -19,6 +21,13 @@ mod status;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            match app.path().app_local_data_dir() {
+                Ok(root) => nvidia_profiles::install_panic_log(root.join("logs").join("panic.log")),
+                Err(error) => eprintln!("NvStrapsReBar panic log is unavailable: {error}"),
+            }
+            Ok(())
+        })
         .manage(app::AppState::default())
         .invoke_handler(tauri::generate_handler![
             app::get_system_snapshot,
@@ -49,10 +58,10 @@ pub fn run() {
             reboot::reboot_after_configuration,
             resizable_bar_commands::inspect_resizable_bar_status,
             resizable_bar_commands::collect_nvidia_smi_evidence,
-            profile_inspector::install_nvidia_profile_inspector,
-            profile_inspector::get_nvidia_profile_inspector_installation,
-            profile_inspector::launch_nvidia_profile_inspector,
-            profile_inspector::backup_nvidia_profiles,
+            nvidia_profiles::load_nvidia_game_settings,
+            nvidia_profiles::set_nvidia_game_rebar,
+            nvidia_profiles::set_nvidia_all_games_rebar,
+            nvidia_profiles::undo_nvidia_game_changes,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run NvStrapsReBar");

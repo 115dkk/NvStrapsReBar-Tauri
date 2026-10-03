@@ -23,39 +23,9 @@ import {
 } from "./bar-settings-model";
 import { Icon } from "./icons";
 import { useGuidedNavigation } from "./navigation";
-import { Crumb, GpuRow, Notice, Result, TaskHead } from "./ui";
+import { Crumb, GpuRow, Notice, Result, SwitchRow, TaskHead } from "./ui";
 
 type Translate = ReturnType<typeof useI18n>["t"];
-
-/** A setting row that describes its on state, with a switch at the right. */
-const SwitchRow = ({ title, detail, checked, disabled, onChange, card = false }: {
-        title: ReactNode;
-        detail?: ReactNode;
-        checked: boolean;
-        disabled?: boolean;
-        onChange: (checked: boolean) => void;
-        card?: boolean;
-}) => {
-        const id = useId();
-        return (
-                <div className={card ? "nv-card nv-switch-row" : "nv-switch-row"}>
-                        <div className="nv-fact-text">
-                                <span className="nv-strong" id={`${id}-title`}>{title}</span>
-                                {detail && <span className="nv-supporting" id={`${id}-detail`}>{detail}</span>}
-                        </div>
-                        <button
-                                type="button"
-                                className="nv-switch"
-                                role="switch"
-                                aria-checked={checked}
-                                aria-labelledby={`${id}-title`}
-                                aria-describedby={detail ? `${id}-detail` : undefined}
-                                disabled={disabled}
-                                onClick={() => onChange(!checked)}
-                        />
-                </div>
-        );
-};
 
 /** The size a choice gives: "Automatic" resolves to what the global mode gives this GPU. */
 const resolvedText = (t: Translate, draft: ConfigDraft, gpu: GpuDevice, choice: GpuChoice) => {

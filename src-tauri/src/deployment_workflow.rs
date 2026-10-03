@@ -463,8 +463,8 @@ fn manual_step_warnings(profile: &MachineProfile, step_id: StepId) -> BackendRes
             "Confirm only after saving these exact firmware setup values.".into(),
         ],
         StepId::ConfigureNvidiaApplications => vec![
-            "Confirm only after applying and independently reviewing the intended per-application ReBAR policy.".into(),
-            "Installing or launching NVIDIA Profile Inspector does not satisfy this step.".into(),
+            "Confirm only after the per-game screen shows Resizable BAR on for the games you use.".into(),
+            "Driver profile values apply when a game starts; restart games that are already running.".into(),
         ],
         _ => {
             return Err(BackendError::Deployment(format!(

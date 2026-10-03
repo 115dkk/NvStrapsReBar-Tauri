@@ -173,7 +173,6 @@ export const useDeploymentWorkspace = (snapshot: SystemSnapshot) => {
                 autoCheck: () => send({ type: "autoCheck" }),
                 retryRecommendation: () => send({ type: "retryRecommendation" }),
                 saveToUsb: () => send({ type: "saveToUsb" }),
-                openInspector: () => send({ type: "openInspector" }),
                 saveRecommendedConfig: () =>
                         send({ type: "saveRecommendedConfig" }),
                 verifyDriver: () => send({ type: "verifyDriver" }),
@@ -187,9 +186,6 @@ export const useDeploymentWorkspace = (snapshot: SystemSnapshot) => {
                 verifyConfigurationBoot: () =>
                         send({ type: "verifyConfigurationBoot" }),
                 collectBar: () => send({ type: "collectBar" }),
-                installInspector: () => send({ type: "installInspector" }),
-                backupProfiles: () => send({ type: "backupProfiles" }),
-                launchInspector: () => send({ type: "launchInspector" }),
         };
         const stepCompleted = (stepId: string) =>
                 view.plan?.steps.find((step) => step.id === stepId)?.state ===

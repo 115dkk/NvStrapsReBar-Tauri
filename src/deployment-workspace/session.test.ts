@@ -194,8 +194,6 @@ describe("DeploymentWorkspaceSession", () => {
                         snapshot,
                         adapter({
                                 listMachineProfiles: async () => [],
-                                getNvidiaProfileInspectorInstallation:
-                                        async () => null,
                         }),
                 );
                 await tick();
@@ -226,8 +224,6 @@ describe("DeploymentWorkspaceSession", () => {
                         snapshot,
                         adapter({
                                 listMachineProfiles: async () => [],
-                                getNvidiaProfileInspectorInstallation:
-                                        async () => null,
                                 selectFirmwareImage: async () =>
                                         "C:\\firmware\\vendor.bin",
                                 inspectFirmwareImage: async () => ({
@@ -455,8 +451,6 @@ describe("DeploymentWorkspaceSession", () => {
                         snapshot,
                         adapter({
                                 listMachineProfiles: async () => [],
-                                getNvidiaProfileInspectorInstallation:
-                                        async () => null,
                                 selectFirmwareImage: async () =>
                                         "C:\\firmware\\vendor.bin",
                                 inspectFirmwareImage: async () => ({
@@ -506,8 +500,6 @@ describe("DeploymentWorkspaceSession", () => {
                         snapshot,
                         adapter({
                                 listMachineProfiles: async () => [owner],
-                                getNvidiaProfileInspectorInstallation:
-                                        async () => null,
                                 getDeploymentPlan: async () => before,
                                 prepareFirmwareArtifact,
                         }),
@@ -556,8 +548,6 @@ describe("DeploymentWorkspaceSession", () => {
                         catalogSnapshot,
                         adapter({
                                 listMachineProfiles: async () => [],
-                                getNvidiaProfileInspectorInstallation:
-                                        async () => null,
                         }),
                 );
 
@@ -578,8 +568,6 @@ describe("DeploymentWorkspaceSession", () => {
                         snapshot,
                         adapter({
                                 listMachineProfiles: async () => [owner],
-                                getNvidiaProfileInspectorInstallation:
-                                        async () => null,
                                 getDeploymentPlan: async () => plan(owner, 1),
                         }),
                 );
@@ -598,8 +586,6 @@ describe("DeploymentWorkspaceSession", () => {
                         snapshot,
                         adapter({
                                 listMachineProfiles: async () => [owner],
-                                getNvidiaProfileInspectorInstallation:
-                                        async () => null,
                                 getDeploymentPlan: async () => plan(owner, 3),
                         }),
                 );
@@ -615,8 +601,6 @@ describe("DeploymentWorkspaceSession", () => {
                         snapshot,
                         adapter({
                                 listMachineProfiles: async () => [],
-                                getNvidiaProfileInspectorInstallation:
-                                        async () => null,
                         }),
                 );
                 await tick();
@@ -628,8 +612,6 @@ describe("DeploymentWorkspaceSession", () => {
                         snapshot,
                         adapter({
                                 listMachineProfiles: async () => [owner],
-                                getNvidiaProfileInspectorInstallation:
-                                        async () => null,
                                 getDeploymentPlan: async () =>
                                         plan(owner, order.length),
                         }),
@@ -651,8 +633,6 @@ describe("DeploymentWorkspaceSession", () => {
                                         first,
                                         second,
                                 ],
-                                getNvidiaProfileInspectorInstallation:
-                                        async () => null,
                                 getDeploymentPlan: (id) =>
                                         id === first.profileId
                                                 ? p1.promise
@@ -760,8 +740,6 @@ describe("DeploymentWorkspaceSession", () => {
                                         first,
                                         second,
                                 ],
-                                getNvidiaProfileInspectorInstallation:
-                                        async () => null,
                                 getDeploymentPlan: async (id) =>
                                         workflowPlan(
                                                 id === first.profileId
@@ -820,8 +798,6 @@ describe("DeploymentWorkspaceSession", () => {
                         snapshot,
                         adapter({
                                 listMachineProfiles: async () => [owner],
-                                getNvidiaProfileInspectorInstallation:
-                                        async () => null,
                                 getDeploymentPlan: async () =>
                                         plan(owner, 1, 2),
                                 getRecommendedDeploymentConfig: async () => ({
@@ -925,8 +901,6 @@ describe("DeploymentWorkspaceSession", () => {
                                         listMachineProfiles: async () => [
                                                 owner,
                                         ],
-                                        getNvidiaProfileInspectorInstallation:
-                                                async () => null,
                                         getDeploymentPlan: async () => before,
                                         getRecommendedDeploymentConfig:
                                                 async () => ({
@@ -983,8 +957,6 @@ describe("DeploymentWorkspaceSession", () => {
                         snapshot,
                         adapter({
                                 listMachineProfiles: async () => [owner],
-                                getNvidiaProfileInspectorInstallation:
-                                        async () => null,
                                 getDeploymentPlan: async () => before,
                                 previewConfigurationReboot: async () => ({
                                         profileId: owner.profileId,
@@ -1020,8 +992,6 @@ describe("DeploymentWorkspaceSession", () => {
                         snapshot,
                         adapter({
                                 listMachineProfiles: async () => [owner],
-                                getNvidiaProfileInspectorInstallation:
-                                        async () => null,
                                 getDeploymentPlan: async () => before,
                                 previewManualDeploymentStep: async () => ({
                                         profileId: owner.profileId,
@@ -1044,59 +1014,5 @@ describe("DeploymentWorkspaceSession", () => {
                         },
                 });
                 expect(confirm).not.toHaveBeenCalled();
-        });
-
-        it("launching Profile Inspector never completes the policy step", async () => {
-                const owner = profile("p1"),
-                        before = plan(owner, 3, 4);
-                const backup = {
-                        backupPath: "b",
-                        manifestPath: "m",
-                        manifest: {
-                                profileId: owner.profileId,
-                                toolVersion: "1",
-                                nipSha256: "a".repeat(64),
-                                nipByteLength: 1,
-                                profileCount: 1,
-                                executableCount: 1,
-                                settingCount: 1,
-                        },
-                        manifestSha256: "b".repeat(64),
-                };
-                const session = createDeploymentWorkspaceSession(
-                        snapshot,
-                        adapter({
-                                listMachineProfiles: async () => [owner],
-                                getNvidiaProfileInspectorInstallation:
-                                        async () => ({
-                                                installPath: "i",
-                                                executablePath: "e",
-                                                manifest: {
-                                                        version: "1",
-                                                        sourceCommit: "c",
-                                                        releaseUrl: "u",
-                                                        assetSha256: "a",
-                                                },
-                                                manifestSha256: "m",
-                                                installedNow: false,
-                                        }),
-                                getDeploymentPlan: async () => before,
-                                launchNvidiaProfileInspector: async () => ({
-                                        profileId: owner.profileId,
-                                        processId: 1,
-                                        executablePath: "e",
-                                        executableSha256: "s",
-                                        elevated: true,
-                                        backup,
-                                        warnings: [],
-                                }),
-                        }),
-                );
-                await tick();
-                await session.dispatch({ type: "launchInspector" });
-                expect(session.view().plan).toEqual(before);
-                expect(session.view().activeStep?.id).toBe(
-                        "configureNvidiaApplications",
-                );
         });
 });

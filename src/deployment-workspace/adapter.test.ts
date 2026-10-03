@@ -24,10 +24,6 @@ const deploymentSeam = [
         "rebootAfterConfiguration",
         "verifyConfigurationReboot",
         "collectNvidiaSmiEvidence",
-        "installNvidiaProfileInspector",
-        "getNvidiaProfileInspectorInstallation",
-        "backupNvidiaProfiles",
-        "launchNvidiaProfileInspector",
 ] as const;
 
 describe("DeploymentAdapter contract", () => {

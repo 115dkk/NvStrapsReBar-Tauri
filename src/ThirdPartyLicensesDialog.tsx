@@ -13,8 +13,21 @@ const lzmaSdkRsLicenseUrl = new URL(
         "licenses/lzma-sdk-rs/LICENSE",
         document.baseURI,
 ).toString();
+const nvidiaProfileInspectorLicenseUrl = new URL(
+        "licenses/nvidiaProfileInspector/LICENSE",
+        document.baseURI,
+).toString();
+const nvapiLicenseUrl = new URL(
+        "licenses/NVAPI/LICENSE",
+        document.baseURI,
+).toString();
 
-type LicenseId = "pretendard" | "jetendard" | "lzmaSdkRs";
+type LicenseId =
+        | "pretendard"
+        | "jetendard"
+        | "lzmaSdkRs"
+        | "nvidiaProfileInspector"
+        | "nvapi";
 
 export function ThirdPartyLicensesDialog({
         onClose,
@@ -31,6 +44,8 @@ export function ThirdPartyLicensesDialog({
                 pretendard: "",
                 jetendard: "",
                 lzmaSdkRs: "",
+                nvidiaProfileInspector: "",
+                nvapi: "",
         });
         const [loadFailed, setLoadFailed] = useState(false);
 
@@ -41,6 +56,11 @@ export function ThirdPartyLicensesDialog({
                                 ["pretendard", pretendardLicenseUrl],
                                 ["jetendard", jetendardLicenseUrl],
                                 ["lzmaSdkRs", lzmaSdkRsLicenseUrl],
+                                [
+                                        "nvidiaProfileInspector",
+                                        nvidiaProfileInspectorLicenseUrl,
+                                ],
+                                ["nvapi", nvapiLicenseUrl],
                         ].map(async ([id, url]) => {
                                 const response = await fetch(url, {
                                         cache: "force-cache",
@@ -149,6 +169,8 @@ export function ThirdPartyLicensesDialog({
                                                 "ui.lzmaSdkRsV023011IsBundledUnderTheBsd3ClauseLicense",
                                         )}
                                 </p>
+                                <p>{t("ui.nvidiaProfileInspectorUsedUnderMit")}</p>
+                                <p>{t("ui.nvapiUsedUnderMit")}</p>
                                 <div className="license-attribution-list">
                                         <div className="license-attribution">
                                                 <strong>Pretendard v1.3.9</strong>
@@ -184,6 +206,23 @@ export function ThirdPartyLicensesDialog({
                                                         {t(
                                                                 "ui.basedOnTheSevenZipSdkPublicDomain",
                                                         )}
+                                                </span>
+                                        </div>
+                                        <div className="license-attribution">
+                                                <strong>
+                                                        NVIDIA Profile Inspector
+                                                </strong>
+                                                <span>
+                                                        Copyright (c) 2016
+                                                        Orbmu2k
+                                                </span>
+                                        </div>
+                                        <div className="license-attribution">
+                                                <strong>NVAPI SDK</strong>
+                                                <span>
+                                                        Copyright (c) 2019-2026
+                                                        NVIDIA CORPORATION &amp;
+                                                        AFFILIATES
                                                 </span>
                                         </div>
                                 </div>
@@ -234,6 +273,36 @@ export function ThirdPartyLicensesDialog({
                                                 }
                                         >
                                                 {t("ui.lzmaSdkRsLicense")}
+                                        </button>
+                                        <button
+                                                type="button"
+                                                aria-pressed={
+                                                        selectedLicense ===
+                                                        "nvidiaProfileInspector"
+                                                }
+                                                onClick={() =>
+                                                        setSelectedLicense(
+                                                                "nvidiaProfileInspector",
+                                                        )
+                                                }
+                                        >
+                                                {t(
+                                                        "ui.nvidiaProfileInspectorLicense",
+                                                )}
+                                        </button>
+                                        <button
+                                                type="button"
+                                                aria-pressed={
+                                                        selectedLicense ===
+                                                        "nvapi"
+                                                }
+                                                onClick={() =>
+                                                        setSelectedLicense(
+                                                                "nvapi",
+                                                        )
+                                                }
+                                        >
+                                                {t("ui.nvapiLicense")}
                                         </button>
                                 </div>
                                 {loadFailed ? (

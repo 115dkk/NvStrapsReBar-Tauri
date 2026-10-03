@@ -173,14 +173,14 @@ the expected active step.
 | Command | Arguments | Result and owner |
 | --- | --- | --- |
 | `preview_manual_deployment_step` | `{ profileId }` | Exact active manual gate, warnings, and a token bound to profile, step, and plan revision; no completion |
-| `confirm_manual_deployment_step` | `{ request: { profileId, stepId, confirmationToken, confirmed } }` | New plan revision only for vendor flash, firmware settings, or reviewed NVIDIA application policy |
+| `confirm_manual_deployment_step` | `{ request: { profileId, stepId, confirmationToken, confirmed } }` | New plan revision only for vendor flash, firmware settings, or the optional per-game record |
 | `verify_deployment_driver` | `{ profileId }` | Reads exactly eight status bytes and accepts only a known non-error Rust DXE status; the volatile variable also proves the current boot and may advance both boot and driver steps |
 | `get_recommended_deployment_config` | `{ profileId }` | Re-enumerated, exact-machine guarded `ConfigDraft` plus Turing, registry-managed, and exact-fallback counts; only valid at the configuration-write step |
 | `save_deployment_config` | `{ request: { profileId, draft } }` | Re-enumeration, validation, EFI write, byte-for-byte readback, save receipt, and advanced plan |
 | `verify_configuration_reboot` | `{ profileId }` | Advances only when the current Windows boot time is later than the recorded configuration readback time |
 
-Manual confirmation is deliberately narrow. Opening a vendor utility, firmware UI, or Profile
-Inspector is not evidence. The token becomes stale as soon as the profile, active step, or plan
+Manual confirmation is deliberately narrow. Opening a vendor utility or firmware UI is not
+evidence. The token becomes stale as soon as the profile, active step, or plan
 revision changes. `RebootAfterFirmware` is not operator-attested: the status variable is
 boot-service/runtime-only rather than non-volatile, so a valid current value is stronger evidence
 that the Rust driver ran during the current boot.
@@ -201,16 +201,32 @@ model, so the client cannot turn a preview constant into a different privileged 
 | `preview_configuration_reboot` | `{ profileId }` | Revision-bound preview of `shutdown.exe /r /t 0`; no restart or plan transition |
 | `reboot_after_configuration` | `{ request: { profileId, confirmationToken, unsavedWorkConfirmed } }` | Restart acceptance with `planAdvanced: false`; deliberately omits `/f` |
 | `collect_nvidia_smi_evidence` | `{ profileId }` | Advanced plan plus hashed tool and XML evidence only after every profile GPU has complete BAR1 values, consistent total/used/free, an exact Windows PCI-size match, and a size above 256 MiB |
-| `install_nvidia_profile_inspector` | none | Content-addressed installation receipt for the single pinned official release |
-| `get_nvidia_profile_inspector_installation` | none | Reverified installation receipt or `null` |
-| `backup_nvidia_profiles` | `{ profileId }` | Immutable `.nip` backup and parsed-count manifest receipt |
-| `launch_nvidia_profile_inspector` | `{ request: { profileId } }` | Launch receipt only after exact-machine validation, elevation, installation verification, and backup |
+| `load_nvidia_game_settings` | none | Driver version, the all-games state, every driver profile with programs and its Resizable BAR state and source, and the earliest intact backup |
+| `set_nvidia_game_rebar` | `{ request: { profileName, on } }` | Administrator only. Backs up the database once, changes that game's profile (never the all-programs profile), saves, and returns the state a new session reads back |
+| `set_nvidia_all_games_rebar` | `{ request: { on, consented } }` | Administrator only; `on` requires `consented`. Same backup, save, and read-back for the all-programs profile |
+| `undo_nvidia_game_changes` | `{ request: { revision } }` | Administrator only. For the undo record revision the screen showed, writes each changed profile's earlier Resizable BAR values back (or removes the app's values), saves, checks them in a new session, and returns a fresh catalog |
 
 Restart acceptance does not prove that Windows restarted, firmware setup opened, firmware was
 flashed, or settings changed. The normal restart step advances only after a later boot is observed.
 `nvidia-smi` evidence proves the applied BAR1 aperture through two independent local observations;
-it does not prove that every application uses ReBAR. Profile Inspector remains a verified external
-UI, and launching it never completes the final application-policy gate.
+it does not prove that every application uses ReBAR. The per-game commands prove what the driver
+settings database stores after a save, not that a running game already uses it; games read their
+profile when they start.
+
+The per-game commands append to `<local data>/logs/driver-settings.log` (rolled over to `.1` past
+2 MiB): each command's start, duration, and result; every failed NVAPI call with its arguments;
+every write, delete, save, and settings file; the values before a change, the planned writes, the
+staged state, and the read-back with each setting's value, location, and predefined flag; skipped
+profiles and skipped backups with their reasons. A profile the driver refuses is left out of the
+list and counted (`skippedProfiles`); fifty refusals in a row end the read with an error. Command
+errors carry the log path in their message. A panic hook writes `<local data>/logs/panic.log`
+before the release build aborts.
+
+The setting accessors are the driver's own (`0xEA99498D`, `0x8A2CF5F5`, `0xD20D29DF`) when it
+exports them, as NVIDIA Profile Inspector does, because the public ones refuse some undocumented
+settings; the public IDs are the fallback, and the log names which resolved. DRS sessions do not
+merge: an NVIDIA app or control panel save between a command's load and save is overwritten, so
+close those tools while switching games.
 
 ## Persistence, concurrency, and safety invariants
 

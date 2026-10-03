@@ -5,9 +5,7 @@ import type {
         FirmwareFingerprint,
         LegacyFirmwareAnalysis,
         MachineProfile,
-        NvidiaProfileBackupReceipt,
         NvidiaSmiEvidence,
-        ProfileInspectorInstallation,
         StepId,
 } from "./contract";
 
@@ -588,8 +586,8 @@ const MANUAL_PREVIEW_FIXTURES = Object.freeze({
                 stepId: "configureNvidiaApplications" as const,
                 title: "Configure NVIDIA application profiles",
                 warnings: [
-                        "Apply and review the intended per-application ReBAR policy.",
-                        "Return after editing the policy and record the result.",
+                        "Confirm only after the per-game screen shows Resizable BAR on for the games you use.",
+                        "Driver profile values apply when a game starts; restart games that are already running.",
                 ],
         },
 });
@@ -650,22 +648,6 @@ const legacyAnalysis: LegacyFirmwareAnalysis = {
                 },
         ],
 };
-const backupReceipt = (profileId: string): NvidiaProfileBackupReceipt => ({
-        backupPath: `C:\\ProgramData\\NvStrapsReBar\\backups\\${profileId}.nip`,
-        manifestPath: `C:\\ProgramData\\NvStrapsReBar\\backups\\${profileId}.json`,
-        manifest: {
-                profileId,
-                toolVersion: "v3.0.2.1",
-                nipSha256: "94".repeat(32),
-                nipByteLength: 18432,
-                profileCount: 12,
-                executableCount: 8,
-                settingCount: 37,
-        },
-        manifestSha256: "a5".repeat(32),
-});
-let installation: ProfileInspectorInstallation | null = null;
-
 export const previewDeploymentAdapter: DeploymentAdapter = {
         selectFirmwareImage: async () => "C:\\Firmware\\E7D25IMS.1N0",
         selectDestinationDirectory: async () => "C:\\NVSTRAPS-USB",
@@ -1087,44 +1069,5 @@ export const previewDeploymentAdapter: DeploymentAdapter = {
                 };
                 saveCursor(profileId, "bar");
                 return { plan: planSnapshot(profile), evidence };
-        },
-        installNvidiaProfileInspector: async () => {
-                installation = {
-                        installPath:
-                                "C:\\ProgramData\\NvStrapsReBar\\tools\\v3.0.2.1",
-                        executablePath:
-                                "C:\\ProgramData\\NvStrapsReBar\\tools\\v3.0.2.1\\nvidiaProfileInspector.exe",
-                        manifest: {
-                                version: "v3.0.2.1",
-                                sourceCommit:
-                                        "bedb800569384eda737cb7aa596fbd97b5d6863c",
-                                releaseUrl: "https://github.com/Orbmu2k/nvidiaProfileInspector/releases/tag/v3.0.2.1",
-                                assetSha256:
-                                        "88dcf3514111e8de630688467c03c36d8c2a8ad9ebc8073f27c069f82b75bb40",
-                        },
-                        manifestSha256: "fa".repeat(32),
-                        installedNow: true,
-                };
-                return clone(installation);
-        },
-        getNvidiaProfileInspectorInstallation: async () => clone(installation),
-        backupNvidiaProfiles: async (profileId) => backupReceipt(profileId),
-        launchNvidiaProfileInspector: async (profileId) => {
-                if (!installation)
-                        throw new Error(
-                                "NVIDIA Profile Inspector is not installed.",
-                        );
-                return {
-                        profileId,
-                        processId: 3240,
-                        executablePath: installation.executablePath,
-                        executableSha256:
-                                "1ebd8129b3c564bf226291fb3344819fd59668066f0c5e03334a69a04a62859e",
-                        elevated: true,
-                        backup: backupReceipt(profileId),
-                        warnings: [
-                                "Application profile changes remain manual in NVIDIA Profile Inspector.",
-                        ],
-                };
         },
 };

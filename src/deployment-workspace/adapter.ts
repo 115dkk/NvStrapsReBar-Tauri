@@ -16,11 +16,8 @@ import type {
         ManualDeploymentStepPreview,
         ManualDeploymentStepReceipt,
         MachineProfile,
-        NvidiaProfileBackupReceipt,
         NvidiaSmiEvidenceReceipt,
         ProfileComparison,
-        ProfileInspectorInstallation,
-        ProfileInspectorLaunch,
         SaveDeploymentConfigReceipt,
 } from "./contract";
 
@@ -79,12 +76,4 @@ export interface DeploymentAdapter {
         collectNvidiaSmiEvidence(
                 profileId: string,
         ): Promise<NvidiaSmiEvidenceReceipt>;
-        installNvidiaProfileInspector(): Promise<ProfileInspectorInstallation>;
-        getNvidiaProfileInspectorInstallation(): Promise<ProfileInspectorInstallation | null>;
-        backupNvidiaProfiles(
-                profileId: string,
-        ): Promise<NvidiaProfileBackupReceipt>;
-        launchNvidiaProfileInspector(
-                profileId: string,
-        ): Promise<ProfileInspectorLaunch>;
 }

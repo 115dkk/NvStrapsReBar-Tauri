@@ -38,44 +38,6 @@ const SubPage = ({ here, title, lead, titleRef, children, bar, wide = false, tes
 /** BAR settings; the screen itself lives in bar-settings.tsx. */
 export const BarPage = BarSettingsPage;
 
-export const GamesPage = ({ titleRef }: { titleRef: Ref<HTMLHeadingElement> }) => {
-        const { t, locale } = useI18n();
-        const { view, commands } = useDeploymentWorkspaceController();
-        const busy = Boolean(view.busyAction);
-        const hasProfile = Boolean(view.selectedProfileId);
-        const canRecord = view.activeStep?.id === OPTIONAL_FINAL_STEP;
-        const recorded = view.plan?.steps.find((step) => step.id === OPTIONAL_FINAL_STEP)?.state === "completed";
-        return (
-                <SubPage
-                        here={t("ui.enablePerGame")}
-                        title={t("ui.gamesTitle")}
-                        lead={t("ui.gamesLead")}
-                        titleRef={titleRef}
-                        testId="games-page"
-                        bar={{
-                                hint: t(hasProfile ? "ui.gamesHint" : "ui.gamesHintNoRecord"),
-                                secondary: canRecord ? [{ label: t("ui.recordGamesDone"), onClick: commands.openManualConfirmation, disabled: busy }] : [],
-                                primary: hasProfile ? { label: t("ui.openProfileInspector"), icon: "external", busy: view.busyAction === "launch-inspector", disabled: busy, onClick: commands.openInspector } : undefined,
-                        }}
-                >
-                        {view.activity?.tone === "error" && <Notice title={t("ui.taskDidNotFinish")}>{translateMessage(locale, view.activity.message)}</Notice>}
-                        {recorded && <Result title={t("ui.gamesRecorded")} />}
-                        <Steps>
-                                <Step title={t(hasProfile ? "ui.gamesStepOpen" : "ui.gamesStepOpenManual")} detail={t(hasProfile ? "ui.gamesStepOpenDetail" : "ui.gamesStepOpenManualDetail")} />
-                                <Step title={t("ui.gamesStepProfile")} />
-                                <Step title={t("ui.gamesStepFeature")} />
-                                <Step title={t("ui.gamesStepApply")} />
-                        </Steps>
-                        {view.backup && (
-                                <>
-                                        <FileCard icon="save" name={t("ui.gamesBackup")} mono={false} meta={<span className="nv-mono">{view.backup.backupPath}</span>} />
-                                        <p className="nv-supporting">{t("ui.gamesBackupRestore")}</p>
-                                </>
-                        )}
-                </SubPage>
-        );
-};
-
 export const ChangesPage = ({ titleRef }: { titleRef: Ref<HTMLHeadingElement> }) => {
         const { t } = useI18n();
         const { snap, exportSettings, busy, settingsFile } = useConfigurationWorkspaceController();

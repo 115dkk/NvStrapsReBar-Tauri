@@ -309,38 +309,3 @@ export type NvidiaSmiEvidenceReceipt = {
         plan: DeploymentPlan;
         evidence: NvidiaSmiEvidence;
 };
-export type ProfileInspectorInstallation = {
-        installPath: string;
-        executablePath: string;
-        manifest: {
-                version: string;
-                sourceCommit: string;
-                releaseUrl: string;
-                assetSha256: string;
-        };
-        manifestSha256: string;
-        installedNow: boolean;
-};
-export type NvidiaProfileBackupReceipt = {
-        backupPath: string;
-        manifestPath: string;
-        manifest: {
-                profileId: string;
-                toolVersion: string;
-                nipSha256: string;
-                nipByteLength: number;
-                profileCount: number;
-                executableCount: number;
-                settingCount: number;
-        };
-        manifestSha256: string;
-};
-export type ProfileInspectorLaunch = {
-        profileId: string;
-        processId: number;
-        executablePath: string;
-        executableSha256: string;
-        elevated: boolean;
-        backup: NvidiaProfileBackupReceipt;
-        warnings: string[];
-};

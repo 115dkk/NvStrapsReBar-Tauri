@@ -4,7 +4,9 @@
 
 NvStrapsReBar prepares and verifies a recoverable, exact-machine firmware deployment for NVIDIA
 Turing Resizable BAR. It does not own vendor flashing, motherboard firmware settings, physical
-recovery, the NVIDIA driver, or per-application NVIDIA policy.
+recovery, or the NVIDIA driver itself. It changes per-game Resizable BAR values in the NVIDIA
+driver's profile database when the user turns a switch, and the all-programs value only with
+consent.
 
 ## Domain language
 
@@ -93,7 +95,16 @@ only Rust remains authoritative for durable plan transitions.
 ### External adapter
 
 A narrowly verified handoff to software the repository does not own. Current external adapters
-are the installed `nvidia-smi.exe` and a pinned official NVIDIA Profile Inspector release.
+are the installed `nvidia-smi.exe` and NVAPI driver settings (DRS) in the driver's `nvapi64.dll`,
+loaded from System32 only.
+
+### Driver profile
+
+A program profile in the NVIDIA driver settings database. Its Resizable BAR state comes from the
+NVIDIA app setting (`0x000BFA21`, driver 616.56 and later) and the rBAR values (`0x000F00BA`
+enable, `0x000F00BB` options, `0x000F00FF` size limit), each resolved from the profile itself,
+then the all-programs profile, then the driver default. The app reports where the deciding value
+lives: this PC, NVIDIA's predefined value, the all-games setting, or the driver default.
 
 ### Hardware support determination
 
@@ -152,8 +163,8 @@ back the requested value.
   stand in for durable or hardware evidence.
 - Every persisted artifact is read back and content-addressed; an existing different artifact is
   an immutable conflict.
-- Vendor flash, UEFI settings, NVIDIA application policy, hardware work, and physical recovery
-  remain truthful manual gates. Reboot completion requires evidence from the rebooted system and
+- Vendor flash, UEFI settings, hardware work, and physical recovery remain truthful manual gates.
+  A driver profile change counts only after a new driver session reads the requested state back. Reboot completion requires evidence from the rebooted system and
   is never inferred from accepting a restart request.
 - Preview-mode browser fixtures prove only the embedded client journey. They never prove native
   dialogs, EFI writes, firmware parsing on a real image, flashing, reboot, or hardware recovery.
