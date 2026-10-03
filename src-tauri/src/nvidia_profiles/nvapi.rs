@@ -3,7 +3,12 @@
 //! Interface IDs and struct layouts come from NVIDIA's NVAPI SDK (`nvapi_interface.h`, `nvapi.h`,
 //! MIT, Copyright (c) 2019-2026 NVIDIA CORPORATION & AFFILIATES); see THIRD_PARTY_NOTICES.md.
 
-use std::{ffi::c_void, path::Path, ptr};
+use std::{
+    ffi::c_void,
+    path::Path,
+    ptr,
+    sync::atomic::{AtomicI32, Ordering},
+};
 
 use super::{
     drs::{
@@ -21,6 +26,7 @@ const BINARY_DATA_MAX: usize = 4096;
 /// The value unions hold at most an `NVDRS_BINARY_SETTING`: a length and 4096 bytes.
 const SETTING_VALUE_BYTES: usize = 4 + BINARY_DATA_MAX;
 const SHORT_STRING_MAX: usize = 64;
+const MAX_APPLICATIONS: u32 = 4096;
 
 const DWORD_TYPE: u32 = 0;
 const BINARY_TYPE: u32 = 1;
@@ -337,18 +343,14 @@ fn text(units: &[u16]) -> String {
 }
 
 fn read_value(kind: u32, bytes: &[u8; SETTING_VALUE_BYTES]) -> Value {
-    let word = |range: std::ops::Range<usize>| bytes[range].to_vec();
+    let dword = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
     match kind {
-        DWORD_TYPE => Value::Dword(u32::from_le_bytes(
-            word(0..4).try_into().unwrap_or_default(),
-        )),
-        QWORD_TYPE => Value::Qword(u64::from_le_bytes(
-            word(0..8).try_into().unwrap_or_default(),
-        )),
-        BINARY_TYPE => {
-            let length = u32::from_le_bytes(word(0..4).try_into().unwrap_or_default()) as usize;
-            Value::Binary(bytes[4..4 + length.min(BINARY_DATA_MAX)].to_vec())
-        }
+        DWORD_TYPE => Value::Dword(dword),
+        QWORD_TYPE => Value::Qword(u64::from_le_bytes([
+            bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+        ])),
+        // The length comes from the driver; a value past the buffer is cut at the buffer.
+        BINARY_TYPE => Value::Binary(bytes[4..4 + (dword as usize).min(BINARY_DATA_MAX)].to_vec()),
         _ => Value::Text,
     }
 }
@@ -448,10 +450,24 @@ pub struct NvapiSession<'a> {
     handle: Handle,
 }
 
+/// The last failed `NvAPI_DRS_DestroySession` status, for the next command to log.
+static DESTROY_FAILURE: AtomicI32 = AtomicI32::new(NVAPI_OK);
+
+/// Takes the status of a session that failed to close since the last call.
+pub fn take_destroy_failure() -> Option<i32> {
+    match DESTROY_FAILURE.swap(NVAPI_OK, Ordering::Relaxed) {
+        NVAPI_OK => None,
+        status => Some(status),
+    }
+}
+
 impl Drop for NvapiSession<'_> {
     fn drop(&mut self) {
         // SAFETY: the handle came from NvAPI_DRS_CreateSession and is destroyed once.
-        unsafe { (self.api.destroy_session)(self.handle) };
+        let status = unsafe { (self.api.destroy_session)(self.handle) };
+        if status != NVAPI_OK {
+            DESTROY_FAILURE.store(status, Ordering::Relaxed);
+        }
     }
 }
 
@@ -482,6 +498,13 @@ impl DrsSession for NvapiSession<'_> {
     fn applications(&mut self, profile: ProfileHandle, count: u32) -> DrsResult<Vec<String>> {
         if count == 0 {
             return Ok(Vec::new());
+        }
+        // Each entry is 20 KiB; a count past any real profile is a bad read, not an allocation.
+        if count > MAX_APPLICATIONS {
+            return Err(DrsError::new(
+                "NvAPI_DRS_EnumApplications (count over 4096)",
+                NVAPI_INVALID_ARGUMENT,
+            ));
         }
         let mut applications = vec![NvdrsApplication::empty(); count as usize];
         let mut returned = count;

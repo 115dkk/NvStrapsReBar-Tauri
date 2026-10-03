@@ -130,6 +130,10 @@ pub struct FakeDriver {
     pub administrator: Cell<bool>,
     /// The driver accepts a save but keeps the old values.
     pub ignore_saves: Cell<bool>,
+    /// Profiles whose information the driver refuses to return.
+    pub broken: RefCell<Vec<String>>,
+    /// The driver refuses every profile except the all-programs one.
+    pub break_games: Cell<bool>,
     files: RefCell<HashMap<PathBuf, FakeDb>>,
 }
 
@@ -140,6 +144,8 @@ impl FakeDriver {
             version,
             administrator: Cell::new(true),
             ignore_saves: Cell::new(false),
+            broken: RefCell::new(Vec::new()),
+            break_games: Cell::new(false),
             files: RefCell::new(HashMap::new()),
         }
     }
@@ -186,6 +192,11 @@ impl DrsSession for FakeSession<'_> {
 
     fn profile_info(&mut self, profile: ProfileHandle) -> DrsResult<ProfileInfo> {
         let entry = &self.db.profiles[index(profile)];
+        let refused = self.driver.broken.borrow().contains(&entry.name)
+            || (self.driver.break_games.get() && index(profile) != self.db.global);
+        if refused {
+            return Err(DrsError::new("NvAPI_DRS_GetProfileInfo", NVAPI_ERROR));
+        }
         Ok(ProfileInfo {
             name: entry.name.clone(),
             predefined: entry.predefined,
