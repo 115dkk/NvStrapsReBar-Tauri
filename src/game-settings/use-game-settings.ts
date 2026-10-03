@@ -13,19 +13,19 @@ export type GamesLoad =
         | { status: "failed"; error: GameSettingsError };
 
 /** What the last finished change did, for the status line. */
-export type GamesOutcome = { kind: "game"; name: string; on: boolean } | { kind: "allGames"; on: boolean } | { kind: "restored" } | null;
+export type GamesOutcome = { kind: "game"; name: string; on: boolean } | { kind: "allGames"; on: boolean } | { kind: "undone" } | null;
 
-export type GamesDialog = "allGames" | "restore" | null;
+export type GamesDialog = "allGames" | "undo" | null;
 
 /**
  * Driver settings for the games page. Each game switch runs on its own; the all-games switch
- * and the restore wait for every game switch and reload the list afterwards.
+ * and the undo wait for every game switch and reload the list afterwards.
  */
 export const useGameSettings = (bridge: GameSettingsBridge = gameSettingsBridge) => {
         const [load, setLoad] = useState<GamesLoad>({ status: "loading" });
         // Requested on/off per game name while its change runs.
         const [pendingGames, setPendingGames] = useState<Record<string, boolean>>({});
-        const [bulk, setBulk] = useState<"allGames" | "restore" | "reload" | null>(null);
+        const [bulk, setBulk] = useState<"allGames" | "undo" | "reload" | null>(null);
         const [error, setError] = useState<GameSettingsError | null>(null);
         const [outcome, setOutcome] = useState<GamesOutcome>(null);
         const [kept, setKept] = useState<string[]>([]);
@@ -76,6 +76,7 @@ export const useGameSettings = (bridge: GameSettingsBridge = gameSettingsBridge)
                                                           catalog: {
                                                                   ...previous.catalog,
                                                                   backup: receipt.backup,
+                                                                  undo: receipt.undo,
                                                                   games: previous.catalog.games.map((game) => (game.name === name ? { ...game, state: receipt.state } : game)),
                                                           },
                                                   }
@@ -95,7 +96,7 @@ export const useGameSettings = (bridge: GameSettingsBridge = gameSettingsBridge)
         );
 
         const runBulk = useCallback(
-                async (kind: "allGames" | "restore", work: () => Promise<GameSettingsCatalog | null>, done: GamesOutcome) => {
+                async (kind: "allGames" | "undo", work: () => Promise<GameSettingsCatalog | null>, done: GamesOutcome) => {
                         if (bulk || running.current.size) return;
                         setDialog(null);
                         setBulk(kind);
@@ -137,10 +138,10 @@ export const useGameSettings = (bridge: GameSettingsBridge = gameSettingsBridge)
                 [bridge, runBulk],
         );
 
-        const confirmRestore = useCallback(() => {
-                const sha = load.status === "ready" ? load.catalog.backup?.sha256 : undefined;
-                if (!sha) return;
-                void runBulk("restore", () => bridge.restore(sha), { kind: "restored" });
+        const confirmUndo = useCallback(() => {
+                const revision = load.status === "ready" ? load.catalog.undo?.revision : undefined;
+                if (!revision) return;
+                void runBulk("undo", () => bridge.undo(revision), { kind: "undone" });
         }, [bridge, load, runBulk]);
 
         return useMemo(
@@ -158,9 +159,9 @@ export const useGameSettings = (bridge: GameSettingsBridge = gameSettingsBridge)
                         setGame,
                         setAllGames,
                         confirmAllGames,
-                        confirmRestore,
+                        confirmUndo,
                 }),
-                [load, pendingGames, bulk, gameBusy, error, outcome, kept, dialog, reload, setGame, setAllGames, confirmAllGames, confirmRestore],
+                [load, pendingGames, bulk, gameBusy, error, outcome, kept, dialog, reload, setGame, setAllGames, confirmAllGames, confirmUndo],
         );
 };
 

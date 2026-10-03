@@ -34,8 +34,8 @@ board, GPU and file names go into the lead or the body, not the heading.
   drive, restarting, recording what happened in BIOS setup, and saving the settings.
 - The NVIDIA per-game step is optional. Installation finishes when the new BAR size is observed;
   per-game setup is offered from the finish screen and from home. It is a switch screen: All games
-  (on needs consent), the games changed on this PC, search with a switch per game, and the backup
-  from before the first change.
+  (on needs consent), the games changed on this PC, search with a switch per game, and the undo
+  that returns the changed profiles to their earlier values.
 - A restart request is never shown as a finished restart; confirmation dialogs ask the user to
   save their work and their left button is Close.
 - BAR settings (`src/guided/bar-settings.tsx`) put one expansion switch first, a size for each

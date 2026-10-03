@@ -860,18 +860,19 @@ export const messages = {
         "ui.gameTurnedOff": { en: "{game}: off", ko: "{game}: 끔" },
         "ui.allGamesTurnedOn": { en: "All games: on", ko: "모든 게임: 켬" },
         "ui.allGamesTurnedOff": { en: "All games: off", ko: "모든 게임: 끔" },
-        "ui.gamesRestored": { en: "NVIDIA settings restored from the backup", ko: "백업한 NVIDIA 설정으로 되돌림" },
-        "ui.gamesBackupSummary": { en: "Backup and diagnostic log", ko: "백업과 진단 기록" },
+        "ui.gamesUndo": { en: "Restore the earlier values", ko: "바꾸기 전 값으로 되돌리기" },
+        "ui.gamesUndoCount": { en: "Profiles changed on this PC: {count}", ko: "이 PC에서 바꾼 프로필 {count}개" },
+        "ui.gamesUndoFirst": { en: "The first change saves the earlier values and a full copy of the NVIDIA driver settings first.", ko: "처음 바꿀 때 바꾸기 전 값과 NVIDIA 드라이버 설정 전체 사본을 먼저 저장합니다." },
+        "ui.gamesUndoDialogTitle": { en: "Restore the earlier values", ko: "바꾸기 전 값으로 되돌리기" },
+        "ui.gamesUndoDialogDetail": { en: "The Resizable BAR values of the profiles changed on this PC ({count}) return to what they were before the app first changed them. Other NVIDIA settings stay as they are.", ko: "이 PC에서 바꾼 프로필 {count}개의 Resizable BAR 값이 앱이 처음 바꾸기 전 값으로 돌아갑니다. 다른 NVIDIA 설정은 그대로 둡니다." },
+        "ui.gamesUndone": { en: "Earlier values restored", ko: "바꾸기 전 값으로 되돌림" },
+        "ui.gamesCopyName": { en: "Full copy of the NVIDIA driver settings", ko: "NVIDIA 드라이버 설정 전체 사본" },
+        "ui.gamesBackupSummary": { en: "Undo and diagnostic log", ko: "되돌리기와 진단 기록" },
         "ui.gamesLogName": { en: "Diagnostic log", ko: "진단 기록" },
         "ui.gamesLogMeta": { en: "Each NVIDIA driver settings read failure, change, and read-back", ko: "NVIDIA 드라이버 설정을 읽다 실패한 곳, 바꾼 값, 다시 읽은 값" },
-        "ui.gamesSkippedTitle": { en: "{count} profiles could not be read", ko: "프로필 {count}개를 읽지 못했습니다" },
+        "ui.gamesSkippedTitle": { en: "Profiles that could not be read: {count}", ko: "프로필 {count}개를 읽지 못했습니다" },
         "ui.gamesSkippedDetail": { en: "They are left out of the list. The diagnostic log names each one with the driver's error.", ko: "이 프로필은 목록에서 뺐습니다. 진단 기록에 프로필마다 드라이버가 돌려준 오류가 남아 있습니다." },
-        "ui.gamesBackupFirst": { en: "The first change saves all NVIDIA driver settings to a file first.", ko: "처음 바꿀 때 NVIDIA 드라이버 설정 전체를 먼저 파일로 저장합니다." },
-        "ui.gamesBackupName": { en: "NVIDIA settings before the first change", ko: "처음 바꾸기 전 NVIDIA 설정" },
         "ui.gamesBackupMeta": { en: "Saved {date} · driver {version}", ko: "{date} 저장 · 드라이버 {version}" },
-        "ui.gamesRestore": { en: "Restore this backup", ko: "이 백업으로 되돌리기" },
-        "ui.gamesRestoreDialogTitle": { en: "Restore the NVIDIA settings backup", ko: "백업한 NVIDIA 설정으로 되돌리기" },
-        "ui.gamesRestoreDialogDetail": { en: "All NVIDIA driver settings return to the copy saved on {date}, including later changes made in other apps such as the NVIDIA app.", ko: "NVIDIA 드라이버 설정 전체가 {date}에 저장한 상태로 돌아갑니다. 그 뒤 NVIDIA 앱 등에서 바꾼 설정도 함께 되돌아갑니다." },
         "ui.restore": { en: "Restore", ko: "되돌리기" },
         "ui.gamesRecordCheck": { en: "Check that the games you play show Resizable BAR on.", ko: "자주 하는 게임에 Resizable BAR가 켜져 있는지 확인하세요." },
         "ui.gamesRecordRestart": { en: "Restart games that are already running.", ko: "실행 중인 게임은 다시 실행하세요." },
@@ -1030,7 +1031,8 @@ export type MessageParameters = {
         "ui.gameTurnedOn": { game: string };
         "ui.gameTurnedOff": { game: string };
         "ui.gamesBackupMeta": { date: string; version: string };
-        "ui.gamesRestoreDialogDetail": { date: string };
+        "ui.gamesUndoCount": { count: string };
+        "ui.gamesUndoDialogDetail": { count: string };
         "ui.gamesSkippedTitle": { count: string };
 };
 export type ParameterizedMessageId = keyof MessageParameters;

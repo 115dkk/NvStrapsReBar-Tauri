@@ -204,7 +204,7 @@ model, so the client cannot turn a preview constant into a different privileged 
 | `load_nvidia_game_settings` | none | Driver version, the all-games state, every driver profile with programs and its Resizable BAR state and source, and the earliest intact backup |
 | `set_nvidia_game_rebar` | `{ request: { profileName, on } }` | Administrator only. Backs up the database once, changes that game's profile (never the all-programs profile), saves, and returns the state a new session reads back |
 | `set_nvidia_all_games_rebar` | `{ request: { on, consented } }` | Administrator only; `on` requires `consented`. Same backup, save, and read-back for the all-programs profile |
-| `restore_nvidia_driver_settings` | `{ request: { backupSha256 } }` | Administrator only. Loads the backup whose hash the screen showed, saves it, and returns a fresh catalog |
+| `undo_nvidia_game_changes` | `{ request: { revision } }` | Administrator only. For the undo record revision the screen showed, writes each changed profile's earlier Resizable BAR values back (or removes the app's values), saves, checks them in a new session, and returns a fresh catalog |
 
 Restart acceptance does not prove that Windows restarted, firmware setup opened, firmware was
 flashed, or settings changed. The normal restart step advances only after a later boot is observed.
@@ -221,6 +221,12 @@ profiles and skipped backups with their reasons. A profile the driver refuses is
 list and counted (`skippedProfiles`); fifty refusals in a row end the read with an error. Command
 errors carry the log path in their message. A panic hook writes `<local data>/logs/panic.log`
 before the release build aborts.
+
+The setting accessors are the driver's own (`0xEA99498D`, `0x8A2CF5F5`, `0xD20D29DF`) when it
+exports them, as NVIDIA Profile Inspector does, because the public ones refuse some undocumented
+settings; the public IDs are the fallback, and the log names which resolved. DRS sessions do not
+merge: an NVIDIA app or control panel save between a command's load and save is overwritten, so
+close those tools while switching games.
 
 ## Persistence, concurrency, and safety invariants
 

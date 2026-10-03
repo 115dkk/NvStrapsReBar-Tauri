@@ -23,13 +23,18 @@ describe("preview driver settings", () => {
                 expect((await bridge.setGame("Counter-Strike 2", false)).state.on).toBe(false);
         });
 
-        it("restores the database saved before the first change", async () => {
-                expect((await bridge.load()).backup).toBeNull();
-                const first = await bridge.setGame("Elden Ring", true);
+        it("undoes every changed profile to its earlier value, once recorded", async () => {
+                expect((await bridge.load()).undo).toBeNull();
+                await bridge.setGame("Elden Ring", true);
+                await bridge.setGame("Cyberpunk 2077", false);
+                await bridge.setGame("Elden Ring", false);
                 await bridge.setAllGames(true, true);
-                const restored = await bridge.restore(first.backup.sha256);
-                expect(restored.allGames.on).toBe(false);
-                expect(restored.games.every((game) => !game.state.changed)).toBe(true);
-                await expect(bridge.restore("0".repeat(64))).rejects.toMatchObject({ code: "nvidia_driver_settings_failed" });
+                const shown = (await bridge.load()).undo!;
+                expect(shown.profiles).toBe(3);
+                await expect(bridge.undo("stale")).rejects.toMatchObject({ code: "nvidia_driver_settings_failed" });
+                const undone = await bridge.undo(shown.revision);
+                expect(undone.allGames.on).toBe(false);
+                expect(undone.games.every((game) => !game.state.changed)).toBe(true);
+                expect(undone.games.find((game) => game.name === "Cyberpunk 2077")!.state).toEqual({ on: true, source: "nvidia", changed: false });
         });
 });

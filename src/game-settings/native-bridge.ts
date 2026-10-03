@@ -7,6 +7,5 @@ export const nativeGameSettingsBridge: GameSettingsBridge = {
                 invoke("set_nvidia_game_rebar", { request: { profileName, on } }),
         setAllGames: (on, consented) =>
                 invoke("set_nvidia_all_games_rebar", { request: { on, consented } }),
-        restore: (backupSha256) =>
-                invoke("restore_nvidia_driver_settings", { request: { backupSha256 } }),
+        undo: (revision) => invoke("undo_nvidia_game_changes", { request: { revision } }),
 };

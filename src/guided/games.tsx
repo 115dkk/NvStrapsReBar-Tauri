@@ -20,7 +20,7 @@ const outcomeText = (t: Translate, outcome: GamesOutcome) => {
         if (!outcome) return "";
         if (outcome.kind === "game") return t(outcome.on ? "ui.gameTurnedOn" : "ui.gameTurnedOff", { game: outcome.name });
         if (outcome.kind === "allGames") return t(outcome.on ? "ui.allGamesTurnedOn" : "ui.allGamesTurnedOff");
-        return t("ui.gamesRestored");
+        return t("ui.gamesUndone");
 };
 
 /** The next action, then the backend's message with the log path for a test report. */
@@ -148,32 +148,33 @@ const GameSearch = ({ games, version, row }: { games: GameProfile[]; version: st
         );
 };
 
-const BackupSection = ({ games, locked }: { games: GameSettingsController; locked: boolean }) => {
-        const { t, locale } = useI18n();
+/** The undo of the app's changes, the full copy of the driver settings, and the log. */
+const UndoSection = ({ games, locked }: { games: GameSettingsController; locked: boolean }) => {
+        const { t, locale, n } = useI18n();
         if (games.load.status !== "ready") return null;
-        const { backup, logPath } = games.load.catalog;
-        const date = backup ? savedAt(locale, backup.createdAtUnixMs) : "";
+        const { backup, logPath, undo } = games.load.catalog;
         return (
                 <details className="nv-disclosure" data-testid="games-backup">
                         <summary><Icon name="chevron" />{t("ui.gamesBackupSummary")}</summary>
                         <div className="nv-group nv-disclosure-body">
-                                {backup ? (
-                                        <>
-                                                <FileCard icon="archive" name={t("ui.gamesBackupName")} mono={false} meta={<><span>{t("ui.gamesBackupMeta", { date, version: backup.driverVersion })}</span><br /><span className="nv-mono">{backup.path}</span></>} />
+                                {undo ? (
+                                        <div className="nv-group">
+                                                <p className="nv-body">{t("ui.gamesUndoCount", { count: n(undo.profiles) })}</p>
                                                 <div className="nv-button-row">
-                                                        <button type="button" className="nv-btn nv-btn-quiet" disabled={locked || games.gameBusy} onClick={() => games.setDialog("restore")}><Icon name="undo" />{t("ui.gamesRestore")}</button>
+                                                        <button type="button" className="nv-btn nv-btn-quiet" disabled={locked || games.gameBusy} onClick={() => games.setDialog("undo")}><Icon name="undo" />{t("ui.gamesUndo")}</button>
                                                 </div>
-                                        </>
+                                        </div>
                                 ) : (
-                                        <p className="nv-supporting">{t("ui.gamesBackupFirst")}</p>
+                                        <p className="nv-supporting">{t("ui.gamesUndoFirst")}</p>
                                 )}
+                                {backup && <FileCard icon="archive" name={t("ui.gamesCopyName")} mono={false} meta={<><span>{t("ui.gamesBackupMeta", { date: savedAt(locale, backup.createdAtUnixMs), version: backup.driverVersion })}</span><br /><span className="nv-mono">{backup.path}</span></>} />}
                                 {logPath && <FileCard icon="doc" name={t("ui.gamesLogName")} mono={false} meta={<><span>{t("ui.gamesLogMeta")}</span><br /><span className="nv-mono">{logPath}</span></>} />}
                         </div>
                 </details>
         );
 };
 
-/** Per-game Resizable BAR: one switch for all games, the games changed here, search, and the backup. */
+/** Per-game Resizable BAR: one switch for all games, the games changed here, search, and the undo. */
 export const GamesPage = ({ titleRef }: { titleRef: Ref<HTMLHeadingElement> }) => {
         const { t, locale, n } = useI18n();
         const games = useGameSettings();
@@ -189,7 +190,6 @@ export const GamesPage = ({ titleRef }: { titleRef: Ref<HTMLHeadingElement> }) =
         const changed = catalog ? games.kept.flatMap((name) => catalog.games.filter((game) => game.name === name)) : [];
         const row = (game: GameProfile) => <GameRow key={game.name} game={game} pending={games.pendingGames[game.name]} disabled={locked} onChange={(name, on) => void games.setGame(name, on)} />;
         const allGamesPending = games.bulk === "allGames";
-        const backupDate = catalog?.backup ? savedAt(locale, catalog.backup.createdAtUnixMs) : "";
         // A confirmed dialog returns focus to a switch that is disabled while the change runs.
         useEffect(() => {
                 if (games.bulk === null && document.activeElement === document.body)
@@ -239,7 +239,7 @@ export const GamesPage = ({ titleRef }: { titleRef: Ref<HTMLHeadingElement> }) =
                                                                 </section>
                                                         )}
                                                         <GameSearch games={catalog.games} version={catalog.driver.version} row={row} />
-                                                        <BackupSection games={games} locked={locked} />
+                                                        <UndoSection games={games} locked={locked} />
                                                 </>
                                         )}
                                         <p className="nv-visually-hidden" role="status">{outcomeText(t, games.outcome)}</p>
@@ -255,9 +255,9 @@ export const GamesPage = ({ titleRef }: { titleRef: Ref<HTMLHeadingElement> }) =
                                         {t("ui.allGamesDialogDetail")}
                                 </ConfirmDialog>
                         )}
-                        {games.dialog === "restore" && (
-                                <ConfirmDialog title={t("ui.gamesRestoreDialogTitle")} confirmLabel={t("ui.restore")} onClose={() => games.setDialog(null)} onConfirm={games.confirmRestore}>
-                                        {t("ui.gamesRestoreDialogDetail", { date: backupDate })}
+                        {games.dialog === "undo" && catalog?.undo && (
+                                <ConfirmDialog title={t("ui.gamesUndoDialogTitle")} confirmLabel={t("ui.restore")} onClose={() => games.setDialog(null)} onConfirm={games.confirmUndo}>
+                                        {t("ui.gamesUndoDialogDetail", { count: n(catalog.undo.profiles) })}
                                 </ConfirmDialog>
                         )}
                 </>

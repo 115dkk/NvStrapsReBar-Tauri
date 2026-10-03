@@ -38,7 +38,8 @@ test("a game switch turns it on, reads the state back, and lists it as changed",
         await expect(changed.getByText("eldenring.exe and 1 more · Changed on this PC")).toBeVisible();
         // The first change saved a backup.
         await page.getByTestId("games-backup").locator("summary").click();
-        await expect(page.getByText("NVIDIA settings before the first change")).toBeVisible();
+        await expect(page.getByText("Full copy of the NVIDIA driver settings")).toBeVisible();
+        await expect(page.getByText("Profiles changed on this PC: 1")).toBeVisible();
         await page.screenshot({ path: `${evidence}/e2e-en-game-on-1180.png`, fullPage: true });
         // Turning it off returns to the driver default; the row stays for this visit.
         await changed.getByRole("switch", { name: "Elden Ring" }).click();
@@ -88,19 +89,26 @@ test("all games needs consent, Escape keeps it off, and turning it off asks noth
         await expect(page.getByRole("switch", { name: "Counter-Strike 2" })).toHaveAttribute("aria-checked", "false");
 });
 
-test("the backup restores the settings from before the first change", async ({ page }) => {
+test("the undo returns the changed profiles to their earlier values", async ({ page }) => {
         await openGames(page);
         await page.getByTestId("games-backup").locator("summary").click();
-        await expect(page.getByText("The first change saves all NVIDIA driver settings to a file first.")).toBeVisible();
+        await expect(page.getByText("The first change saves the earlier values and a full copy of the NVIDIA driver settings first.")).toBeVisible();
         await search(page).fill("elden");
-        await page.getByRole("switch", { name: "Elden Ring" }).click();
-        await expect(page.getByRole("list", { name: "Games changed on this PC" })).toBeVisible();
-        await button(page, "Restore this backup").click();
-        const dialog = page.getByRole("dialog", { name: "Restore the NVIDIA settings backup" });
-        await expect(dialog).toContainText("including later changes made in other apps such as the NVIDIA app");
+        await results(page).getByRole("switch", { name: "Elden Ring" }).click();
+        await search(page).fill("rdr2");
+        await results(page).getByRole("switch", { name: "Red Dead Redemption 2" }).click();
+        await expect(page.getByText("Profiles changed on this PC: 2")).toBeVisible();
+        await expect(page.getByText("Full copy of the NVIDIA driver settings")).toBeVisible();
+        await button(page, "Restore the earlier values").click();
+        const dialog = page.getByRole("dialog", { name: "Restore the earlier values" });
+        await expect(dialog).toContainText("The Resizable BAR values of the profiles changed on this PC (2) return to what they were before the app first changed them.");
+        await page.screenshot({ path: `${evidence}/e2e-en-undo-dialog-1180.png` });
         await dialog.getByRole("button", { name: "Restore" }).click();
-        await expect(page.getByRole("status").filter({ hasText: "NVIDIA settings restored from the backup" })).toBeAttached();
-        await expect(page.getByRole("list", { name: "Games changed on this PC" }).getByRole("switch", { name: "Elden Ring" })).toHaveAttribute("aria-checked", "false");
+        await expect(page.getByRole("status").filter({ hasText: "Earlier values restored" })).toBeAttached();
+        const changed = page.getByRole("list", { name: "Games changed on this PC" });
+        await expect(changed.getByRole("switch", { name: "Elden Ring" })).toHaveAttribute("aria-checked", "false");
+        await expect(changed.getByRole("switch", { name: "Red Dead Redemption 2" })).toHaveAttribute("aria-checked", "true");
+        await expect(changed.getByText("RDR2.exe · NVIDIA default")).toBeVisible();
 });
 
 test("without administrator rights the switches wait for a reopen", async ({ page }) => {
@@ -134,7 +142,7 @@ test("failures keep the old state and name the next action", async ({ page }) =>
 
 test("skipped profiles are counted and the log is one click away", async ({ page }) => {
         await openGames(page, { games: "partial" });
-        await expect(page.getByRole("note")).toContainText("3 profiles could not be read");
+        await expect(page.getByRole("note")).toContainText("Profiles that could not be read: 3");
         await expect(page.getByRole("note")).toContainText("driver-settings.log");
         await page.getByTestId("games-backup").locator("summary").click();
         await expect(page.getByText("Diagnostic log", { exact: true })).toBeVisible();

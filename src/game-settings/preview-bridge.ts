@@ -52,7 +52,15 @@ const fixtures: Fixture[] = [
 let allGamesOn: boolean | null = null;
 let userValues = new Map<string, boolean>();
 let backup: DriverSettingsBackup | null = null;
-let backupValues: { allGamesOn: boolean | null; userValues: Map<string, boolean> } | null = null;
+/** The earlier value of each profile the app changed, recorded on the first change only. */
+let originals = new Map<string, boolean | null | undefined>();
+const ALL_PROGRAMS = "\u0000all programs";
+
+const record = (key: string, value: boolean | null | undefined) => {
+        if (!originals.has(key)) originals.set(key, value);
+};
+
+const undoSummary = () => (originals.size ? { profiles: originals.size, revision: `preview-${[...originals.keys()].join("|")}` } : null);
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -88,12 +96,12 @@ const catalog = (): GameSettingsCatalog => ({
         backup: backup && { ...backup },
         skippedProfiles: previewState() === "partial" ? 3 : 0,
         logPath: LOG_PATH,
+        undo: undoSummary(),
 });
 
 /** The first change saves the database it is about to change. */
 const ensureBackup = (): DriverSettingsBackup => {
         if (!backup) {
-                backupValues = { allGamesOn, userValues: new Map(userValues) };
                 backup = {
                         path: "C:\\Users\\Preview\\AppData\\Local\\io.github.nvstrapsrebar.desktop\\nvidia-driver-settings\\backups\\5d".concat("41".repeat(31), ".nvdrs"),
                         sha256: "5d".concat("41".repeat(31)),
@@ -117,7 +125,7 @@ export const resetPreviewGameSettings = () => {
         allGamesOn = null;
         userValues = new Map();
         backup = null;
-        backupValues = null;
+        originals = new Map();
 };
 
 export const previewGameSettingsBridge: GameSettingsBridge = {
@@ -130,6 +138,7 @@ export const previewGameSettingsBridge: GameSettingsBridge = {
                 const fixture = fixtures.find((game) => game.name === profileName);
                 if (!fixture) throw failure("nvidia_driver_settings_failed", `the driver has no profile named "${profileName}"`);
                 const saved = await write();
+                record(profileName, userValues.get(profileName));
                 const before = new Map(userValues);
                 userValues.delete(profileName);
                 if (on || gameState(fixture).on) userValues.set(profileName, on);
@@ -137,19 +146,25 @@ export const previewGameSettingsBridge: GameSettingsBridge = {
                         userValues = before;
                         throw failure("nvidia_driver_readback_mismatch", "the NVIDIA driver did not keep the requested Resizable BAR value");
                 }
-                return { profileName, state: gameState(fixture), backup: saved };
+                return { profileName, state: gameState(fixture), backup: saved, undo: undoSummary() };
         },
         setAllGames: async (on, consented): Promise<GameRebarReceipt> => {
                 if (on && !consented) throw failure("nvidia_driver_settings_failed", "turning Resizable BAR on for all programs needs the user's consent");
                 const saved = await write();
+                record(ALL_PROGRAMS, allGamesOn);
                 allGamesOn = on ? true : null;
-                return { profileName: null, state: allGamesState(), backup: saved };
+                return { profileName: null, state: allGamesState(), backup: saved, undo: undoSummary() };
         },
-        restore: async (backupSha256) => {
+        undo: async (revision) => {
                 await delay(260);
-                if (!backup || !backupValues || backup.sha256 !== backupSha256) throw failure("nvidia_driver_settings_failed", "the NVIDIA settings backup changed after it was shown");
-                allGamesOn = backupValues.allGamesOn;
-                userValues = new Map(backupValues.userValues);
+                const summary = undoSummary();
+                if (!summary) throw failure("nvidia_driver_settings_failed", "the app has not changed any NVIDIA profile");
+                if (summary.revision !== revision) throw failure("nvidia_driver_settings_failed", "the list of changed profiles changed after it was shown");
+                for (const [key, value] of originals) {
+                        if (key === ALL_PROGRAMS) allGamesOn = value ?? null;
+                        else if (value === undefined || value === null) userValues.delete(key);
+                        else userValues.set(key, value);
+                }
                 return catalog();
         },
 };

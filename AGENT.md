@@ -25,9 +25,10 @@ authoritative. Keep RIIR, deployment automation, and physical-machine proof as s
   prove.
 - NVIDIA driver profiles change only on the user's switch. A game switch writes only that game's
   profile; the all-games switch writes the all-programs profile, and turning it on needs the
-  user's consent in a dialog. Back up the whole driver settings database before the app's first
-  change, never overwrite a backup, and show a state only after a new driver session reads it
-  back. These are driver settings, not firmware: real writes are tested on a Windows PC with an
+  user's consent in a dialog. Record each profile's own values before the app first changes it,
+  and undo only those values, so an undo never rolls back a driver update or other NVIDIA
+  settings. Also save a full copy of the database before the first change, never overwrite a copy,
+  and show a state only after a new driver session reads it back. These are driver settings, not firmware: real writes are tested on a Windows PC with an
   NVIDIA driver from the handoff, while repository tests use the in-memory database and NVAPI
   stand-ins.
 - A driver settings failure is never dropped silently. Return it, or skip and count it, but every

@@ -26,7 +26,7 @@ Rust now owns:
 - Windows device discovery, EFI variable access, validation, verified write/readback, elevation,
   machine identity, deployment plans, artifact storage, and reboot policy; and
 - verified adapters for `nvidia-smi` evidence and for per-game Resizable BAR in the NVIDIA driver
-  settings database (NVAPI DRS), with a backup and read-back for every change.
+  settings database (NVAPI DRS), with an undo record and read-back for every change.
 
 CI enforces this source boundary on Windows and Linux. It also builds the `x86_64-unknown-uefi`
 target, independently parses the generated FFS, runs the host tests, and boots an injected copy of
@@ -146,8 +146,10 @@ all-programs profile after the user consents in a dialog. Turning on writes the 
 setting (`0x000BFA21`, driver 616.56 and later) and rBAR enable, plus options and a 1 GiB size
 limit only where the profile has no value of its own. Turning off removes what turning on wrote
 and writes an explicit off only when NVIDIA's value or the all-games value would still turn it on.
-The first change saves the whole database to a content-addressed file that is never overwritten
-and that the same screen restores. A change is shown only after a new session reads it back. The
+Before a profile first changes, its own Resizable BAR values are recorded; the undo writes only
+those values back, so it never rolls back a driver update or settings changed in NVIDIA's own
+tools. The first change also saves the whole database to a content-addressed file that is never
+overwritten. A change is shown only after a new session reads it back. The
 final plan step stays an optional record the user makes after checking the games they play.
 
 ### Product definition

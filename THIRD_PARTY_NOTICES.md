@@ -75,12 +75,14 @@ verifies the bundled source files and production-build copies against the pinned
 
 ## NVIDIA Profile Inspector
 
-- Component: setting IDs from `CustomSettingNames.xml` and the 256-byte table that unmasks
-  predefined values (`DrsDecrypterService.cs`)
+- Component: setting IDs from `CustomSettingNames.xml`, the 256-byte table that unmasks
+  predefined values (`DrsDecrypterService.cs`), and the interface IDs and argument lists of the
+  driver's own setting accessors (`NvapiDrsWrapper.cs`)
 - Copyright: Copyright (c) 2016 Orbmu2k
 - License: MIT
 - Upstream: <https://github.com/Orbmu2k/nvidiaProfileInspector>
-- Used in: [`src-tauri/src/nvidia_profiles/policy.rs`](src-tauri/src/nvidia_profiles/policy.rs)
+- Used in: [`src-tauri/src/nvidia_profiles/policy.rs`](src-tauri/src/nvidia_profiles/policy.rs),
+  [`src-tauri/src/nvidia_profiles/nvapi.rs`](src-tauri/src/nvidia_profiles/nvapi.rs)
 - Full license: [`public/licenses/nvidiaProfileInspector/LICENSE`](public/licenses/nvidiaProfileInspector/LICENSE)
 
 NVIDIA does not publish the Resizable BAR setting IDs (`0x000BFA21`, `0x000F00BA`, `0x000F00BB`,

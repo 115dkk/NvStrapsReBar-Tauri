@@ -66,8 +66,9 @@ Button recovery routes; on other boards you choose the routes yourself.
 Run `nvidia-smi -q -d memory`, or just look at the app's home screen: an expanded GPU shows its
 new BAR size in green. The NVIDIA driver applies Resizable BAR per application. **Turn on for each
 game** lists the driver's game profiles: search for a game and flip its switch, or turn on
-**All games** for every game without its own setting. The first change saves a copy of all NVIDIA
-driver settings, which the same screen can restore. Changes apply the next time a game starts and
+**All games** for every game without its own setting. Each profile's earlier values are recorded
+the first time the app changes it, and the same screen puts them back without touching other
+NVIDIA settings, even after a driver update. Changes apply the next time a game starts and
 need the app to run as administrator. The setting IDs come from
 [NVIDIA Profile Inspector](https://github.com/Orbmu2k/nvidiaProfileInspector); the app talks to
 the driver through NVIDIA's public NVAPI.
