@@ -194,18 +194,19 @@ pub fn turn_on(settings: &RebarSettings, driver_version: u32) -> Vec<Write> {
     writes
 }
 
-/// The size limit in the type the driver uses for it.
+/// The size limit in the type the driver uses for it: a QWORD on R610 and later; before that,
+/// the type of the value the profile inherits, or nothing when there is none.
 fn size_limit_value(inherited: Option<&Setting>, driver_version: u32) -> Option<Value> {
+    if driver_version >= QWORD_SIZE_LIMIT_MIN_DRIVER {
+        return Some(Value::Qword(SIZE_LIMIT_ON));
+    }
     match inherited.map(|setting| &setting.value) {
         Some(Value::Qword(_)) => Some(Value::Qword(SIZE_LIMIT_ON)),
         Some(Value::Binary(bytes)) if bytes.len() == 8 => {
             Some(Value::Binary(SIZE_LIMIT_ON.to_le_bytes().to_vec()))
         }
         Some(Value::Dword(_)) => Some(Value::Dword(SIZE_LIMIT_ON as u32)),
-        Some(_) => None,
-        None => {
-            (driver_version >= QWORD_SIZE_LIMIT_MIN_DRIVER).then_some(Value::Qword(SIZE_LIMIT_ON))
-        }
+        Some(_) | None => None,
     }
 }
 
@@ -456,6 +457,11 @@ mod tests {
         assert!(turn_on(&binary, OLD_DRIVER).contains(&Write::Set {
             id: SIZE_LIMIT_ID,
             value: Value::Binary(SIZE_LIMIT_ON.to_le_bytes().to_vec())
+        }));
+        // R610 and later always take a QWORD, whatever an older tool left behind.
+        assert!(turn_on(&binary, DRIVER).contains(&Write::Set {
+            id: SIZE_LIMIT_ID,
+            value: Value::Qword(SIZE_LIMIT_ON)
         }));
         // An old driver without a known type gets no size limit, and no app setting.
         let writes = turn_on(&RebarSettings::default(), OLD_DRIVER);

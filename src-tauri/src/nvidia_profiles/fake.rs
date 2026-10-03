@@ -3,9 +3,9 @@
 
 use std::{
     cell::{Cell, RefCell},
-    collections::{BTreeMap, HashMap},
+    collections::BTreeMap,
     fs,
-    path::{Path, PathBuf},
+    path::Path,
 };
 
 use super::{
@@ -134,7 +134,6 @@ pub struct FakeDriver {
     pub broken: RefCell<Vec<String>>,
     /// The driver refuses every profile except the all-programs one.
     pub break_games: Cell<bool>,
-    files: RefCell<HashMap<PathBuf, FakeDb>>,
 }
 
 impl FakeDriver {
@@ -146,7 +145,6 @@ impl FakeDriver {
             ignore_saves: Cell::new(false),
             broken: RefCell::new(Vec::new()),
             break_games: Cell::new(false),
-            files: RefCell::new(HashMap::new()),
         }
     }
 }
@@ -232,9 +230,8 @@ impl DrsSession for FakeSession<'_> {
         Ok(())
     }
 
-    fn delete_setting(&mut self, profile: ProfileHandle, id: u32) -> DrsResult<()> {
-        self.db.profiles[index(profile)].user.remove(&id);
-        Ok(())
+    fn delete_setting(&mut self, profile: ProfileHandle, id: u32) -> DrsResult<bool> {
+        Ok(self.db.profiles[index(profile)].user.remove(&id).is_some())
     }
 
     fn save(&mut self) -> DrsResult<()> {
@@ -252,23 +249,6 @@ impl DrsSession for FakeSession<'_> {
 
     fn save_to_file(&mut self, path: &Path) -> DrsResult<()> {
         fs::write(path, format!("{:?}", self.db))
-            .map_err(|_| DrsError::new("NvAPI_DRS_SaveSettingsToFile", NVAPI_ERROR))?;
-        self.driver
-            .files
-            .borrow_mut()
-            .insert(path.to_path_buf(), self.db.clone());
-        Ok(())
-    }
-
-    fn load_from_file(&mut self, path: &Path) -> DrsResult<()> {
-        let saved = fs::read_to_string(path)
-            .map_err(|_| DrsError::new("NvAPI_DRS_LoadSettingsFromFile", NVAPI_ERROR))?;
-        let files = self.driver.files.borrow();
-        let db = files
-            .values()
-            .find(|db| format!("{db:?}") == saved)
-            .ok_or(DrsError::new("NvAPI_DRS_LoadSettingsFromFile", NVAPI_ERROR))?;
-        self.db = db.clone();
-        Ok(())
+            .map_err(|_| DrsError::new("NvAPI_DRS_SaveSettingsToFile", NVAPI_ERROR))
     }
 }

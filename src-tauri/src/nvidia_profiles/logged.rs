@@ -164,13 +164,26 @@ impl<S: DrsSession> DrsSession for LoggedSession<'_, S> {
         )
     }
 
-    fn delete_setting(&mut self, profile: ProfileHandle, id: u32) -> DrsResult<()> {
-        changed(
-            self.journal,
-            "drs.delete_setting",
-            format_args!("profile={:#x} id={id:#010x}", profile.0),
-            self.inner.delete_setting(profile, id),
-        )
+    fn delete_setting(&mut self, profile: ProfileHandle, id: u32) -> DrsResult<bool> {
+        let result = self.inner.delete_setting(profile, id);
+        match &result {
+            Ok(true) => self.journal.info(
+                "drs.delete_setting",
+                format_args!("profile={:#x} id={id:#010x} -> ok", profile.0),
+            ),
+            Ok(false) => self.journal.info(
+                "drs.delete_setting",
+                format_args!(
+                    "profile={:#x} id={id:#010x} -> nothing to delete",
+                    profile.0
+                ),
+            ),
+            Err(error) => self.journal.error(
+                "drs.delete_setting",
+                format_args!("profile={:#x} id={id:#010x} -> {error}", profile.0),
+            ),
+        }
+        result
     }
 
     fn save(&mut self) -> DrsResult<()> {
@@ -188,15 +201,6 @@ impl<S: DrsSession> DrsSession for LoggedSession<'_, S> {
             "drs.save_to_file",
             format_args!("path={}", path.display()),
             self.inner.save_to_file(path),
-        )
-    }
-
-    fn load_from_file(&mut self, path: &Path) -> DrsResult<()> {
-        changed(
-            self.journal,
-            "drs.load_from_file",
-            format_args!("path={}", path.display()),
-            self.inner.load_from_file(path),
         )
     }
 }

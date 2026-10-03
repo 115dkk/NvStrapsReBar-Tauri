@@ -71,11 +71,11 @@ pub trait DrsSession {
     fn global_profile(&mut self) -> DrsResult<ProfileHandle>;
     fn setting(&mut self, profile: ProfileHandle, id: u32) -> DrsResult<Option<Setting>>;
     fn set_setting(&mut self, profile: ProfileHandle, id: u32, value: &Value) -> DrsResult<()>;
-    /// Removes the value written on this PC; a predefined value comes back.
-    fn delete_setting(&mut self, profile: ProfileHandle, id: u32) -> DrsResult<()>;
+    /// Removes the value written on this PC; a predefined value comes back. `false` means the
+    /// profile had no value of its own to remove.
+    fn delete_setting(&mut self, profile: ProfileHandle, id: u32) -> DrsResult<bool>;
     fn save(&mut self) -> DrsResult<()>;
     fn save_to_file(&mut self, path: &Path) -> DrsResult<()>;
-    fn load_from_file(&mut self, path: &Path) -> DrsResult<()>;
 
     fn rebar_settings(&mut self, profile: ProfileHandle) -> DrsResult<RebarSettings> {
         let mut settings = RebarSettings::default();
@@ -95,7 +95,7 @@ pub trait DrsDriver {
     fn driver_version(&self) -> DrsResult<u32>;
     /// A session with the system settings loaded.
     fn open(&self) -> DrsResult<Self::Session<'_>>;
-    /// A session without loaded settings, to load a settings file into.
+    /// A session without loaded settings.
     fn open_empty(&self) -> DrsResult<Self::Session<'_>>;
 }
 

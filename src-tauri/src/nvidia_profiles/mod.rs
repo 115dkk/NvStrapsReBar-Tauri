@@ -12,6 +12,7 @@ mod journal;
 mod logged;
 mod nvapi;
 mod policy;
+mod undo;
 
 use std::{
     fmt,
@@ -80,6 +81,8 @@ pub struct GameSettingsCatalog {
     /// Profiles the driver refused to read; each one has a line in the log.
     pub skipped_profiles: u32,
     pub log_path: Option<PathBuf>,
+    /// The profiles the app changed, which the undo returns to their earlier values.
+    pub undo: Option<undo::UndoSummary>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -112,6 +115,8 @@ pub struct GameRebarReceipt {
     /// The state a new session read back after the save.
     pub state: RebarState,
     pub backup: DriverSettingsBackup,
+    /// The undo record after this change.
+    pub undo: Option<undo::UndoSummary>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -131,8 +136,9 @@ pub struct SetAllGamesRebarRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct RestoreDriverSettingsRequest {
-    pub backup_sha256: String,
+pub struct UndoGameChangesRequest {
+    /// The record revision the screen showed.
+    pub revision: String,
 }
 
 impl From<DrsError> for BackendError {
@@ -147,10 +153,26 @@ impl From<DrsError> for BackendError {
     }
 }
 
+/// The full database copies and the record of the values the app changed.
+#[derive(Clone, Debug)]
+struct Store {
+    backups: PathBuf,
+    originals: PathBuf,
+}
+
+impl Store {
+    fn under(root: &Path) -> Self {
+        Self {
+            backups: root.join("backups"),
+            originals: root.join("originals.json"),
+        }
+    }
+}
+
 /// Where the commands keep their files.
 #[derive(Clone, Debug)]
 struct Paths {
-    backups: PathBuf,
+    store: Store,
     log: PathBuf,
 }
 
@@ -160,7 +182,7 @@ impl Paths {
             BackendError::NvidiaDriverSettings(format!("local data path failed: {error}"))
         })?;
         Ok(Self {
-            backups: root.join("nvidia-driver-settings").join("backups"),
+            store: Store::under(&root.join("nvidia-driver-settings")),
             log: root.join("logs").join("driver-settings.log"),
         })
     }
@@ -174,7 +196,7 @@ pub async fn load_nvidia_game_settings(app: AppHandle) -> CommandResult<GameSett
         "load_nvidia_game_settings".into(),
         |paths, journal| {
             with_driver(journal, |driver| {
-                load_catalog(driver, &paths.backups, journal)
+                load_catalog(driver, &paths.store, journal)
             })
         },
     )
@@ -198,7 +220,7 @@ pub async fn set_nvidia_game_rebar(
                 driver,
                 Target::Game(&request.profile_name),
                 request.on,
-                &paths.backups,
+                &paths.store,
                 journal,
             )
         })
@@ -220,33 +242,24 @@ pub async fn set_nvidia_all_games_rebar(
         require_consent(&request)?;
         require_administrator(inspect_access().is_elevated)?;
         with_driver(journal, |driver| {
-            change(
-                driver,
-                Target::AllGames,
-                request.on,
-                &paths.backups,
-                journal,
-            )
+            change(driver, Target::AllGames, request.on, &paths.store, journal)
         })
     })
     .await
 }
 
 #[tauri::command]
-pub async fn restore_nvidia_driver_settings(
+pub async fn undo_nvidia_game_changes(
     app: AppHandle,
-    request: RestoreDriverSettingsRequest,
+    request: UndoGameChangesRequest,
 ) -> CommandResult<GameSettingsCatalog> {
     let paths = Paths::of(&app).map_err(ApiError::from)?;
-    let label = format!(
-        "restore_nvidia_driver_settings sha256={}",
-        request.backup_sha256
-    );
+    let label = format!("undo_nvidia_game_changes revision={}", request.revision);
     run(paths, label, move |paths, journal| {
         require_administrator(inspect_access().is_elevated)?;
         with_driver(journal, |driver| {
-            restore(driver, &paths.backups, &request.backup_sha256, journal)?;
-            load_catalog(driver, &paths.backups, journal)
+            undo::undo(driver, &paths.store.originals, &request.revision, journal)?;
+            load_catalog(driver, &paths.store, journal)
         })
     })
     .await
@@ -306,6 +319,7 @@ fn with_driver<T>(
         poisoned.into_inner()
     });
     let api = nvapi::system_api().inspect_err(|error| journal.error("drs.load_nvapi", error))?;
+    journal.info("drs.accessors", api.accessors());
     let driver = NvapiDriver::new(api);
     action(&LoggedDriver::new(&driver, journal))
 }
@@ -394,7 +408,7 @@ fn describe_state(state: &RebarState) -> String {
 
 fn load_catalog<D: DrsDriver>(
     driver: &D,
-    backups: &Path,
+    store: &Store,
     journal: &Journal,
 ) -> BackendResult<GameSettingsCatalog> {
     let started = Instant::now();
@@ -477,9 +491,10 @@ fn load_catalog<D: DrsDriver>(
         },
         all_games,
         games,
-        backup: read_backup(backups, journal)?,
+        backup: read_backup(&store.backups, journal)?,
         skipped_profiles: skipped,
         log_path: journal.path().map(Path::to_path_buf),
+        undo: undo::summary(&store.originals, journal),
     })
 }
 
@@ -516,11 +531,13 @@ fn resolve<S: DrsSession>(session: &mut S, target: Target<'_>) -> BackendResult<
     let profile = session.find_profile(name)?.ok_or_else(|| {
         BackendError::NvidiaDriverSettings(format!("the driver has no profile named {name:?}"))
     })?;
-    // A game request never changes the all-programs profile; that needs consent.
-    if session.profile_info(profile)?.name == session.profile_info(global)?.name {
-        return Err(BackendError::NvidiaDriverSettings(
-            "the all-programs profile is changed only through the all-games switch".into(),
-        ));
+    // A game request never changes the all-programs profile, the base profile, or a global
+    // preset: those have no programs and change only through the consented all-games switch.
+    let info = session.profile_info(profile)?;
+    if info.name == session.profile_info(global)?.name || info.app_count == 0 {
+        return Err(BackendError::NvidiaDriverSettings(format!(
+            "{name:?} has no programs; profiles that apply to all programs change only through the all-games switch"
+        )));
     }
     Ok(profile)
 }
@@ -529,11 +546,20 @@ fn apply<S: DrsSession>(
     session: &mut S,
     profile: ProfileHandle,
     writes: &[Write],
+    journal: &Journal,
 ) -> BackendResult<()> {
     for write in writes {
         match write {
             Write::Set { id, value } => session.set_setting(profile, *id, value)?,
-            Write::Delete { id } => session.delete_setting(profile, *id)?,
+            Write::Delete { id } => {
+                // Deletes target values just read as written on this PC.
+                if !session.delete_setting(profile, *id)? {
+                    journal.warn(
+                        "change.delete",
+                        format_args!("{id:#010x} was read as set on this PC but the driver had nothing to delete"),
+                    );
+                }
+            }
         }
     }
     Ok(())
@@ -545,7 +571,7 @@ fn change<D: DrsDriver>(
     driver: &D,
     target: Target<'_>,
     on: bool,
-    backups: &Path,
+    store: &Store,
     journal: &Journal,
 ) -> BackendResult<GameRebarReceipt> {
     let version = driver.driver_version()?;
@@ -554,9 +580,22 @@ fn change<D: DrsDriver>(
         format_args!("{target} on={on} driver={}", driver_version_text(version)),
     );
     let mut session = driver.open()?;
-    let backup = ensure_backup(&mut session, backups, version, journal)?;
+    let backup = ensure_backup(&mut session, &store.backups, version, journal)?;
     let profile = resolve(&mut session, target)?;
     let settings = session.rebar_settings(profile)?;
+    // The earlier values are on disk before anything changes in the driver.
+    let name = match target {
+        Target::Game(name) => name.to_owned(),
+        Target::AllGames => session.profile_info(profile)?.name,
+    };
+    undo::record(
+        &store.originals,
+        &name,
+        matches!(target, Target::AllGames),
+        &settings,
+        version,
+        journal,
+    )?;
     journal.info(
         "change.before",
         format_args!(
@@ -571,14 +610,14 @@ fn change<D: DrsDriver>(
             "change.plan",
             format_args!("{target} turn on: {}", describe_writes(&writes)),
         );
-        apply(&mut session, profile, &writes)?;
+        apply(&mut session, profile, &writes, journal)?;
     } else {
         let writes = policy::clear(&settings);
         journal.info(
             "change.plan",
             format_args!("{target} clear: {}", describe_writes(&writes)),
         );
-        apply(&mut session, profile, &writes)?;
+        apply(&mut session, profile, &writes, journal)?;
         let cleared = session.rebar_settings(profile)?;
         let writes = policy::force_off(&cleared, version);
         journal.info(
@@ -589,7 +628,7 @@ fn change<D: DrsDriver>(
                 describe_writes(&writes)
             ),
         );
-        apply(&mut session, profile, &writes)?;
+        apply(&mut session, profile, &writes, journal)?;
     }
     let staged_settings = session.rebar_settings(profile)?;
     let staged = rebar_state(&staged_settings, version);
@@ -628,37 +667,8 @@ fn change<D: DrsDriver>(
         },
         state,
         backup,
+        undo: undo::summary(&store.originals, journal),
     })
-}
-
-/// Loads the backed-up database into the driver and saves it.
-fn restore<D: DrsDriver>(
-    driver: &D,
-    backups: &Path,
-    sha256: &str,
-    journal: &Journal,
-) -> BackendResult<()> {
-    let backup = read_backup(backups, journal)?.ok_or_else(|| {
-        BackendError::NvidiaDriverSettings("there is no NVIDIA settings backup".into())
-    })?;
-    if backup.sha256.as_str() != sha256.to_ascii_lowercase() {
-        return Err(BackendError::NvidiaDriverSettings(format!(
-            "the NVIDIA settings backup changed after it was shown (now {})",
-            backup.sha256.as_str()
-        )));
-    }
-    journal.info(
-        "restore.start",
-        format_args!("path={}", backup.path.display()),
-    );
-    let mut session = driver.open_empty()?;
-    session.load_from_file(&backup.path)?;
-    session.save()?;
-    journal.info(
-        "restore.done",
-        format_args!("sha256={}", backup.sha256.as_str()),
-    );
-    Ok(())
 }
 
 /// The earliest intact backup. Manifests and backups are never rewritten; a damaged one is
@@ -868,7 +878,8 @@ mod tests {
     fn the_catalog_lists_games_with_programs_and_their_state() {
         let driver = FakeDriver::new(sample_db(), DRIVER);
         let directory = TestDirectory::new();
-        let catalog = load_catalog(&driver, &directory.0, &Journal::memory()).unwrap();
+        let catalog =
+            load_catalog(&driver, &Store::under(&directory.0), &Journal::memory()).unwrap();
         let names: Vec<_> = catalog
             .games
             .iter()
@@ -902,7 +913,7 @@ mod tests {
             &driver,
             Target::Game("Elden Ring"),
             true,
-            &directory.0,
+            &Store::under(&directory.0),
             &Journal::memory(),
         )
         .unwrap();
@@ -929,7 +940,7 @@ mod tests {
             &driver,
             Target::Game("Elden Ring"),
             true,
-            &directory.0,
+            &Store::under(&directory.0),
             &Journal::memory(),
         )
         .unwrap();
@@ -937,12 +948,13 @@ mod tests {
             &driver,
             Target::Game("Counter-Strike 2"),
             true,
-            &directory.0,
+            &Store::under(&directory.0),
             &Journal::memory(),
         )
         .unwrap();
         assert_eq!(first.backup, second.backup);
-        let catalog = load_catalog(&driver, &directory.0, &Journal::memory()).unwrap();
+        let catalog =
+            load_catalog(&driver, &Store::under(&directory.0), &Journal::memory()).unwrap();
         assert_eq!(catalog.backup, Some(first.backup));
     }
 
@@ -954,7 +966,7 @@ mod tests {
             &driver,
             Target::Game("Elden Ring"),
             true,
-            &directory.0,
+            &Store::under(&directory.0),
             &Journal::memory(),
         )
         .unwrap();
@@ -962,7 +974,7 @@ mod tests {
             &driver,
             Target::Game("Elden Ring"),
             false,
-            &directory.0,
+            &Store::under(&directory.0),
             &Journal::memory(),
         )
         .unwrap();
@@ -973,7 +985,7 @@ mod tests {
             &driver,
             Target::Game("Cyberpunk 2077"),
             false,
-            &directory.0,
+            &Store::under(&directory.0),
             &Journal::memory(),
         )
         .unwrap();
@@ -994,13 +1006,14 @@ mod tests {
             &driver,
             Target::AllGames,
             true,
-            &directory.0,
+            &Store::under(&directory.0),
             &Journal::memory(),
         )
         .unwrap();
         assert_eq!(receipt.profile_name, None);
         assert!(receipt.state.on);
-        let catalog = load_catalog(&driver, &directory.0, &Journal::memory()).unwrap();
+        let catalog =
+            load_catalog(&driver, &Store::under(&directory.0), &Journal::memory()).unwrap();
         assert!(catalog.all_games.on);
         let counter_strike = game(&catalog, "Counter-Strike 2");
         assert!(counter_strike.state.on);
@@ -1010,7 +1023,7 @@ mod tests {
             &driver,
             Target::Game("Counter-Strike 2"),
             false,
-            &directory.0,
+            &Store::under(&directory.0),
             &Journal::memory(),
         )
         .unwrap();
@@ -1019,12 +1032,12 @@ mod tests {
             &driver,
             Target::AllGames,
             false,
-            &directory.0,
+            &Store::under(&directory.0),
             &Journal::memory(),
         )
         .unwrap();
         assert!(
-            !load_catalog(&driver, &directory.0, &Journal::memory())
+            !load_catalog(&driver, &Store::under(&directory.0), &Journal::memory())
                 .unwrap()
                 .all_games
                 .on
@@ -1039,7 +1052,7 @@ mod tests {
             &driver,
             Target::Game("Base Profile"),
             true,
-            &directory.0,
+            &Store::under(&directory.0),
             &Journal::memory(),
         )
         .unwrap_err();
@@ -1082,7 +1095,7 @@ mod tests {
             &driver,
             Target::Game("Elden Ring"),
             true,
-            &directory.0,
+            &Store::under(&directory.0),
             &Journal::memory(),
         )
         .unwrap_err();
@@ -1099,7 +1112,7 @@ mod tests {
             &driver,
             Target::Game("Elden Ring"),
             true,
-            &directory.0,
+            &Store::under(&directory.0),
             &Journal::memory(),
         )
         .unwrap_err();
@@ -1115,43 +1128,180 @@ mod tests {
                 &driver,
                 Target::Game("Not A Game"),
                 true,
-                &directory.0,
+                &Store::under(&directory.0),
                 &Journal::memory()
             )
             .is_err()
         );
     }
 
+    fn undo_summary(directory: &TestDirectory) -> undo::UndoSummary {
+        undo::summary(&Store::under(&directory.0).originals, &Journal::memory())
+            .expect("changes were recorded")
+    }
+
     #[test]
-    fn restore_brings_back_the_backed_up_database() {
-        let driver = FakeDriver::new(sample_db(), DRIVER);
+    fn undo_returns_every_changed_profile_to_its_earlier_values() {
+        let mut db = sample_db();
+        // A value set earlier by another tool must come back too.
+        db.profiles[2].user.insert(ENABLE_ID, Value::Dword(1));
+        db.profiles[2]
+            .user
+            .insert(SIZE_LIMIT_ID, Value::Qword(4 << 30));
+        let original = db.clone();
+        let driver = FakeDriver::new(db, DRIVER);
         let directory = TestDirectory::new();
-        let receipt = change(
-            &driver,
-            Target::Game("Elden Ring"),
-            true,
-            &directory.0,
-            &Journal::memory(),
-        )
-        .unwrap();
+        let store = Store::under(&directory.0);
+        let journal = Journal::memory();
+        change(&driver, Target::Game("Elden Ring"), false, &store, &journal).unwrap();
+        change(&driver, Target::Game("Elden Ring"), true, &store, &journal).unwrap();
         change(
             &driver,
-            Target::AllGames,
-            true,
-            &directory.0,
-            &Journal::memory(),
+            Target::Game("Cyberpunk 2077"),
+            false,
+            &store,
+            &journal,
         )
         .unwrap();
-        let wrong = "0".repeat(64);
-        assert!(restore(&driver, &directory.0, &wrong, &Journal::memory()).is_err());
-        restore(
+        change(&driver, Target::AllGames, true, &store, &journal).unwrap();
+        let summary = undo_summary(&directory);
+        assert_eq!(summary.profiles, 3);
+        let catalog = load_catalog(&driver, &store, &journal).unwrap();
+        assert_eq!(catalog.undo, Some(summary.clone()));
+
+        undo::undo(&driver, &store.originals, &summary.revision, &journal).unwrap();
+        assert_eq!(*driver.system.borrow(), original);
+        assert!(
+            journal
+                .lines()
+                .iter()
+                .any(|line| line.contains("INFO undo.done"))
+        );
+    }
+
+    #[test]
+    fn undo_keeps_what_a_driver_update_changed_since() {
+        let driver = FakeDriver::new(sample_db(), DRIVER);
+        let directory = TestDirectory::new();
+        let store = Store::under(&directory.0);
+        let journal = Journal::memory();
+        change(
             &driver,
-            &directory.0,
-            receipt.backup.sha256.as_str(),
-            &Journal::memory(),
+            Target::Game("Counter-Strike 2"),
+            true,
+            &store,
+            &journal,
         )
         .unwrap();
-        assert_eq!(*driver.system.borrow(), sample_db());
+        // A driver update turns another game on and adds a profile.
+        {
+            let mut system = driver.system.borrow_mut();
+            system.profiles[2].nvidia.insert(ENABLE_ID, Value::Dword(1));
+            system.profiles.push(fake::FakeProfile {
+                name: "New Game".into(),
+                predefined: true,
+                apps: vec!["new.exe".into()],
+                ..Default::default()
+            });
+        }
+        let expected = {
+            let mut system = driver.system.borrow().clone();
+            system.profiles[3].user.clear();
+            system
+        };
+        undo::undo(
+            &driver,
+            &store.originals,
+            &undo_summary(&directory).revision,
+            &journal,
+        )
+        .unwrap();
+        assert_eq!(*driver.system.borrow(), expected);
+    }
+
+    #[test]
+    fn the_first_record_of_a_profile_is_kept() {
+        let driver = FakeDriver::new(sample_db(), DRIVER);
+        let directory = TestDirectory::new();
+        let store = Store::under(&directory.0);
+        let journal = Journal::memory();
+        change(&driver, Target::Game("Elden Ring"), true, &store, &journal).unwrap();
+        let first = undo_summary(&directory);
+        change(&driver, Target::Game("Elden Ring"), false, &store, &journal).unwrap();
+        change(&driver, Target::Game("Elden Ring"), true, &store, &journal).unwrap();
+        assert_eq!(undo_summary(&directory), first);
+    }
+
+    #[test]
+    fn a_stale_or_empty_undo_is_refused() {
+        let driver = FakeDriver::new(sample_db(), DRIVER);
+        let directory = TestDirectory::new();
+        let store = Store::under(&directory.0);
+        let journal = Journal::memory();
+        assert!(undo::undo(&driver, &store.originals, "any", &journal).is_err());
+        change(&driver, Target::Game("Elden Ring"), true, &store, &journal).unwrap();
+        let shown = undo_summary(&directory);
+        change(
+            &driver,
+            Target::Game("Counter-Strike 2"),
+            true,
+            &store,
+            &journal,
+        )
+        .unwrap();
+        let error = undo::undo(&driver, &store.originals, &shown.revision, &journal).unwrap_err();
+        assert!(
+            error.to_string().contains("changed after it was shown"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn a_damaged_record_is_moved_aside_and_logged() {
+        let driver = FakeDriver::new(sample_db(), DRIVER);
+        let directory = TestDirectory::new();
+        let store = Store::under(&directory.0);
+        fs::create_dir_all(&directory.0).unwrap();
+        fs::write(&store.originals, b"{ not json").unwrap();
+        let journal = Journal::memory();
+        assert!(
+            load_catalog(&driver, &store, &journal)
+                .unwrap()
+                .undo
+                .is_none()
+        );
+        change(&driver, Target::Game("Elden Ring"), true, &store, &journal).unwrap();
+        assert_eq!(undo_summary(&directory).profiles, 1);
+        let aside: Vec<_> = fs::read_dir(&directory.0)
+            .unwrap()
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("originals.json.damaged-")
+            })
+            .collect();
+        assert_eq!(aside.len(), 1);
+        assert_eq!(fs::read(aside[0].path()).unwrap(), b"{ not json");
+        let log = journal.lines().join("\n");
+        assert!(log.contains("ERROR undo.record"), "{log}");
+        assert!(log.contains("moved to"), "{log}");
+    }
+
+    #[test]
+    fn game_requests_need_a_profile_with_programs() {
+        let driver = FakeDriver::new(sample_db(), DRIVER);
+        let directory = TestDirectory::new();
+        let error = change(
+            &driver,
+            Target::Game("Driver Telemetry"),
+            true,
+            &Store::under(&directory.0),
+            &Journal::memory(),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("has no programs"), "{error}");
     }
 
     #[test]
@@ -1162,13 +1312,17 @@ mod tests {
             &driver,
             Target::Game("Elden Ring"),
             true,
-            &directory.0,
+            &Store::under(&directory.0),
             &Journal::memory(),
         )
         .unwrap();
         fs::write(&first.backup.path, b"damaged").unwrap();
         let journal = Journal::memory();
-        assert!(read_backup(&directory.0, &journal).unwrap().is_none());
+        assert!(
+            read_backup(&Store::under(&directory.0).backups, &journal)
+                .unwrap()
+                .is_none()
+        );
         let lines = journal.lines();
         assert_eq!(lines.len(), 1);
         assert!(lines[0].contains(" WARN backup.skip "));
@@ -1178,7 +1332,7 @@ mod tests {
             &driver,
             Target::Game("Counter-Strike 2"),
             true,
-            &directory.0,
+            &Store::under(&directory.0),
             &Journal::memory(),
         )
         .unwrap();
@@ -1225,7 +1379,7 @@ mod tests {
             &driver,
             Target::Game("Elden Ring"),
             true,
-            &directory.0,
+            &Store::under(&directory.0),
             &journal,
         )
         .unwrap();
@@ -1255,7 +1409,7 @@ mod tests {
                 &driver,
                 Target::Game("Elden Ring"),
                 true,
-                &directory.0,
+                &Store::under(&directory.0),
                 &journal
             )
             .is_err()
@@ -1265,7 +1419,7 @@ mod tests {
                 &driver,
                 Target::Game("Missing Game"),
                 true,
-                &directory.0,
+                &Store::under(&directory.0),
                 &journal
             )
             .is_err()
@@ -1288,7 +1442,7 @@ mod tests {
         let journal = Journal::memory();
         let driver = LoggedDriver::new(&fake, &journal);
         let directory = TestDirectory::new();
-        let catalog = load_catalog(&driver, &directory.0, &journal).unwrap();
+        let catalog = load_catalog(&driver, &Store::under(&directory.0), &journal).unwrap();
         assert_eq!(catalog.skipped_profiles, 1);
         assert!(catalog.games.iter().all(|game| game.name != "Elden Ring"));
         let log = journal.lines().join("\n");
@@ -1320,8 +1474,12 @@ mod tests {
         fake.break_games.set(true);
         let journal = Journal::memory();
         let directory = TestDirectory::new();
-        let error =
-            load_catalog(&LoggedDriver::new(&fake, &journal), &directory.0, &journal).unwrap_err();
+        let error = load_catalog(
+            &LoggedDriver::new(&fake, &journal),
+            &Store::under(&directory.0),
+            &journal,
+        )
+        .unwrap_err();
         assert!(
             error.to_string().contains("refused 50 profiles in a row"),
             "{error}"

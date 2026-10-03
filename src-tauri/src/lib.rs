@@ -61,7 +61,7 @@ pub fn run() {
             nvidia_profiles::load_nvidia_game_settings,
             nvidia_profiles::set_nvidia_game_rebar,
             nvidia_profiles::set_nvidia_all_games_rebar,
-            nvidia_profiles::restore_nvidia_driver_settings,
+            nvidia_profiles::undo_nvidia_game_changes,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run NvStrapsReBar");

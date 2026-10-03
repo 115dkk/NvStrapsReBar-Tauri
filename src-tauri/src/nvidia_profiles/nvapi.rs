@@ -146,6 +146,9 @@ type EnumApplicationsFn =
 type GetSettingFn = unsafe extern "C" fn(Handle, Handle, u32, *mut NvdrsSetting) -> i32;
 type SetSettingFn = unsafe extern "C" fn(Handle, Handle, *mut NvdrsSetting) -> i32;
 type DeleteSettingFn = unsafe extern "C" fn(Handle, Handle, u32) -> i32;
+/// The driver's own setting accessors take extra flag arguments, passed as zero.
+type GetSettingExFn = unsafe extern "C" fn(Handle, Handle, u32, *mut NvdrsSetting, *mut u32) -> i32;
+type SetSettingExFn = unsafe extern "C" fn(Handle, Handle, *mut NvdrsSetting, u32, u32) -> i32;
 
 // Interface IDs from nvapi_interface.h.
 const INITIALIZE: u32 = 0x0150_E828;
@@ -154,7 +157,6 @@ const DRS_CREATE_SESSION: u32 = 0x0694_D52E;
 const DRS_DESTROY_SESSION: u32 = 0xDAD9_CFF8;
 const DRS_LOAD_SETTINGS: u32 = 0x375D_BD6B;
 const DRS_SAVE_SETTINGS: u32 = 0xFCBC_7E14;
-const DRS_LOAD_SETTINGS_FROM_FILE: u32 = 0xD3ED_E889;
 const DRS_SAVE_SETTINGS_TO_FILE: u32 = 0x2BE2_5DF8;
 const DRS_GET_CURRENT_GLOBAL_PROFILE: u32 = 0x617B_FF9F;
 const DRS_FIND_PROFILE_BY_NAME: u32 = 0x7E4A_9A0B;
@@ -165,6 +167,25 @@ const DRS_GET_SETTING: u32 = 0x73BF_8338;
 const DRS_SET_SETTING: u32 = 0x577D_D202;
 const DRS_DELETE_PROFILE_SETTING: u32 = 0xE4A2_6362;
 
+// Since R445 the public accessors refuse some undocumented settings (NVAPI_SETTING_NOT_FOUND).
+// NVIDIA Profile Inspector resolves the driver's own accessors first and falls back to the
+// public ones (NvapiDrsWrapper.cs, "workaround for some settings throw errors when changed").
+const DRS_GET_SETTING_EX: u32 = 0xEA99_498D;
+const DRS_SET_SETTING_EX: u32 = 0x8A2C_F5F5;
+const DRS_DELETE_PROFILE_SETTING_EX: u32 = 0xD20D_29DF;
+
+#[derive(Clone, Copy)]
+enum GetSetting {
+    Driver(GetSettingExFn),
+    Public(GetSettingFn),
+}
+
+#[derive(Clone, Copy)]
+enum SetSetting {
+    Driver(SetSettingExFn),
+    Public(SetSettingFn),
+}
+
 /// The NVAPI functions the app calls, resolved once.
 pub struct NvApi {
     initialize: InitializeFn,
@@ -173,16 +194,28 @@ pub struct NvApi {
     destroy_session: SessionFn,
     load_settings: SessionFn,
     save_settings: SessionFn,
-    load_settings_from_file: SessionFileFn,
     save_settings_to_file: SessionFileFn,
     current_global_profile: GlobalProfileFn,
     find_profile_by_name: FindProfileFn,
     enum_profiles: EnumProfilesFn,
     profile_info: ProfileInfoFn,
     enum_applications: EnumApplicationsFn,
-    get_setting: GetSettingFn,
-    set_setting: SetSettingFn,
+    get_setting: GetSetting,
+    set_setting: SetSetting,
     delete_profile_setting: DeleteSettingFn,
+    /// Which setting accessors resolved, for the log.
+    accessors: String,
+}
+
+/// # Safety
+///
+/// `query` must return null or a function with signature `F` for `id`.
+unsafe fn resolve_optional<F: Copy>(query: QueryInterface, id: u32) -> Option<F> {
+    const { assert!(size_of::<F>() == size_of::<*mut c_void>()) };
+    // SAFETY: the caller passes NVAPI's resolver, which accepts any ID.
+    let pointer = unsafe { query(id) };
+    // SAFETY: as in `resolve_function`.
+    (!pointer.is_null()).then(|| unsafe { std::mem::transmute_copy::<*mut c_void, F>(&pointer) })
 }
 
 /// # Safety
@@ -210,10 +243,49 @@ impl NvApi {
     /// `query` must behave like `nvapi_QueryInterface`: every ID resolves to null or to the NVAPI
     /// function nvapi.h declares for it.
     pub unsafe fn resolve(query: QueryInterface) -> DrsResult<Self> {
+        // SAFETY: NvAPI_Initialize takes no arguments and returns a status.
+        let initialize = unsafe { resolve_function(query, INITIALIZE, "NvAPI_Initialize")? };
+        // SAFETY: each ID is paired with the signature nvapi.h (or, for the driver's own
+        // accessors, NVIDIA Profile Inspector) declares for it.
+        let (get_setting, get_id) = match unsafe { resolve_optional(query, DRS_GET_SETTING_EX) } {
+            Some(function) => (GetSetting::Driver(function), DRS_GET_SETTING_EX),
+            None => (
+                GetSetting::Public(unsafe {
+                    resolve_function(query, DRS_GET_SETTING, "NvAPI_DRS_GetSetting")?
+                }),
+                DRS_GET_SETTING,
+            ),
+        };
+        let (set_setting, set_id) = match unsafe { resolve_optional(query, DRS_SET_SETTING_EX) } {
+            Some(function) => (SetSetting::Driver(function), DRS_SET_SETTING_EX),
+            None => (
+                SetSetting::Public(unsafe {
+                    resolve_function(query, DRS_SET_SETTING, "NvAPI_DRS_SetSetting")?
+                }),
+                DRS_SET_SETTING,
+            ),
+        };
+        let (delete_profile_setting, delete_id) =
+            match unsafe { resolve_optional(query, DRS_DELETE_PROFILE_SETTING_EX) } {
+                Some(function) => (function, DRS_DELETE_PROFILE_SETTING_EX),
+                None => (
+                    unsafe {
+                        resolve_function(
+                            query,
+                            DRS_DELETE_PROFILE_SETTING,
+                            "NvAPI_DRS_DeleteProfileSetting",
+                        )?
+                    },
+                    DRS_DELETE_PROFILE_SETTING,
+                ),
+            };
+        let accessors = format!(
+            "get_setting={get_id:#010x} set_setting={set_id:#010x} delete_setting={delete_id:#010x}"
+        );
         // SAFETY: each ID is paired with the signature nvapi.h declares for it.
         unsafe {
             Ok(Self {
-                initialize: resolve_function(query, INITIALIZE, "NvAPI_Initialize")?,
+                initialize,
                 driver_version: resolve_function(
                     query,
                     SYS_GET_DRIVER_AND_BRANCH_VERSION,
@@ -238,11 +310,6 @@ impl NvApi {
                     query,
                     DRS_SAVE_SETTINGS,
                     "NvAPI_DRS_SaveSettings",
-                )?,
-                load_settings_from_file: resolve_function(
-                    query,
-                    DRS_LOAD_SETTINGS_FROM_FILE,
-                    "NvAPI_DRS_LoadSettingsFromFile",
                 )?,
                 save_settings_to_file: resolve_function(
                     query,
@@ -274,15 +341,17 @@ impl NvApi {
                     DRS_ENUM_APPLICATIONS,
                     "NvAPI_DRS_EnumApplications",
                 )?,
-                get_setting: resolve_function(query, DRS_GET_SETTING, "NvAPI_DRS_GetSetting")?,
-                set_setting: resolve_function(query, DRS_SET_SETTING, "NvAPI_DRS_SetSetting")?,
-                delete_profile_setting: resolve_function(
-                    query,
-                    DRS_DELETE_PROFILE_SETTING,
-                    "NvAPI_DRS_DeleteProfileSetting",
-                )?,
+                get_setting,
+                set_setting,
+                delete_profile_setting,
+                accessors,
             })
         }
+    }
+
+    /// The interface IDs the setting accessors resolved to.
+    pub fn accessors(&self) -> &str {
+        &self.accessors
     }
 
     pub fn initialize(&self) -> DrsResult<()> {
@@ -306,8 +375,8 @@ fn handle(profile: ProfileHandle) -> Handle {
 fn unicode(text: &str, function: &'static str) -> DrsResult<Box<UnicodeString>> {
     let mut buffer = Box::new([0_u16; UNICODE_STRING_MAX]);
     for (index, unit) in text.encode_utf16().enumerate() {
-        // Keep the final unit for the terminating NUL.
-        if index + 1 == UNICODE_STRING_MAX {
+        // Keep the final unit for the terminating NUL; an inner NUL would cut the name short.
+        if index + 1 == UNICODE_STRING_MAX || unit == 0 {
             return Err(DrsError::new(function, NVAPI_INVALID_ARGUMENT));
         }
         buffer[index] = unit;
@@ -552,8 +621,22 @@ impl DrsSession for NvapiSession<'_> {
 
     fn setting(&mut self, profile: ProfileHandle, id: u32) -> DrsResult<Option<Setting>> {
         let mut setting = NvdrsSetting::empty();
-        // SAFETY: the session is live and the versioned output struct is writable.
-        match unsafe { (self.api.get_setting)(self.handle, handle(profile), id, &mut *setting) } {
+        // A binary value is returned only into a buffer whose length the caller states.
+        let capacity = (BINARY_DATA_MAX as u32).to_le_bytes();
+        setting.predefined_value[..4].copy_from_slice(&capacity);
+        setting.current_value[..4].copy_from_slice(&capacity);
+        let status = match self.api.get_setting {
+            // SAFETY: the session is live, the versioned output struct and the flags are writable.
+            GetSetting::Driver(function) => unsafe {
+                let mut flags = 0_u32;
+                function(self.handle, handle(profile), id, &mut *setting, &mut flags)
+            },
+            // SAFETY: the session is live and the versioned output struct is writable.
+            GetSetting::Public(function) => unsafe {
+                function(self.handle, handle(profile), id, &mut *setting)
+            },
+        };
+        match status {
             NVAPI_OK => Ok(Some(read_setting(&setting))),
             NVAPI_SETTING_NOT_FOUND => Ok(None),
             status => Err(DrsError::new("NvAPI_DRS_GetSetting", status)),
@@ -564,16 +647,24 @@ impl DrsSession for NvapiSession<'_> {
         let mut setting = NvdrsSetting::empty();
         setting.setting_id = id;
         setting.setting_type = write_value(value, &mut setting.current_value)?;
-        // SAFETY: the session is live and the versioned input struct is fully initialized.
-        check("NvAPI_DRS_SetSetting", unsafe {
-            (self.api.set_setting)(self.handle, handle(profile), &mut *setting)
-        })
+        let status = match self.api.set_setting {
+            // SAFETY: the session is live and the versioned input struct is fully initialized.
+            SetSetting::Driver(function) => unsafe {
+                function(self.handle, handle(profile), &mut *setting, 0, 0)
+            },
+            // SAFETY: as above.
+            SetSetting::Public(function) => unsafe {
+                function(self.handle, handle(profile), &mut *setting)
+            },
+        };
+        check("NvAPI_DRS_SetSetting", status)
     }
 
-    fn delete_setting(&mut self, profile: ProfileHandle, id: u32) -> DrsResult<()> {
+    fn delete_setting(&mut self, profile: ProfileHandle, id: u32) -> DrsResult<bool> {
         // SAFETY: the session is live.
         match unsafe { (self.api.delete_profile_setting)(self.handle, handle(profile), id) } {
-            NVAPI_OK | NVAPI_SETTING_NOT_FOUND => Ok(()),
+            NVAPI_OK => Ok(true),
+            NVAPI_SETTING_NOT_FOUND => Ok(false),
             status => Err(DrsError::new("NvAPI_DRS_DeleteProfileSetting", status)),
         }
     }
@@ -592,18 +683,11 @@ impl DrsSession for NvapiSession<'_> {
             (self.api.save_settings_to_file)(self.handle, path.as_ptr())
         })
     }
-
-    fn load_from_file(&mut self, path: &Path) -> DrsResult<()> {
-        let path = unicode_path(path, "NvAPI_DRS_LoadSettingsFromFile")?;
-        // SAFETY: the session is live and the path is a NUL-terminated NvAPI_UnicodeString.
-        check("NvAPI_DRS_LoadSettingsFromFile", unsafe {
-            (self.api.load_settings_from_file)(self.handle, path.as_ptr())
-        })
-    }
 }
 
 /// The NVAPI the installed NVIDIA driver provides, loaded and initialized once per process.
-#[cfg(windows)]
+/// Only 64-bit Windows: the cast below relies on the x86-64 calling convention.
+#[cfg(all(windows, target_arch = "x86_64"))]
 pub fn system_api() -> DrsResult<&'static NvApi> {
     use std::sync::OnceLock;
 
@@ -650,7 +734,7 @@ pub fn system_api() -> DrsResult<&'static NvApi> {
     Ok(API.get_or_init(|| api))
 }
 
-#[cfg(not(windows))]
+#[cfg(not(all(windows, target_arch = "x86_64")))]
 pub fn system_api() -> DrsResult<&'static NvApi> {
     Err(DrsError::new(
         "nvapi64.dll",
@@ -857,7 +941,43 @@ mod tests {
         }
     }
 
+    unsafe extern "C" fn get_setting_ex(
+        session: Handle,
+        profile: Handle,
+        id: u32,
+        setting: *mut NvdrsSetting,
+        flags: *mut u32,
+    ) -> i32 {
+        // SAFETY: the caller passes writable flags.
+        assert_eq!(unsafe { *flags }, 0);
+        // SAFETY: forwarded unchanged.
+        unsafe { get_setting(session, profile, id, setting) }
+    }
+    unsafe extern "C" fn set_setting_ex(
+        session: Handle,
+        profile: Handle,
+        setting: *mut NvdrsSetting,
+        first: u32,
+        second: u32,
+    ) -> i32 {
+        assert_eq!((first, second), (0, 0));
+        // SAFETY: forwarded unchanged.
+        unsafe { set_setting(session, profile, setting) }
+    }
+
+    /// The driver's own accessors, as current drivers export them.
     unsafe extern "C" fn query(id: u32) -> *mut c_void {
+        match id {
+            DRS_GET_SETTING_EX => get_setting_ex as GetSettingExFn as *mut c_void,
+            DRS_SET_SETTING_EX => set_setting_ex as SetSettingExFn as *mut c_void,
+            DRS_DELETE_PROFILE_SETTING_EX => delete_setting as DeleteSettingFn as *mut c_void,
+            // SAFETY: the public table below answers every other ID.
+            _ => unsafe { public_query(id) },
+        }
+    }
+
+    /// Only the public accessors, as a driver without the driver's own ones would answer.
+    unsafe extern "C" fn public_query(id: u32) -> *mut c_void {
         match id {
             INITIALIZE => initialize as InitializeFn as *mut c_void,
             SYS_GET_DRIVER_AND_BRANCH_VERSION => driver_version as DriverVersionFn as *mut c_void,
@@ -865,9 +985,7 @@ mod tests {
             DRS_DESTROY_SESSION => destroy_session as SessionFn as *mut c_void,
             DRS_LOAD_SETTINGS => load_settings as SessionFn as *mut c_void,
             DRS_SAVE_SETTINGS => save_settings as SessionFn as *mut c_void,
-            DRS_LOAD_SETTINGS_FROM_FILE | DRS_SAVE_SETTINGS_TO_FILE => {
-                file_operation as SessionFileFn as *mut c_void
-            }
+            DRS_SAVE_SETTINGS_TO_FILE => file_operation as SessionFileFn as *mut c_void,
             DRS_GET_CURRENT_GLOBAL_PROFILE => global_profile as GlobalProfileFn as *mut c_void,
             DRS_FIND_PROFILE_BY_NAME => find_profile as FindProfileFn as *mut c_void,
             DRS_ENUM_PROFILES => enum_profiles as EnumProfilesFn as *mut c_void,
@@ -883,6 +1001,35 @@ mod tests {
     fn api() -> NvApi {
         // SAFETY: `query` pairs every ID with a stand-in of the declared signature.
         unsafe { NvApi::resolve(query) }.expect("every function resolves")
+    }
+
+    #[test]
+    fn the_drivers_own_accessors_come_first_and_the_public_ones_are_the_fallback() {
+        assert_eq!(
+            api().accessors(),
+            "get_setting=0xea99498d set_setting=0x8a2cf5f5 delete_setting=0xd20d29df"
+        );
+        // SAFETY: `public_query` pairs every public ID with a stand-in of the declared signature.
+        let public = unsafe { NvApi::resolve(public_query) }.expect("public functions resolve");
+        assert_eq!(
+            public.accessors(),
+            "get_setting=0x73bf8338 set_setting=0x577dd202 delete_setting=0xe4a26362"
+        );
+        let driver = NvapiDriver::new(&public);
+        let mut session = driver.open().unwrap();
+        let game = session
+            .find_profile("Elden Ring")
+            .unwrap()
+            .expect("sample profile");
+        session
+            .set_setting(game, ENABLE_ID, &Value::Dword(1))
+            .unwrap();
+        assert_eq!(
+            session.setting(game, ENABLE_ID).unwrap().unwrap().value,
+            Value::Dword(1)
+        );
+        assert!(session.delete_setting(game, ENABLE_ID).unwrap());
+        assert!(!session.delete_setting(game, ENABLE_ID).unwrap());
     }
 
     #[test]
@@ -914,9 +1061,9 @@ mod tests {
         assert_eq!(settings.app.unwrap().value, Value::Dword(2));
         assert_eq!(settings.size_limit.unwrap().value, Value::Qword(1 << 30));
         assert_eq!(settings.enable.unwrap().value, Value::Binary(vec![1, 2, 3]));
-        session.delete_setting(game, ENABLE_ID).unwrap();
-        // Deleting again is not an error.
-        session.delete_setting(game, ENABLE_ID).unwrap();
+        assert!(session.delete_setting(game, ENABLE_ID).unwrap());
+        // Deleting again finds nothing to delete, which is not an error.
+        assert!(!session.delete_setting(game, ENABLE_ID).unwrap());
         assert!(session.find_profile("Missing game").unwrap().is_none());
     }
 
