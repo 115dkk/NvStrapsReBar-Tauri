@@ -115,6 +115,8 @@ test("failures keep the old state and name the next action", async ({ page }) =>
         await openGames(page, { games: "unavailable", locale: "ko" });
         await expect(page.getByRole("alert")).toContainText("NVIDIA 드라이버 설정을 읽지 못했습니다");
         await expect(page.getByRole("alert")).toContainText("NVIDIA 그래픽 드라이버를 설치한 뒤 다시 읽으세요.");
+        // The backend message and the log path stay on screen for the test report.
+        await expect(page.getByRole("alert")).toContainText("nvapi64.dll returned NvAPI status -2 (log: C:\\Users\\Preview\\AppData\\Local\\io.github.nvstrapsrebar.desktop\\logs\\driver-settings.log)");
         await page.screenshot({ path: `${evidence}/e2e-ko-driver-unavailable-1180.png` });
         await page.evaluate(() => sessionStorage.setItem("nvstraps-preview-games-state", "ready"));
         await button(page, "다시 읽기").click();
@@ -125,8 +127,18 @@ test("failures keep the old state and name the next action", async ({ page }) =>
         const elden = page.getByRole("switch", { name: "Elden Ring" });
         await elden.click();
         await expect(page.getByRole("alert")).toContainText("바꾼 값이 드라이버에 남지 않았습니다.");
+        await expect(page.getByRole("alert")).toContainText("the NVIDIA driver did not keep the requested Resizable BAR value (log: ");
         await expect(elden).toHaveAttribute("aria-checked", "false");
         await expect(page.getByRole("list", { name: "이 PC에서 바꾼 게임" })).toHaveCount(0);
+});
+
+test("skipped profiles are counted and the log is one click away", async ({ page }) => {
+        await openGames(page, { games: "partial" });
+        await expect(page.getByRole("note")).toContainText("3 profiles could not be read");
+        await expect(page.getByRole("note")).toContainText("driver-settings.log");
+        await page.getByTestId("games-backup").locator("summary").click();
+        await expect(page.getByText("Diagnostic log", { exact: true })).toBeVisible();
+        await page.screenshot({ path: `${evidence}/e2e-en-skipped-and-log-1180.png`, fullPage: true });
 });
 
 test("the page fits the minimum window in both languages", async ({ page }) => {

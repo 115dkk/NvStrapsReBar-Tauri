@@ -861,7 +861,11 @@ export const messages = {
         "ui.allGamesTurnedOn": { en: "All games: on", ko: "모든 게임: 켬" },
         "ui.allGamesTurnedOff": { en: "All games: off", ko: "모든 게임: 끔" },
         "ui.gamesRestored": { en: "NVIDIA settings restored from the backup", ko: "백업한 NVIDIA 설정으로 되돌림" },
-        "ui.gamesBackupSummary": { en: "NVIDIA settings backup", ko: "NVIDIA 설정 백업" },
+        "ui.gamesBackupSummary": { en: "Backup and diagnostic log", ko: "백업과 진단 기록" },
+        "ui.gamesLogName": { en: "Diagnostic log", ko: "진단 기록" },
+        "ui.gamesLogMeta": { en: "Each NVIDIA driver settings read failure, change, and read-back", ko: "NVIDIA 드라이버 설정을 읽다 실패한 곳, 바꾼 값, 다시 읽은 값" },
+        "ui.gamesSkippedTitle": { en: "{count} profiles could not be read", ko: "프로필 {count}개를 읽지 못했습니다" },
+        "ui.gamesSkippedDetail": { en: "They are left out of the list. The diagnostic log names each one with the driver's error.", ko: "이 프로필은 목록에서 뺐습니다. 진단 기록에 프로필마다 드라이버가 돌려준 오류가 남아 있습니다." },
         "ui.gamesBackupFirst": { en: "The first change saves all NVIDIA driver settings to a file first.", ko: "처음 바꿀 때 NVIDIA 드라이버 설정 전체를 먼저 파일로 저장합니다." },
         "ui.gamesBackupName": { en: "NVIDIA settings before the first change", ko: "처음 바꾸기 전 NVIDIA 설정" },
         "ui.gamesBackupMeta": { en: "Saved {date} · driver {version}", ko: "{date} 저장 · 드라이버 {version}" },
@@ -1027,6 +1031,7 @@ export type MessageParameters = {
         "ui.gameTurnedOff": { game: string };
         "ui.gamesBackupMeta": { date: string; version: string };
         "ui.gamesRestoreDialogDetail": { date: string };
+        "ui.gamesSkippedTitle": { count: string };
 };
 export type ParameterizedMessageId = keyof MessageParameters;
 export type StaticMessageId = Exclude<MessageId, ParameterizedMessageId>;

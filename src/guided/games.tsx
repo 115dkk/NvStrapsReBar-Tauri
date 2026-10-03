@@ -8,7 +8,8 @@ import { translateMessage, useI18n } from "../i18n";
 import { Icon } from "./icons";
 import { useGuidedNavigation } from "./navigation";
 import { OPTIONAL_FINAL_STEP } from "./routing";
-import { ActionBar, Crumb, FileCard, Notice, Result, SwitchRow, TaskHead } from "./ui";
+import type { GameSettingsError } from "../game-settings/model";
+import { ActionBar, Caution, Crumb, FileCard, Notice, Result, SwitchRow, TaskHead } from "./ui";
 
 type Translate = ReturnType<typeof useI18n>["t"];
 
@@ -20,6 +21,17 @@ const outcomeText = (t: Translate, outcome: GamesOutcome) => {
         if (outcome.kind === "game") return t(outcome.on ? "ui.gameTurnedOn" : "ui.gameTurnedOff", { game: outcome.name });
         if (outcome.kind === "allGames") return t(outcome.on ? "ui.allGamesTurnedOn" : "ui.allGamesTurnedOff");
         return t("ui.gamesRestored");
+};
+
+/** The next action, then the backend's message with the log path for a test report. */
+const ErrorNotice = ({ title, error }: { title: ReactNode; error: GameSettingsError }) => {
+        const { t } = useI18n();
+        return (
+                <Notice title={title}>
+                        {t(error.id)}
+                        {error.detail && <><br /><span className="nv-mono nv-error-detail">{error.detail}</span></>}
+                </Notice>
+        );
 };
 
 const GameRow = ({ game, pending, disabled, onChange }: { game: GameProfile; pending: boolean | undefined; disabled: boolean; onChange: (name: string, on: boolean) => void }) => {
@@ -139,7 +151,7 @@ const GameSearch = ({ games, version, row }: { games: GameProfile[]; version: st
 const BackupSection = ({ games, locked }: { games: GameSettingsController; locked: boolean }) => {
         const { t, locale } = useI18n();
         if (games.load.status !== "ready") return null;
-        const backup = games.load.catalog.backup;
+        const { backup, logPath } = games.load.catalog;
         const date = backup ? savedAt(locale, backup.createdAtUnixMs) : "";
         return (
                 <details className="nv-disclosure" data-testid="games-backup">
@@ -155,6 +167,7 @@ const BackupSection = ({ games, locked }: { games: GameSettingsController; locke
                                 ) : (
                                         <p className="nv-supporting">{t("ui.gamesBackupFirst")}</p>
                                 )}
+                                {logPath && <FileCard icon="doc" name={t("ui.gamesLogName")} mono={false} meta={<><span>{t("ui.gamesLogMeta")}</span><br /><span className="nv-mono">{logPath}</span></>} />}
                         </div>
                 </details>
         );
@@ -162,7 +175,7 @@ const BackupSection = ({ games, locked }: { games: GameSettingsController; locke
 
 /** Per-game Resizable BAR: one switch for all games, the games changed here, search, and the backup. */
 export const GamesPage = ({ titleRef }: { titleRef: Ref<HTMLHeadingElement> }) => {
-        const { t, locale } = useI18n();
+        const { t, locale, n } = useI18n();
         const games = useGameSettings();
         const { snap } = useConfigurationWorkspaceController();
         const { view, commands } = useDeploymentWorkspaceController();
@@ -191,19 +204,25 @@ export const GamesPage = ({ titleRef }: { titleRef: Ref<HTMLHeadingElement> }) =
                                         <TaskHead title={t("ui.gamesTitle")} lead={t("ui.gamesLead")} titleRef={titleRef} />
                                         {view.activity?.tone === "error" && <Notice title={t("ui.taskDidNotFinish")}>{translateMessage(locale, view.activity.message)}</Notice>}
                                         {recorded && <Result title={t("ui.gamesRecorded")} />}
-                                        {games.error && <Notice title={t("ui.taskDidNotFinish")}>{t(games.error)}</Notice>}
+                                        {games.error && <ErrorNotice title={t("ui.taskDidNotFinish")} error={games.error} />}
                                         {games.load.status === "loading" && (
                                                 <div className="nv-games-loading" role="status"><span className="nv-spinner" aria-hidden="true" />{t("ui.gamesReading")}</div>
                                         )}
                                         {games.load.status === "failed" && (
                                                 <>
-                                                        <Notice title={t("ui.gamesReadFailed")}>{t(games.load.message)}</Notice>
+                                                        <ErrorNotice title={t("ui.gamesReadFailed")} error={games.load.error} />
                                                         <div><button type="button" className="nv-btn nv-btn-quiet" onClick={() => void games.reload()}><Icon name="restart" />{t("ui.gamesReadAgain")}</button></div>
                                                 </>
                                         )}
                                         {catalog && (
                                                 <>
                                                         {!elevated && <AdministratorCard />}
+                                                        {catalog.skippedProfiles > 0 && (
+                                                                <Caution title={t("ui.gamesSkippedTitle", { count: n(catalog.skippedProfiles) })}>
+                                                                        {t("ui.gamesSkippedDetail")}
+                                                                        {catalog.logPath && <><br /><span className="nv-mono">{catalog.logPath}</span></>}
+                                                                </Caution>
+                                                        )}
                                                         <SwitchRow
                                                                 card
                                                                 title={t("ui.allGames")}

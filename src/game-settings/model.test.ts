@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GameProfile, RebarState } from "./contract";
-import { gameSettingsErrorId, indexGames, keepChanged, searchGames, sourceMessageId } from "./model";
+import { gameSettingsError, indexGames, keepChanged, searchGames, sourceMessageId } from "./model";
 
 const off: RebarState = { on: false, source: "driver", changed: false };
 const game = (name: string, apps: string[], state: RebarState = off): GameProfile => ({ name, apps, state });
@@ -55,11 +55,14 @@ describe("game rows", () => {
                 expect(sourceMessageId(off)).toBeNull();
         });
 
-        it("maps backend error codes to next actions", () => {
-                expect(gameSettingsErrorId({ code: "administrator_required" })).toBe("ui.gamesErrorAdministrator");
-                expect(gameSettingsErrorId({ code: "nvidia_driver_unavailable" })).toBe("ui.gamesErrorDriverUnavailable");
-                expect(gameSettingsErrorId({ code: "nvidia_driver_readback_mismatch" })).toBe("ui.gamesErrorReadback");
-                expect(gameSettingsErrorId({ code: "nvidia_driver_settings_failed" })).toBe("ui.gamesErrorFailed");
-                expect(gameSettingsErrorId(new Error("anything"))).toBe("ui.gamesErrorFailed");
+        it("maps backend error codes to next actions and keeps the backend message", () => {
+                expect(gameSettingsError({ code: "administrator_required" }).id).toBe("ui.gamesErrorAdministrator");
+                expect(gameSettingsError({ code: "nvidia_driver_unavailable" }).id).toBe("ui.gamesErrorDriverUnavailable");
+                expect(gameSettingsError({ code: "nvidia_driver_readback_mismatch" }).id).toBe("ui.gamesErrorReadback");
+                const failed = gameSettingsError({ code: "nvidia_driver_settings_failed", message: "NvAPI_DRS_SetSetting returned NvAPI status -1 (log: C:\\logs\\driver-settings.log)" });
+                expect(failed).toEqual({ id: "ui.gamesErrorFailed", detail: "NvAPI_DRS_SetSetting returned NvAPI status -1 (log: C:\\logs\\driver-settings.log)" });
+                expect(gameSettingsError(new Error("worker stopped"))).toEqual({ id: "ui.gamesErrorFailed", detail: "worker stopped" });
+                expect(gameSettingsError("plain text")).toEqual({ id: "ui.gamesErrorFailed", detail: "plain text" });
+                expect(gameSettingsError(undefined)).toEqual({ id: "ui.gamesErrorFailed", detail: null });
         });
 });

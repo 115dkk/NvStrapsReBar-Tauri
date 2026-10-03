@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { previewMode } from "../bridge";
-import type { StaticMessageId } from "../i18n-catalog";
 import type { GameSettingsBridge, GameSettingsCatalog } from "./contract";
-import { gameSettingsErrorId, keepChanged } from "./model";
+import { gameSettingsError, keepChanged, type GameSettingsError } from "./model";
 import { nativeGameSettingsBridge } from "./native-bridge";
 import { previewGameSettingsBridge } from "./preview-bridge";
 
@@ -11,7 +10,7 @@ export const gameSettingsBridge: GameSettingsBridge = previewMode ? previewGameS
 export type GamesLoad =
         | { status: "loading" }
         | { status: "ready"; catalog: GameSettingsCatalog }
-        | { status: "failed"; message: StaticMessageId };
+        | { status: "failed"; error: GameSettingsError };
 
 /** What the last finished change did, for the status line. */
 export type GamesOutcome = { kind: "game"; name: string; on: boolean } | { kind: "allGames"; on: boolean } | { kind: "restored" } | null;
@@ -27,7 +26,7 @@ export const useGameSettings = (bridge: GameSettingsBridge = gameSettingsBridge)
         // Requested on/off per game name while its change runs.
         const [pendingGames, setPendingGames] = useState<Record<string, boolean>>({});
         const [bulk, setBulk] = useState<"allGames" | "restore" | "reload" | null>(null);
-        const [error, setError] = useState<StaticMessageId | null>(null);
+        const [error, setError] = useState<GameSettingsError | null>(null);
         const [outcome, setOutcome] = useState<GamesOutcome>(null);
         const [kept, setKept] = useState<string[]>([]);
         const [dialog, setDialog] = useState<GamesDialog>(null);
@@ -46,7 +45,8 @@ export const useGameSettings = (bridge: GameSettingsBridge = gameSettingsBridge)
                         const catalog = await bridge.load();
                         if (current === generation.current) apply(catalog);
                 } catch (cause) {
-                        if (current === generation.current) setLoad({ status: "failed", message: gameSettingsErrorId(cause) });
+                        console.error("[games] reading the NVIDIA driver settings failed", cause);
+                        if (current === generation.current) setLoad({ status: "failed", error: gameSettingsError(cause) });
                 }
         }, [apply, bridge]);
 
@@ -84,7 +84,8 @@ export const useGameSettings = (bridge: GameSettingsBridge = gameSettingsBridge)
                                 setKept((current) => (current.includes(name) ? current : [...current, name]));
                                 setOutcome({ kind: "game", name, on: receipt.state.on });
                         } catch (cause) {
-                                if (current === generation.current) setError(gameSettingsErrorId(cause));
+                                console.error(`[games] turning ${on ? "on" : "off"} ${name} failed`, cause);
+                                if (current === generation.current) setError(gameSettingsError(cause));
                         } finally {
                                 running.current.delete(name);
                                 setPendingGames(({ [name]: _, ...rest }) => rest);
@@ -110,7 +111,8 @@ export const useGameSettings = (bridge: GameSettingsBridge = gameSettingsBridge)
                                 }
                                 setOutcome(done);
                         } catch (cause) {
-                                setError(gameSettingsErrorId(cause));
+                                console.error(`[games] ${kind} failed`, cause);
+                                setError(gameSettingsError(cause));
                         } finally {
                                 setBulk(null);
                         }

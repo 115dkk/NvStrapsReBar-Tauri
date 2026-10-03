@@ -272,3 +272,4 @@
 .nv-app .nv-switch-row > .nv-switch-busy { color: var(--muted); }
 .nv-app .nv-games-loading { display: flex; align-items: center; gap: 10px; min-height: 56px; color: var(--muted); }
 .nv-app input[type="search"].nv-input { appearance: none; }
+.nv-app .nv-error-detail { display: inline-block; margin-top: 6px; color: var(--muted); }

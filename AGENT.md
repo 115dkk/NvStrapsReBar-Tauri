@@ -30,6 +30,9 @@ authoritative. Keep RIIR, deployment automation, and physical-machine proof as s
   back. These are driver settings, not firmware: real writes are tested on a Windows PC with an
   NVIDIA driver from the handoff, while repository tests use the in-memory database and NVAPI
   stand-ins.
+- A driver settings failure is never dropped silently. Return it, or skip and count it, but every
+  failed NVAPI call, every write, and every skip leaves a line in the diagnostic log, and command
+  errors carry the log path. Do not panic for a recoverable condition; release builds abort.
 - Browser preview, Playwright, compilation, OVMF, and QEMU evidence must state their target. None
   of them proves a real vendor image, native dialog, WebView2 lifecycle, flash, reboot, or GPU.
 

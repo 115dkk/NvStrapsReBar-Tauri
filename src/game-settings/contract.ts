@@ -29,6 +29,10 @@ export type GameSettingsCatalog = {
         allGames: RebarState;
         games: GameProfile[];
         backup: DriverSettingsBackup | null;
+        /** Profiles the driver refused to read; each one has a line in the log. */
+        skippedProfiles: number;
+        /** The diagnostic log of the driver settings commands. */
+        logPath: string | null;
 };
 
 export type GameRebarReceipt = {

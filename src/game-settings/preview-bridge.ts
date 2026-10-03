@@ -9,7 +9,9 @@ import type {
 
 /** Browser preview: a fixed driver database that resolves values like the driver does. */
 export const PREVIEW_GAMES_STATE_KEY = "nvstraps-preview-games-state";
-export type PreviewGamesState = "ready" | "unavailable" | "write-fails" | "readback-fails";
+export type PreviewGamesState = "ready" | "unavailable" | "write-fails" | "readback-fails" | "partial";
+
+const LOG_PATH = "C:\\Users\\Preview\\AppData\\Local\\io.github.nvstrapsrebar.desktop\\logs\\driver-settings.log";
 
 type Fixture = { name: string; apps: string[]; nvidia?: true };
 
@@ -57,14 +59,14 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const previewState = (): PreviewGamesState => {
         try {
                 const value = sessionStorage.getItem(PREVIEW_GAMES_STATE_KEY);
-                if (value === "unavailable" || value === "write-fails" || value === "readback-fails") return value;
+                if (value === "unavailable" || value === "write-fails" || value === "readback-fails" || value === "partial") return value;
         } catch {
                 // Storage can be unavailable; the fixture stays ready.
         }
         return "ready";
 };
 
-const failure = (code: string, message: string) => Object.assign(new Error(message), { code, recoverable: true });
+const failure = (code: string, message: string) => Object.assign(new Error(`${message} (log: ${LOG_PATH})`), { code, recoverable: true });
 
 const allGamesState = (): RebarState =>
         allGamesOn === null
@@ -84,6 +86,8 @@ const catalog = (): GameSettingsCatalog => ({
         allGames: allGamesState(),
         games: fixtures.map((fixture): GameProfile => ({ name: fixture.name, apps: [...fixture.apps], state: gameState(fixture) })),
         backup: backup && { ...backup },
+        skippedProfiles: previewState() === "partial" ? 3 : 0,
+        logPath: LOG_PATH,
 });
 
 /** The first change saves the database it is about to change. */
@@ -91,7 +95,7 @@ const ensureBackup = (): DriverSettingsBackup => {
         if (!backup) {
                 backupValues = { allGamesOn, userValues: new Map(userValues) };
                 backup = {
-                        path: "C:\\Users\\Preview\\AppData\\Local\\com.nvstraps.rebar\\nvidia-driver-settings\\backups\\5d".concat("41".repeat(31), ".nvdrs"),
+                        path: "C:\\Users\\Preview\\AppData\\Local\\io.github.nvstrapsrebar.desktop\\nvidia-driver-settings\\backups\\5d".concat("41".repeat(31), ".nvdrs"),
                         sha256: "5d".concat("41".repeat(31)),
                         byteLength: 3_482_112,
                         driverVersion: "616.64",

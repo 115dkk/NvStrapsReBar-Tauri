@@ -70,7 +70,15 @@ const errorIds: Record<string, StaticMessageId> = {
         nvidia_driver_readback_mismatch: "ui.gamesErrorReadback",
 };
 
-export const gameSettingsErrorId = (cause: unknown): StaticMessageId => {
-        const code = cause && typeof cause === "object" && "code" in cause ? (cause as { code?: unknown }).code : undefined;
-        return (typeof code === "string" && errorIds[code]) || "ui.gamesErrorFailed";
+/** The next action for the user, and the backend's own message (with the log path) for the report. */
+export type GameSettingsError = { id: StaticMessageId; detail: string | null };
+
+export const gameSettingsError = (cause: unknown): GameSettingsError => {
+        const record = cause && typeof cause === "object" ? (cause as { code?: unknown; message?: unknown }) : null;
+        const code = record?.code;
+        const message = typeof record?.message === "string" ? record.message : typeof cause === "string" ? cause : null;
+        return {
+                id: (typeof code === "string" && errorIds[code]) || "ui.gamesErrorFailed",
+                detail: message?.trim() || null,
+        };
 };

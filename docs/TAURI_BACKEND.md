@@ -213,6 +213,15 @@ it does not prove that every application uses ReBAR. The per-game commands prove
 settings database stores after a save, not that a running game already uses it; games read their
 profile when they start.
 
+The per-game commands append to `<local data>/logs/driver-settings.log` (rolled over to `.1` past
+2 MiB): each command's start, duration, and result; every failed NVAPI call with its arguments;
+every write, delete, save, and settings file; the values before a change, the planned writes, the
+staged state, and the read-back with each setting's value, location, and predefined flag; skipped
+profiles and skipped backups with their reasons. A profile the driver refuses is left out of the
+list and counted (`skippedProfiles`); fifty refusals in a row end the read with an error. Command
+errors carry the log path in their message. A panic hook writes `<local data>/logs/panic.log`
+before the release build aborts.
+
 ## Persistence, concurrency, and safety invariants
 
 - Long firmware, package, download, process, and evidence operations run off the Tauri event loop.
