@@ -180,6 +180,7 @@ button:disabled {
         max-height: min(680px, calc(100vh - 48px));
         display: flex;
         flex-direction: column;
+        overflow: auto;
 }
 .license-modal-head {
         display: flex;
@@ -216,7 +217,7 @@ button:disabled {
 }
 .license-picker {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
         gap: 8px;
         margin-bottom: 8px;
 }

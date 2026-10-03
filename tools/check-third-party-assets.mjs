@@ -3,6 +3,18 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 const expected = {
+  nvidiaProfileInspector: {
+    license: {
+      bytes: 1_074,
+      sha256: "0b116abacb4c7dcaae7c32784627d0501a23931759b504babf2d3ca979d1eeac",
+    },
+  },
+  nvapi: {
+    license: {
+      bytes: 1_191,
+      sha256: "ab5ec6eb9869bc1b082619d18f66e1b8ae19b6033c57294466d671279a57ecf8",
+    },
+  },
   lzmaSdkRs: {
     license: {
       bytes: 1_726,
@@ -60,6 +72,29 @@ for (const required of [
   if (!lzmaSdkRsLicense.includes(required)) {
     throw new Error(`Bundled lzma-sdk-rs license is missing: ${required}`);
   }
+}
+
+for (const [path, component, expectation, required] of [
+  [
+    "public/licenses/nvidiaProfileInspector/LICENSE",
+    "NVIDIA Profile Inspector",
+    expected.nvidiaProfileInspector.license,
+    ["The MIT License (MIT)", "Copyright (c) 2016 Orbmu2k"],
+  ],
+  [
+    "public/licenses/NVAPI/LICENSE",
+    "NVAPI SDK",
+    expected.nvapi.license,
+    ["MIT License", "Copyright (c) 2019-2026 NVIDIA CORPORATION & AFFILIATES"],
+  ],
+]) {
+  const text = await verify(path, expectation, component);
+  for (const phrase of required) {
+    if (!text.includes(phrase)) {
+      throw new Error(`Bundled ${component} license is missing: ${phrase}`);
+    }
+  }
+  await verify(path.replace(/^public\//, "dist/"), expectation, component);
 }
 
 async function verify(path, expectation, component) {
@@ -185,6 +220,10 @@ for (const required of [
   expected.jetendard.releaseArchive.sha256,
   ...Object.values(expected.jetendard.fonts).map(({ sha256 }) => sha256),
   expected.jetendard.license.sha256,
+  "NVIDIA Profile Inspector",
+  expected.nvidiaProfileInspector.license.sha256,
+  "NVAPI SDK",
+  expected.nvapi.license.sha256,
 ]) {
   if (!notices.includes(required)) {
     throw new Error(`THIRD_PARTY_NOTICES.md is missing: ${required}`);

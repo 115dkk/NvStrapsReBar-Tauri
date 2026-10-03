@@ -72,3 +72,41 @@ digest pins the exact source from which the three files were extracted.
 Every application build includes both Jetendard's copyright notice and complete OFL text. Users
 can read it offline through the application's **Licenses** dialog. `npm run check:third-party`
 verifies the bundled source files and production-build copies against the pinned size and hashes.
+
+## NVIDIA Profile Inspector
+
+- Component: setting IDs from `CustomSettingNames.xml` and the 256-byte table that unmasks
+  predefined values (`DrsDecrypterService.cs`)
+- Copyright: Copyright (c) 2016 Orbmu2k
+- License: MIT
+- Upstream: <https://github.com/Orbmu2k/nvidiaProfileInspector>
+- Used in: [`src-tauri/src/nvidia_profiles/policy.rs`](src-tauri/src/nvidia_profiles/policy.rs)
+- Full license: [`public/licenses/nvidiaProfileInspector/LICENSE`](public/licenses/nvidiaProfileInspector/LICENSE)
+
+NVIDIA does not publish the Resizable BAR setting IDs (`0x000BFA21`, `0x000F00BA`, `0x000F00BB`,
+`0x000F00FF`). The app uses the values the Profile Inspector project documents and does not
+bundle or download the Profile Inspector program. The application's **Licenses** dialog shows the
+copyright notice and the full MIT text.
+
+| File | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `LICENSE` | 1,074 | `0b116abacb4c7dcaae7c32784627d0501a23931759b504babf2d3ca979d1eeac` |
+
+## NVAPI SDK
+
+- Component: NVAPI interface IDs (`nvapi_interface.h`) and the `NVDRS_*` structure layouts and
+  status codes (`nvapi.h`, `nvapi_lite_common.h`)
+- Copyright: Copyright (c) 2019-2026 NVIDIA CORPORATION & AFFILIATES
+- License: MIT
+- Upstream: <https://github.com/NVIDIA/nvapi>
+- Used in: [`src-tauri/src/nvidia_profiles/nvapi.rs`](src-tauri/src/nvidia_profiles/nvapi.rs)
+- Full license: [`public/licenses/NVAPI/LICENSE`](public/licenses/NVAPI/LICENSE)
+
+The app neither bundles nor links the SDK libraries. It loads `nvapi64.dll`, which the NVIDIA
+driver installs in System32, and resolves the functions through `nvapi_QueryInterface`. The
+license file reproduces the notice from the SDK headers; the application's **Licenses** dialog
+shows it.
+
+| File | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `LICENSE` | 1,191 | `ab5ec6eb9869bc1b082619d18f66e1b8ae19b6033c57294466d671279a57ecf8` |
