@@ -19,10 +19,17 @@ authoritative. Keep RIIR, deployment automation, and physical-machine proof as s
   completion. Accepting a restart request is not a completed restart.
 - Keep `/f` out of every Windows restart command. Require saved-work confirmation immediately
   before a real restart request.
-- Keep vendor flash, firmware settings, physical recovery, hardware changes, and NVIDIA
-  per-application policy as manual gates. Present each gate as the user's next action (what to do,
-  where, and how to record it), never as a disclaimer about what the app cannot do. Automate only
-  evidence the owning system can actually prove.
+- Keep vendor flash, firmware settings, physical recovery, and hardware changes as manual gates.
+  Present each gate as the user's next action (what to do, where, and how to record it), never as
+  a disclaimer about what the app cannot do. Automate only evidence the owning system can actually
+  prove.
+- NVIDIA driver profiles change only on the user's switch. A game switch writes only that game's
+  profile; the all-games switch writes the all-programs profile, and turning it on needs the
+  user's consent in a dialog. Back up the whole driver settings database before the app's first
+  change, never overwrite a backup, and show a state only after a new driver session reads it
+  back. These are driver settings, not firmware: real writes are tested on a Windows PC with an
+  NVIDIA driver from the handoff, while repository tests use the in-memory database and NVAPI
+  stand-ins.
 - Browser preview, Playwright, compilation, OVMF, and QEMU evidence must state their target. None
   of them proves a real vendor image, native dialog, WebView2 lifecycle, flash, reboot, or GPU.
 
@@ -39,7 +46,7 @@ authoritative. Keep RIIR, deployment automation, and physical-machine proof as s
   privilege, active step, external-tool output, and consequential data even when the client did so.
 - Evidence belongs to the owner of the claimed result. Preserve separate receipts for artifact
   preparation, manual attestation, current-boot DXE status, configuration readback, later boot,
-  BAR1 observation, and NVIDIA policy review.
+  BAR1 observation, NVIDIA driver profile read-back, and the optional per-game record.
 - Preserve camel-case wire compatibility across Rust serde types,
   `src/deployment-workspace/contract.ts`, the Tauri adapter, preview fixtures, and Playwright
   journeys. The deployment UI talks only to `DeploymentWorkspaceSession`; command names and

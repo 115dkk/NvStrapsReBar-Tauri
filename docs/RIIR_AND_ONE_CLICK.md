@@ -25,8 +25,8 @@ Rust now owns:
   the pinned legacy patch catalogs;
 - Windows device discovery, EFI variable access, validation, verified write/readback, elevation,
   machine identity, deployment plans, artifact storage, and reboot policy; and
-- verified adapters for `nvidia-smi` evidence and NVIDIA Profile Inspector installation, backup,
-  and launch.
+- verified adapters for `nvidia-smi` evidence and for per-game Resizable BAR in the NVIDIA driver
+  settings database (NVAPI DRS), with a backup and read-back for every change.
 
 CI enforces this source boundary on Windows and Linux. It also builds the `x86_64-unknown-uefi`
 target, independently parses the generated FFS, runs the host tests, and boots an injected copy of
@@ -38,16 +38,17 @@ The project does not and should not claim to have rewritten code it does not own
 WebView2, the NVIDIA display driver and NVAPI, vendor UEFI firmware, motherboard flash logic, GPU
 microcode/vBIOS, QEMU/OVMF, and optional third-party tools remain outside this repository.
 
-The Windows client may execute two narrowly pinned external capabilities:
+The Windows client may use two narrowly bounded NVIDIA capabilities:
 
 - the installed NVIDIA `nvidia-smi.exe`, read-only, to collect BAR1 evidence; and
-- a content-addressed official NVIDIA Profile Inspector release, after archive and file hashes are
-  verified. Before its UI is opened, customized NVIDIA profiles are exported to an immutable
-  backup.
+- NVAPI driver settings (DRS) in the driver's `nvapi64.dll`, loaded from System32 only, to read
+  driver profiles and to change their Resizable BAR values when the user turns a switch.
 
-Those are adapter boundaries, not hidden source dependencies. Reimplementing either proprietary
-NVIDIA interface in Rust would add reverse-engineering and driver-compatibility risk without
-removing the underlying proprietary driver.
+Those are adapter boundaries, not hidden source dependencies. The DRS adapter calls only functions
+in NVIDIA's MIT-licensed public NVAPI SDK; the Resizable BAR setting IDs come from NVIDIA Profile
+Inspector (MIT) because NVIDIA does not publish them. That is a driver-compatibility risk: a
+driver that renames or retires those IDs needs an app update, as driver 616.56 already showed by
+adding the NVIDIA app setting `0x000BFA21`.
 
 ### Remaining proof gap
 
@@ -81,8 +82,8 @@ application can perform these steps without an external build environment:
     volatile status variable, and prove the later configuration reboot from Windows boot time;
 12. require complete, internally consistent BAR1 telemetry for every pinned GPU and an exact match
     to the independent Windows PCI resource size before advancing; and
-13. install the pinned official Profile Inspector release, back up customized profiles, and open
-    its UI without claiming that a policy was applied.
+13. on the user's switch, back up the NVIDIA driver settings once, change one game's or (with
+    consent) all programs' Resizable BAR values, and show the state a new session reads back.
 
 An exact vendor-firmware update can legitimately change the reported BIOS version/release date and
 firmware-assigned BAR0. The plan permits only those fields before the first proven post-flash boot;
@@ -117,7 +118,7 @@ No generic application can truthfully or safely collapse the following steps int
   GPU; and
 - recover a machine that no longer reaches POST.
 
-The plan records vendor flash, saved firmware settings, and reviewed NVIDIA application policy as
+The plan records vendor flash, saved firmware settings, and the optional per-game record as
 explicit operator attestations tied to the exact profile, active step, and plan revision. It does
 not ask the operator to attest to a boot that software can prove: the current-boot DXE status and
 post-configuration Windows boot time close those gates automatically.
@@ -138,14 +139,16 @@ End users no longer need EDK2, BaseTools, Python, `pefile`, `GenSec`, `GenFfs`, 
 a separate firmware-volume editor for the supported preparation path. These functions are in Rust
 and ship with the desktop application.
 
-NVIDIA Profile Inspector remains an external UI because NVIDIA's per-application policy database
-is not this project's data model. The app downloads one pinned official release, verifies every
-installed file, records a manifest, exports a backup, and launches it. It does not silently choose
-per-game policies. The official tool documents its import/export command line and advanced-setting
-risks in the
-[NVIDIA Profile Inspector repository](https://github.com/Orbmu2k/nvidiaProfileInspector).
-Installation, backup, or launch is never treated as policy completion. The final plan step remains
-open until the operator reviews and confirms the intended per-application settings.
+Per-game Resizable BAR lives in the NVIDIA driver settings database, which the app changes
+through NVAPI DRS instead of handing the user to NVIDIA Profile Inspector. The app never chooses
+a game on its own: a game switch changes that game's profile, and turning on all games changes the
+all-programs profile after the user consents in a dialog. Turning on writes the NVIDIA app
+setting (`0x000BFA21`, driver 616.56 and later) and rBAR enable, plus options and a 1 GiB size
+limit only where the profile has no value of its own. Turning off removes what turning on wrote
+and writes an explicit off only when NVIDIA's value or the all-games value would still turn it on.
+The first change saves the whole database to a content-addressed file that is never overwritten
+and that the same screen restores. A change is shown only after a new session reads it back. The
+final plan step stays an optional record the user makes after checking the games they play.
 
 ### Product definition
 
@@ -158,8 +161,8 @@ The safest maximum for this machine is therefore:
 
 `select official image -> confirm detected profile/recovery -> prepare and export -> reboot to
 firmware UI -> perform and attest vendor flash/settings -> boot Windows -> verify volatile DXE
-status -> write/read back config -> reboot -> verify later boot and BAR1 -> open backed-up Profile
-Inspector -> attest reviewed application policy`
+status -> write/read back config -> reboot -> verify later boot and BAR1 -> switch games on with
+driver read-back -> record the per-game step (optional)`
 
 Every mismatch outside those typed, one-boot transitions is a hard stop. Manual gates stay visible
 in the plan until evidence from their actual owner exists.

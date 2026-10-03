@@ -29,8 +29,8 @@ C/C++ [NvStrapsReBar](https://github.com/terminatorul/NvStrapsReBar)를 안정�
    BIOS 화면에서 한 일을 기록합니다.
 3. **켜기**: 권장 크기를 저장하고(버튼이 확인 역할을 하며, 앱이 값을 다시 읽어 확인합니다) 다시
    시작합니다.
-4. **마무리**: 앱이 NVIDIA 드라이버가 알려 주는 BAR 크기를 확인합니다. NVIDIA Profile
-   Inspector에서 게임마다 켜는 일은 그 뒤에 마무리 화면과 홈에서 고를 수 있습니다.
+4. **마무리**: 앱이 NVIDIA 드라이버가 알려 주는 BAR 크기를 확인합니다. 게임마다 켜는 일은 그
+   뒤에 마무리 화면과 홈에서 고를 수 있습니다.
 
 설치가 끝나면 홈에 NVIDIA GPU마다 지금 BAR 크기가 나옵니다. **BAR 설정**에서는 Resizable BAR
 확장을 켜고 끄고, GPU마다 크기를 정하거나 빼고, 필요한 보드에는 메인보드 쪽 BAR 크기 제한도
@@ -62,9 +62,13 @@ DDR4(MS-7D25)는 문서에 있는 M-FLASH 설치와 Flash BIOS Button 복구 방
 ## 결과 확인
 
 `nvidia-smi -q -d memory`를 돌려 보거나, 앱 첫 화면만 봐도 됩니다. 확장된 GPU는 새 BAR
-크기가 초록색으로 나옵니다. Resizable BAR를 게임마다 켜고 끄는 일은 NVIDIA 드라이버 몫이라,
-앱이 공식 [NVIDIA Profile Inspector](https://github.com/Orbmu2k/nvidiaProfileInspector)
-릴리스를 설치하고, 지금 프로필을 백업해 두고, 열어 주는 데까지 맡습니다.
+크기가 초록색으로 나옵니다. NVIDIA 드라이버는 Resizable BAR를 게임마다 따로 적용합니다.
+**게임마다 켜기** 화면에서 게임을 찾아 스위치를 켜거나, **모든 게임**을 켜서 따로 정한 값이
+없는 게임에 한꺼번에 적용합니다. 처음 바꿀 때 NVIDIA 드라이버 설정 전체를 파일로 먼저 저장하고,
+같은 화면에서 이 파일로 되돌릴 수 있습니다. 바꾼 설정은 게임을 다시 실행하면 적용되고, 앱을
+관리자 권한으로 실행해야 바꿀 수 있습니다. 설정 번호는
+[NVIDIA Profile Inspector](https://github.com/Orbmu2k/nvidiaProfileInspector)에서 가져왔고,
+드라이버와는 NVIDIA가 공개한 NVAPI로 주고받습니다.
 
 ## 하드웨어를 바꾸기 전에
 

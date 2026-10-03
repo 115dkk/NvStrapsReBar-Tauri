@@ -32,7 +32,7 @@ stages, and you can close the app at any point; it reopens on the same step.
 3. **Turn on** — save the recommended sizes (the button is the confirmation; the app reads the
    value back) and restart.
 4. **Finish** — the app reads the BAR size the NVIDIA driver reports. Turning Resizable BAR on per
-   game in NVIDIA Profile Inspector is offered afterwards from the finish screen and from home.
+   game is offered afterwards from the finish screen and from home.
 
 After installation, home shows every NVIDIA GPU with its current BAR size. **BAR Settings** turns
 expansion on or off, sets per-GPU sizes or exclusions, and sets a motherboard-side BAR limit for
@@ -64,10 +64,13 @@ Button recovery routes; on other boards you choose the routes yourself.
 ## Checking the result
 
 Run `nvidia-smi -q -d memory`, or just look at the app's home screen: an expanded GPU shows its
-new BAR size in green. The NVIDIA driver applies Resizable BAR per application, so for game-level
-control the app installs the official
-[NVIDIA Profile Inspector](https://github.com/Orbmu2k/nvidiaProfileInspector) release, backs up
-your current profiles, and opens it for you.
+new BAR size in green. The NVIDIA driver applies Resizable BAR per application. **Turn on for each
+game** lists the driver's game profiles: search for a game and flip its switch, or turn on
+**All games** for every game without its own setting. The first change saves a copy of all NVIDIA
+driver settings, which the same screen can restore. Changes apply the next time a game starts and
+need the app to run as administrator. The setting IDs come from
+[NVIDIA Profile Inspector](https://github.com/Orbmu2k/nvidiaProfileInspector); the app talks to
+the driver through NVIDIA's public NVAPI.
 
 ## Before changing hardware
 
