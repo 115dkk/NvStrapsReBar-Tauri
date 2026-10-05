@@ -15,7 +15,8 @@ test("pins the exact commit, publishes a pre-release, and leaves latest unchange
   assert.ok(args.includes("--latest=false"));
   assert.ok(!args.includes("--clobber"));
   assert.equal(args[3], "release-files/NvStrapsReBar-windows-x64.zip");
-  assert.equal(args[4], "release-files/SHA256SUMS.txt");
+  assert.equal(args[4], "release-files/NvStrapsReBar-windows-x64-setup.exe");
+  assert.equal(args[5], "release-files/SHA256SUMS.txt");
 });
 test("a rerun gets a new tag without deleting or updating the first release", () => {
   assert.notEqual(releaseArguments(env)[2], releaseArguments({ ...env, GITHUB_RUN_ATTEMPT: "2" })[2]);

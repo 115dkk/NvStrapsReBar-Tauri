@@ -101,6 +101,20 @@ jobs:
         run: cargo check -p nvstraps-core --no-default-features
       - name: Build native application
         run: npm run tauri:ci
+      - name: Install Inno Setup 7
+        shell: pwsh
+        run: |
+          $installer = "$env:RUNNER_TEMP\innosetup-7.1.0-x64.exe"
+          Invoke-WebRequest https://github.com/jrsoftware/issrc/releases/download/is-7_1_0/innosetup-7.1.0-x64.exe -OutFile $installer
+          if ((Get-FileHash $installer -Algorithm SHA256).Hash -ne '0362A383ED217D4C4239B5933866DD96D3EB2102737DA92F80F6057A4B40DF2F') { throw 'Inno Setup installer hash mismatch' }
+          Start-Process $installer -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-','/CURRENTUSER',"/DIR=$env:RUNNER_TEMP\InnoSetup7" -Wait
+          if (-not (Test-Path "$env:RUNNER_TEMP\InnoSetup7\ISCC.exe")) { throw 'ISCC.exe was not installed' }
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          $version = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          & "$env:RUNNER_TEMP\InnoSetup7\ISCC.exe" /Qp "/DAppVersion=$version" "/DOutputDir=..\target\release" installer/NvStrapsReBar.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with $LASTEXITCODE" }
       - name: Upload native executable
         uses: actions/upload-artifact@v7
         with:
@@ -108,6 +122,7 @@ jobs:
           path: |
             target/release/NvStrapsReBar.exe
             target/release/NvStrapsReBar.ffs
+            target/release/NvStrapsReBar-windows-x64-setup.exe
           if-no-files-found: error
 
   prerelease:
@@ -132,8 +147,9 @@ jobs:
         run: |
           test -s NvStrapsReBar.exe
           test -s NvStrapsReBar.ffs
+          test -s NvStrapsReBar-windows-x64-setup.exe
           zip NvStrapsReBar-windows-x64.zip NvStrapsReBar.exe NvStrapsReBar.ffs
-          sha256sum NvStrapsReBar-windows-x64.zip > SHA256SUMS.txt
+          sha256sum NvStrapsReBar-windows-x64.zip NvStrapsReBar-windows-x64-setup.exe > SHA256SUMS.txt
       - name: Publish this commit as a pre-release
         env:
           GH_TOKEN: ${{ github.token }}

@@ -107,6 +107,11 @@ npm run check:miri   # 먼저: rustup toolchain install nightly --component miri
 OVMF가 있는 Linux에서 도는 `npm run test:qemu`(변수 저장소를 분리한 OVMF 사본으로 부팅)가
 맡습니다.
 
+설치 파일은 같은 두 파일을 Inno Setup 7로 감쌉니다. `npm run tauri:ci` 다음에
+`ISCC.exe installer\NvStrapsReBar.iss`를 실행하면 `target\installer\NvStrapsReBar-windows-x64-setup.exe`가
+나옵니다. 설치할 때 MIT 라이선스를 보여 주고 시작 메뉴 바로가기를 만들며, 바탕화면 바로가기는
+설치하는 사람이 고릅니다. CI는 이 파일을 포터블 ZIP과 함께 올립니다.
+
 더 깊은 문서(영어):
 
 - [Rust UEFI 구현 상태](docs/RUST_UEFI_PORT.md)
