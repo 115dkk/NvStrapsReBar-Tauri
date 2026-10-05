@@ -69,6 +69,10 @@ standard is claimed. Depth comes from three surface steps; the dialog shadow is 
 | --warn / --warn-soft | #dfb96e / #2e2617 | Remaining work; the one caution before the BIOS install |
 | --bad / --bad-soft | #ee918b / #35201f | An actual failure only |
 
+The app icon (`src-tauri/icons/logo.svg`, rendered with `npx tauri icon`) uses the same tokens:
+a `--surface` tile with a `--line` edge, a short `--control-line` bar over a long `--accent` bar,
+the `256 MiB → 8 GiB` that home leads with. It stays that plain; no NVIDIA green, gradient or glow.
+
 Status always has a text label; color alone is insufficient. Colored backgrounds are reserved
 for the result header, the single caution and failure notices.
 

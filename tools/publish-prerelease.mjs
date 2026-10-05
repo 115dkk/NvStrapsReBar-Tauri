@@ -16,16 +16,17 @@ export function releaseArguments(env) {
   // Each attempt has its own tag; retries never replace an existing release or asset.
   const tag = `pre-${run}.${attempt}-${sha.slice(0, 8)}`;
   return ["release", "create", tag,
-    "release-files/NvStrapsReBar-windows-x64.zip", "release-files/SHA256SUMS.txt",
+    "release-files/NvStrapsReBar-windows-x64.zip",
+    "release-files/NvStrapsReBar-windows-x64-setup.exe", "release-files/SHA256SUMS.txt",
     "--repo", repo, "--target", sha, "--prerelease", "--latest=false",
     "--title", `Windows pre-release ${tag}`,
-    "--notes", `Development build from master commit ${sha}.\n\nExtract the ZIP and keep NvStrapsReBar.exe and NvStrapsReBar.ffs together. Requires Windows x64 and WebView2. This portable build is not an installer.`,
+    "--notes", `Development build from master commit ${sha}.\n\nExtract the ZIP and keep NvStrapsReBar.exe and NvStrapsReBar.ffs together. Requires Windows x64 and WebView2. NvStrapsReBar-windows-x64-setup.exe installs the same two files with Start menu and optional desktop shortcuts.`,
     "--generate-notes"];
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const args = releaseArguments(process.env);
-  for (const asset of args.slice(3, 5)) {
+  for (const asset of args.slice(3, 6)) {
     if (!statSync(asset).isFile() || statSync(asset).size === 0) {
       throw new Error(`Release asset is empty or missing: ${asset}`);
     }

@@ -109,6 +109,11 @@ FFI and UEFI protocol boundaries stay covered by compilation, Clippy, native tes
 Linux with QEMU and OVMF installed — `npm run test:qemu`, which boots an injected OVMF copy with
 an isolated variable store.
 
+The installer wraps the same two files with Inno Setup 7. After `npm run tauri:ci`, run
+`ISCC.exe installer\NvStrapsReBar.iss`; it writes `target\installer\NvStrapsReBar-windows-x64-setup.exe`,
+which shows the MIT license, adds a Start menu shortcut and offers a desktop shortcut. CI publishes
+it next to the portable ZIP.
+
 Deeper documentation:
 
 - [Rust UEFI implementation status](docs/RUST_UEFI_PORT.md)
