@@ -4,7 +4,7 @@
 ;
 ;   iscc /DAppVersion=0.1.0 installer\NvStrapsReBar.iss
 ;
-; AppVersion defaults to the Tauri version; SourceDir defaults to target\release.
+; AppVersion defaults to 0.1.0 (CI passes the Tauri version); SourceDir defaults to target\release.
 
 #ifndef AppVersion
   #define AppVersion "0.1.0"
