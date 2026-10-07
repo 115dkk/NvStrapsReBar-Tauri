@@ -63,9 +63,6 @@ html:lang(ko) {
                 "Segoe UI", "Malgun Gothic", sans-serif;
         font-weight: var(--ko-weight-body);
 }
-html:lang(ko) .modal p {
-        font-weight: var(--ko-weight-supporting);
-}
 html:lang(ko) label {
         font-weight: var(--ko-weight-label);
 }
@@ -99,35 +96,12 @@ textarea {
         font-family: var(--font-technical);
         font-weight: 400;
 }
-/* Plain controls outside the guided frame: the licenses dialog. */
-.modal button,
-.modal select {
-        color: var(--ink);
-        background: #252b30;
-        border: 1px solid #485058;
-        border-radius: 6px;
-}
 input,
 textarea {
         border-radius: 6px;
 }
-.modal button {
-        transition-property: background-color, border-color, color, scale;
-        transition-duration: 0.15s;
-        transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
-}
 button:active:not(:disabled) {
         scale: 0.96;
-}
-.modal button {
-        min-height: 40px;
-        padding: 8px 13px;
-        font-weight: 650;
-        cursor: pointer;
-}
-.modal button:hover:not(:disabled) {
-        border-color: #77818b;
-        background: #2b3238;
 }
 button:focus-visible,
 select:focus-visible,
@@ -139,106 +113,6 @@ textarea:focus-visible {
 button:disabled {
         opacity: 0.42;
         cursor: not-allowed;
-}
-.kicker {
-        font:
-                700 11px/1.2 var(--font-technical);
-        letter-spacing: 0.13em;
-        color: var(--accent);
-}
-
-.modal-backdrop {
-        position: fixed;
-        inset: 0;
-        z-index: 20;
-        background: #080a0ccc;
-        display: grid;
-        place-items: center;
-        padding: 24px;
-}
-.modal {
-        width: min(520px, 100%);
-        background: #202428;
-        border: 1px solid #667079;
-        border-radius: 12px;
-        padding: 28px;
-        box-shadow:
-                0 4px 12px rgba(0, 0, 0, 0.5),
-                0 24px 60px #000;
-}
-.modal h2 {
-        font-size: 22px;
-        margin: 9px 0;
-}
-.modal p {
-        color: var(--muted);
-        font-size: 13px;
-        line-height: 1.55;
-}
-.license-modal {
-        width: min(700px, 100%);
-        max-height: min(680px, calc(100vh - 48px));
-        display: flex;
-        flex-direction: column;
-        overflow: auto;
-}
-.license-modal-head {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 20px;
-}
-.license-modal-head h2 {
-        margin-bottom: 0;
-        text-wrap: balance;
-}
-.license-attribution-list {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        gap: 8px;
-}
-.license-attribution {
-        display: grid;
-        gap: 4px;
-        padding: 13px 15px;
-        border-left: 3px solid var(--accent);
-        background: #191d21;
-        color: var(--muted);
-        font-size: 12px;
-        line-height: 1.45;
-}
-.license-attribution strong {
-        color: var(--ink);
-        font-size: 13px;
-}
-.license-modal h3 {
-        margin: 18px 0 8px;
-        font-size: 13px;
-}
-.license-picker {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        gap: 8px;
-        margin-bottom: 8px;
-}
-.license-picker button[aria-pressed="true"] {
-        border-color: var(--accent);
-        background: var(--accent-soft);
-}
-.license-text {
-        min-height: 160px;
-        margin: 0;
-        overflow: auto;
-        padding: 14px 16px;
-        border: 1px solid var(--line);
-        background: #111417;
-        color: #c6ccd1;
-        font: 400 11px/1.55 var(--font-technical);
-        white-space: pre-wrap;
-}
-.license-text:focus-visible {
-        outline: 2px solid var(--accent);
-        outline-offset: 2px;
 }
 @media (prefers-reduced-motion: reduce) {
         * {

@@ -298,11 +298,11 @@ test("every technical declaration routes through the pinned Jetendard faces", ()
         expect(styles.match(/\bmonospace\b/g)).toHaveLength(1);
         // The guided components read the same token through --font-mono.
         expect(styles).toMatch(/--font-mono:\s*var\(--font-technical\);/);
-        // Technical text in the guided components and the licenses dialog uses the token.
+        // Technical text in the guided components uses the token; license prose is body text.
         expect(
                 (styles.match(/var\(--font-technical\)/g)?.length ?? 0) +
                         (styles.match(/var\(--font-mono\)/g)?.length ?? 0),
-        ).toBeGreaterThanOrEqual(5);
+        ).toBeGreaterThanOrEqual(4);
         expect(styles).not.toMatch(/font:\s*650[^;]+var\(--font-technical\)/);
         expect(styles).toContain(":where(code, pre, kbd, samp)");
         expect(assetChecker).toContain(
@@ -524,13 +524,10 @@ test("both bundled OFL texts are readable in a focus-contained dialog", async ({
         await loadJetendardWeights(page);
         await page.getByRole("button", { name: "Menu" }).click();
         await page.getByRole("menuitem", { name: "Licenses" }).click();
-        const englishDialog = page.getByRole("dialog", {
-                name: "Open-source licenses",
-        });
-        await expect(englishDialog).toContainText(
-                "Jetendard v0.1.0 is bundled for technical information",
-        );
-        await expect(englishDialog).toContainText("Pretendard v1.3.9");
+        const englishDialog = page.getByRole("dialog", { name: "Licenses" });
+        await expect(englishDialog).toContainText("Pretendard");
+        await expect(englishDialog).toContainText("Jetendard");
+        await expect(englishDialog).toContainText("SIL Open Font License 1.1");
         await englishDialog.getByRole("button", { name: "Close" }).click();
 
         await chooseLanguage(page, "한국어");
@@ -540,36 +537,30 @@ test("both bundled OFL texts are readable in a focus-contained dialog", async ({
         const openButton = page.getByRole("button", { name: "메뉴" });
         await openButton.click();
         await page.getByRole("menuitem", { name: "라이선스" }).click();
-        const dialog = page.getByRole("dialog", {
-                name: "오픈 소스 라이선스",
-        });
+        const dialog = page.getByRole("dialog", { name: "라이선스" });
         await expect(dialog).toBeVisible();
-        await expect(dialog).toContainText("Pretendard v1.3.9");
-        await expect(dialog).toContainText("Copyright (c) 2021, Kil Hyung-jin");
-        await expect(dialog).toContainText("Reserved Font Name 'Pretendard'");
-        await expect(dialog).toContainText("Jetendard v0.1.0");
-        await expect(dialog).toContainText("Copyright (c) 2026 Jung Woong Park");
-        await expect(dialog).toContainText("Reserved Font Name 'Jetendard'");
+
+        const closeButton = dialog.getByRole("button", { name: "닫기" });
+        await expect(closeButton).toBeFocused();
+        const pretendardSummary = dialog.locator("summary", { hasText: "Pretendard" });
+        await page.keyboard.press("Tab");
+        await expect(pretendardSummary).toBeFocused();
+        await page.keyboard.press("Shift+Tab");
+        await expect(closeButton).toBeFocused();
+
+        await pretendardSummary.click();
         const pretendardFullText = dialog.getByTestId("pretendard-license-text");
+        await expect(pretendardFullText).toBeVisible();
+        await expect(pretendardFullText).toContainText("Copyright (c) 2021, Kil Hyung-jin");
         await expect(pretendardFullText).toContainText("SIL OPEN FONT LICENSE");
         await expect(pretendardFullText).toContainText(
                 "Version 1.1 - 26 February 2007",
         );
         await expect(pretendardFullText).toContainText("PERMISSION & CONDITIONS");
 
-        const closeButton = dialog.getByRole("button", { name: "닫기" });
-        await expect(closeButton).toBeFocused();
-        await page.keyboard.press("Shift+Tab");
-        await expect(pretendardFullText).toBeFocused();
-        await page.keyboard.press("Tab");
-        await expect(closeButton).toBeFocused();
-
-        const jetendardLicenseButton = dialog.getByRole("button", {
-                name: "Jetendard 라이선스",
-        });
-        await jetendardLicenseButton.click();
-        await expect(jetendardLicenseButton).toHaveAttribute("aria-pressed", "true");
+        await dialog.locator("summary", { hasText: "Jetendard" }).click();
         const jetendardFullText = dialog.getByTestId("jetendard-license-text");
+        await expect(jetendardFullText).toBeVisible();
         await expect(jetendardFullText).toContainText(
                 "Copyright (c) 2026 Jung Woong Park",
         );

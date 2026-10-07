@@ -273,3 +273,16 @@
 .nv-app .nv-games-loading { display: flex; align-items: center; gap: 10px; min-height: 56px; color: var(--muted); }
 .nv-app input[type="search"].nv-input { appearance: none; }
 .nv-app .nv-error-detail { display: inline-block; margin-top: 6px; color: var(--muted); }
+
+/* Licenses dialog: one row per component, the full text opens under its row. */
+.nv-app .nv-dialog.nv-licenses { width: min(640px, 100%); max-height: min(720px, calc(100dvh - 48px)); overflow: hidden; }
+.nv-app .nv-license-list { flex: 1; min-height: 0; overflow: auto; scrollbar-color: var(--control-line) transparent; scrollbar-width: thin; display: flex; flex-direction: column; margin: 0 -8px; padding: 0 8px; }
+.nv-app .nv-license-list > li + li { border-top: 1px solid var(--line); }
+.nv-app .nv-license > summary { min-height: 60px; padding: 10px 8px; gap: 12px; font-weight: 400; border-radius: var(--radius-md); transition-property: background-color; transition-duration: 150ms; transition-timing-function: cubic-bezier(0.2, 0, 0, 1); }
+.nv-app .nv-license > summary:hover { background: var(--surface2); }
+.nv-app .nv-license > summary .nv-meta { flex: none; }
+.nv-app .nv-license-name { display: flex; align-items: baseline; gap: 8px; font-weight: 600; }
+.nv-app .nv-license-name .nv-mono { font-weight: 400; color: var(--muted); }
+.nv-app .nv-license-body { padding: 0 8px 16px 36px; }
+.nv-app .nv-license-text { margin: 0; padding: 14px 16px; border-radius: var(--radius-sm); background: var(--bg); color: var(--muted); font-size: 14px; line-height: 22px; white-space: pre-wrap; overflow-wrap: anywhere; text-wrap: pretty; }
+.nv-app .nv-license-text:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

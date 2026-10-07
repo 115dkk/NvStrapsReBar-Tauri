@@ -161,28 +161,14 @@ describe("i18n locale policy", () => {
         });
 
         it("localizes the bundled lzma-sdk-rs attribution and upstream credit", () => {
-                expect(
-                        translate(
-                                "en",
-                                "ui.lzmaSdkRsV023011IsBundledUnderTheBsd3ClauseLicense",
-                        ),
-                ).toContain("BSD 3-Clause License");
-                expect(
-                        translate(
-                                "ko",
-                                "ui.lzmaSdkRsV023011IsBundledUnderTheBsd3ClauseLicense",
-                        ),
-                ).toBe(
-                        "lzma-sdk-rs 0.2301.1은 BSD 3-Clause 라이선스로 앱에 포함됩니다. 일부 코드는 퍼블릭 도메인인 7-Zip SDK를 바탕으로 합니다.",
+                expect(translate("en", "ui.licenseUseLzmaSdkRs")).toContain(
+                        "7-Zip SDK",
                 );
-                expect(
-                        translate(
-                                "ko",
-                                "ui.basedOnTheSevenZipSdkPublicDomain",
-                        ),
-                ).toBe("7-Zip SDK 기반 · 퍼블릭 도메인");
-                expect(translate("ko", "ui.lzmaSdkRsLicense")).toBe(
-                        "lzma-sdk-rs 라이선스",
+                expect(translate("en", "ui.licenseUseLzmaSdkRs")).toContain(
+                        "public domain",
+                );
+                expect(translate("ko", "ui.licenseUseLzmaSdkRs")).toBe(
+                        "BIOS 이미지의 압축 영역 풀기와 다시 묶기, 일부 코드는 7-Zip SDK(퍼블릭 도메인) 기반",
                 );
         });
 
