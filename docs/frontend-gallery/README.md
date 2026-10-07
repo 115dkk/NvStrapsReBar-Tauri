@@ -216,8 +216,8 @@ until the selected profile's recommendation is reviewed.
 
 ## 12. 앱 안에서 읽는 Pretendard 라이선스
 
-Pretendard v1.3.9의 저작권 고지와 SIL OFL 1.1 전문을 앱 안에서 확인하는
-화면입니다. 외부 페이지나 네트워크 연결 없이 번들된 라이선스를 읽습니다.
+구성 요소마다 한 줄씩 이름, 버전, 앱에서 쓰는 곳, 라이선스를 보여 주고, 줄을 열면
+그 아래에 전문이 나옵니다. 전문은 앱에 들어 있는 파일을 읽으므로 네트워크가 필요 없습니다.
 
 [원본 크기로 보기](12-korean-pretendard-license-900x760.png)
 

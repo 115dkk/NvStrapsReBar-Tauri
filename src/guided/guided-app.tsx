@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { previewMode } from "../bridge";
+import { useConfigurationWorkspaceController } from "../configuration-workspace/context";
 import { DeploymentWorkspaceProvider } from "../deployment-workspace/context";
 import { useDeploymentWorkspace } from "../deployment-workspace/use-deployment-workspace";
 import { useI18n } from "../i18n";
 import type { SystemSnapshot } from "../types";
 import { AppBar } from "./app-bar";
 import { GuidedDialogs } from "./dialogs";
+import { LicensesDialog } from "./licenses-dialog";
 import { Home } from "./home";
 import { InstallPage } from "./install";
 import { GuidedNavigationProvider, initialInstallUi, type GuidedNavigation, type InstallUi } from "./navigation";
@@ -20,6 +22,7 @@ import { installInProgress, type GuidedPage, type InstallScreen } from "./routin
  */
 export const GuidedApp = ({ snapshot }: { snapshot: SystemSnapshot }) => {
         const { t, locale } = useI18n();
+        const { showLicenses, closeLicenses, licenseButton } = useConfigurationWorkspaceController();
         // The session survives page changes; a new system snapshot still replaces it.
         const deployment = useDeploymentWorkspace(snapshot);
         const { view, commands } = deployment;
@@ -80,6 +83,7 @@ export const GuidedApp = ({ snapshot }: { snapshot: SystemSnapshot }) => {
                                                                                 : page === "profiles" ? <ProfilesPage titleRef={titleRef} />
                                                                                         : <Home titleRef={titleRef} />}
                                         <GuidedDialogs />
+                                        {showLicenses && <LicensesDialog onClose={closeLicenses} returnFocus={licenseButton} />}
                                 </div>
                         </GuidedNavigationProvider>
                 </DeploymentWorkspaceProvider>

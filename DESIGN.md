@@ -1,8 +1,8 @@
 # Desktop guided design
 
 The executable design source is `src/guided/guided.css` (guided components, `nv-` classes,
-ported from the NvStrapsReBar design system) and `src/styles.css` (fonts, base tokens and the
-licenses dialog). This document maps that source, not a second theme implementation. The design system artifact and the reviewed screen
+ported from the NvStrapsReBar design system) and `src/styles.css` (fonts and base
+tokens). This document maps that source, not a second theme implementation. The design system artifact and the reviewed screen
 designs live outside the repository; the UX contract and visual QA notes are under
 `.superloopy/evidence/frontend/`.
 
@@ -45,6 +45,9 @@ board, GPU and file names go into the lead or the body, not the heading.
   Revert, and Save opens one confirmation. Removing the saved settings is confirmed as turning
   expansion off. `bar-settings-model.ts` mirrors the nvstraps-core lookup order so the screen
   shows the size each GPU actually gets. Validation and the write stay in Rust.
+- The licenses dialog (`src/guided/licenses-dialog.tsx`) is one list: a row per component with
+  its name, version, what the app uses it for, its license and its copyright, and the full
+  text opening under that row. The texts are bundled under `public/licenses` and read offline.
 - Native window chrome stays OS-owned. Desktop minimum width remains 900px.
 
 ## Color and depth
