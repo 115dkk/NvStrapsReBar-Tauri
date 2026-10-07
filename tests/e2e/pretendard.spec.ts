@@ -298,11 +298,11 @@ test("every technical declaration routes through the pinned Jetendard faces", ()
         expect(styles.match(/\bmonospace\b/g)).toHaveLength(1);
         // The guided components read the same token through --font-mono.
         expect(styles).toMatch(/--font-mono:\s*var\(--font-technical\);/);
-        // Technical text in the guided components and the licenses dialog uses the token.
+        // Technical text in the guided components uses the token; license prose is body text.
         expect(
                 (styles.match(/var\(--font-technical\)/g)?.length ?? 0) +
                         (styles.match(/var\(--font-mono\)/g)?.length ?? 0),
-        ).toBeGreaterThanOrEqual(5);
+        ).toBeGreaterThanOrEqual(4);
         expect(styles).not.toMatch(/font:\s*650[^;]+var\(--font-technical\)/);
         expect(styles).toContain(":where(code, pre, kbd, samp)");
         expect(assetChecker).toContain(
