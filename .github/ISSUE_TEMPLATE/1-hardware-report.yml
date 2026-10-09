@@ -5,11 +5,9 @@ body:
   - type: markdown
     attributes:
       value: |
-        Use this form after you flashed (or tried to flash) a board with the NvStrapsReBar driver. A failed trial is as useful as a working one: it tells the next owner of that board what to avoid. [Issue #39](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/39) is a complete example.
+        A failed trial helps as much as a working one. [Issue #39](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/39) is a complete example.
 
-        Every board is its own trial. Before flashing, check [Flasher compatibility](https://github.com/115dkk/NvStrapsReBar-Tauri/blob/master/docs/FLASHER_COMPATIBILITY.md) and keep a recovery route ready.
-
-        Leave out serial numbers, the Windows product key and anything else that identifies you. Do not attach a BIOS image: a dump read with a programmer holds the board's serial number and MAC address, and an official image may not be yours to share ([SECURITY.md](https://github.com/115dkk/NvStrapsReBar-Tauri/blob/master/SECURITY.md)). The SHA-256 hashes below are enough. 한국어로 작성해도 됩니다.
+        Do not attach BIOS images or dumps; the hashes are enough. 한국어로 작성해도 됩니다.
   - type: dropdown
     id: outcome
     attributes:
@@ -27,7 +25,6 @@ body:
     id: motherboard
     attributes:
       label: Motherboard
-      description: Model name as printed by the maker, plus the board ID if you know it.
       placeholder: "MSI MAG B660 TOMAHAWK WIFI (DDR5), MS-7D41"
     validations:
       required: true
@@ -35,7 +32,7 @@ body:
     id: bios
     attributes:
       label: BIOS version
-      description: Version, file name and date of the official image you started from.
+      description: The official image you started from.
       placeholder: "7D41vAO (E7D41IMS.AO0, 2026-09-07)"
     validations:
       required: true
@@ -43,7 +40,6 @@ body:
     id: gpu
     attributes:
       label: GPU
-      description: Model and memory, plus the PCI IDs from Device Manager if you have them.
       placeholder: "RTX 2060 12GB (TU106, 10DE:1F03, subsystem 10DE:1629)"
     validations:
       required: true
@@ -66,7 +62,7 @@ body:
     id: board-type
     attributes:
       label: Board type
-      description: The first question the app asks. Does BIOS setup have a Re-Size BAR item?
+      description: Does BIOS setup have a Re-Size BAR item?
       options:
         - "Has Re-Size BAR"
         - "Only Above 4G Decoding: an older board, extra patches may apply"
@@ -77,7 +73,7 @@ body:
     id: bios-settings
     attributes:
       label: BIOS settings
-      description: Look in BIOS setup itself after flashing, not in GPU-Z or Windows, because flashing a new image often resets these settings. Leave a box empty if the setting was different or you did not check it.
+      description: Check them in BIOS setup after flashing; flashing often resets them.
       options:
         - label: Above 4G Decoding is on
         - label: CSM is off
@@ -86,13 +82,12 @@ body:
     id: artifact
     attributes:
       label: What you flashed
-      description: Fill in each line. For an older board, list the patches you picked on the extra patches screen (for example Haswell Above 4G), or write none.
       value: |
-        - App release and route (guided installation, or NvStrapsReBar.ffs with `nvstraps-ffs inject`):
-        - Extra patches (older boards only):
+        - App release and route (guided or ffs inject):
+        - Extra patches (older boards):
         - Original image SHA-256:
         - Flashed image SHA-256:
-        - Cross-check, if any (UEFITool, UEFIExtract):
+        - Cross-check (UEFITool, UEFIExtract):
   - type: dropdown
     id: flash-route
     attributes:
@@ -109,26 +104,26 @@ body:
     id: flash-details
     attributes:
       label: Flash details
-      description: What the flasher said, any warning it showed, and whether you needed recovery.
+      description: What the flasher said, and any recovery you needed.
       placeholder: "M-FLASH accepted the full image and finished without errors. No programmer needed."
   - type: textarea
     id: results
     attributes:
       label: Results
-      description: Fill in each line, step by step. Copy the driver status from the app as it is shown.
+      description: Copy the driver status as the app shows it.
       value: |
-        - First boot after flashing (POST OK / no POST):
+        - First boot (POST OK / no POST):
         - Driver status before configuring:
-        - BAR Settings saved (expansion, GPU size, other options):
+        - BAR Settings saved:
         - Driver status after the restart:
-        - BAR1 size (app, GPU-Z, nvidia-smi):
+        - BAR1 size (app, GPU-Z or nvidia-smi):
     validations:
       required: true
   - type: dropdown
     id: sleep
     attributes:
       label: Sleep and resume (S3)
-      description: Put Windows to sleep, wake it, and read the BAR1 size again.
+      description: Sleep, wake, and read the BAR1 size again.
       options:
         - "Not tested"
         - "Works: BAR1 is still expanded after waking"
@@ -151,14 +146,10 @@ body:
     id: extra
     attributes:
       label: Anything else
-      description: >-
-        Screenshots (GPU-Z, the app), logs, and the steps you took to recover if something went wrong.
-        The app writes its logs to `%LOCALAPPDATA%\io.github.nvstrapsrebar.desktop\logs`:
-        `panic.log` if the app crashed, `driver-settings.log` for the per-game switches.
+      description: Screenshots, logs from `%LOCALAPPDATA%\io.github.nvstrapsrebar.desktop\logs`, recovery steps.
   - type: checkboxes
     id: credit
     attributes:
       label: Credit
-      description: Optional. The README thanks the people whose reports moved the project forward.
       options:
         - label: You may thank me by my GitHub name in the README

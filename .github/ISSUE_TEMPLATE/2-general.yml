@@ -4,11 +4,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Flashed a board, or tried to? Use the **Hardware report** form instead, so the result lands next to the others.
-
-        Report a security problem privately through [GitHub's private vulnerability reporting](https://github.com/115dkk/NvStrapsReBar-Tauri/security/advisories/new), as [SECURITY.md](https://github.com/115dkk/NvStrapsReBar-Tauri/blob/master/SECURITY.md) explains, not in a public issue.
-
-        한국어로 작성해도 됩니다.
+        Flashed a board? Use **Hardware report** instead. Report security problems [privately](https://github.com/115dkk/NvStrapsReBar-Tauri/security/advisories/new), not here. 한국어로 작성해도 됩니다.
   - type: dropdown
     id: kind
     attributes:
@@ -26,7 +22,7 @@ body:
     id: version
     attributes:
       label: App release
-      description: The release you downloaded, from the release page or Windows Settings > Apps.
+      description: Shown in Windows Settings > Apps.
       placeholder: "1.0.1"
   - type: textarea
     id: what-happened
@@ -61,9 +57,4 @@ body:
     id: evidence
     attributes:
       label: Screenshots or logs
-      description: >-
-        The app writes its logs to `%LOCALAPPDATA%\io.github.nvstrapsrebar.desktop\logs`:
-        `panic.log` if the app crashed, `driver-settings.log` for the per-game switches.
-        Leave out serial numbers, the Windows product key and anything else that identifies you.
-        Do not attach a BIOS image: a dump read with a programmer holds the board's serial number
-        and MAC address, and an official image may not be yours to share.
+      description: Logs are in `%LOCALAPPDATA%\io.github.nvstrapsrebar.desktop\logs`. Do not attach BIOS images or dumps.
