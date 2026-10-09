@@ -89,3 +89,4 @@ jobs:
           name: rust-uefi-qemu-evidence
           path: target/qemu-smoke/
           if-no-files-found: error
+          retention-days: 7

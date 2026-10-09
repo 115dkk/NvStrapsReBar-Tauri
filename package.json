@@ -15,7 +15,7 @@
     "test:watch": "vitest src",
     "test:e2e": "playwright test",
     "check": "npm run typecheck && npm run test && npm run build && npm run check:third-party && npm run check:ci-scope",
-    "check:ci-scope": "node --test tools/ci-scope.test.mjs tools/publish-prerelease.test.mjs tools/publish-release.test.mjs",
+    "check:ci-scope": "node --test tools/ci-scope.test.mjs tools/release-plan.test.mjs tools/apply-version.test.mjs tools/publish-release.test.mjs",
     "check:third-party": "node tools/check-third-party-assets.mjs",
     "check:riir": "node tools/check-riir.mjs",
     "check:unsafe": "node tools/check-uefi-unsafe.mjs",
