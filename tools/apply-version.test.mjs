@@ -28,6 +28,24 @@ test("rewrites only the version fields and keeps dependency versions", () => {
   assert.match(out.get("installer/NvStrapsReBar.iss"), /defaults to 1\.2\.3/);
 });
 
+test("a Windows checkout with CRLF endings is rewritten the same way and keeps its endings", () => {
+  const crlf = new Map([...fixtures].map(([path, text]) => [path, text.replaceAll("\n", "\r\n")]));
+  const out = rewriteManifests("1.2.3", crlf);
+  assert.equal(JSON.parse(out.get("package.json")).version, "1.2.3");
+  const lock = JSON.parse(out.get("package-lock.json"));
+  assert.equal(lock.version, "1.2.3");
+  assert.equal(lock.packages[""].version, "1.2.3");
+  assert.match(out.get("crates/a/Cargo.toml"), /^version = "1\.2\.3"\r$/m);
+  assert.match(out.get("installer/NvStrapsReBar.iss"), /#define AppVersion "1\.2\.3"\r/);
+  for (const text of out.values()) {
+    assert.ok(!/[^\r]\n/.test(text), "every line still ends with CRLF");
+  }
+  // Rewriting to the version the files already carry changes nothing, CRLF or not.
+  for (const [path, text] of rewriteManifests("1.0.0", crlf)) {
+    assert.equal(text, crlf.get(path), path);
+  }
+});
+
 test("rejects versions that are not semantic and files without a version", () => {
   assert.throws(() => rewriteManifests("1.2", fixtures), /not <major>/);
   assert.throws(() => rewriteManifests("1.2.3", new Map([["crates/b/Cargo.toml", "[package]\nname = \"b\"\n"]])), /no version field/);

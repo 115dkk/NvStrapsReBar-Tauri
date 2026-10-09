@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 
 import {
   bumpVersion,
@@ -69,6 +70,11 @@ test("only master pushes with a program change release", () => {
 test("the first release publishes the manifests' version; later ones bump the last tag", () => {
   const first = planRelease({ ...push, files: ["src/a.ts"], messages: [], latestTag: null, manifestVersion: "1.0.0" });
   assert.deepEqual([first.release, first.level, first.version, first.tag], [true, "patch", "1.0.0", "v1.0.0"]);
+  // Until a tag exists, even a tooling-only push publishes the manifests' version, so a first
+  // release that failed to publish is retried by the next push.
+  const retry = planRelease({ ...push, files: ["tools/apply-version.mjs"], messages: [], latestTag: null, manifestVersion: "1.0.0" });
+  assert.deepEqual([retry.release, retry.level, retry.version], [true, "none", "1.0.0"]);
+  assert.match(retry.reason, /no release tag exists yet/);
   const patch = planRelease({ ...push, files: ["src/a.ts"], messages: [], latestTag: "v1.0.0", manifestVersion: "1.0.0" });
   assert.deepEqual([patch.version, patch.tag], ["1.0.1", "v1.0.1"]);
   const minor = planRelease({ ...push, files: ["crates/nvstraps-uefi/src/pci.rs"], messages: [], latestTag: "v1.0.4", manifestVersion: "1.0.4" });
@@ -83,7 +89,9 @@ test("a manual bump past the last tag is published as written", () => {
   assert.match(plan.reason, /already moved past v1\.0\.0/);
 });
 
-test("the checked-in manifests agree on one semantic version", () => {
+test("the checked-in manifests agree on one semantic version, with LF or CRLF endings", () => {
   assert.match(manifestVersion(), /^\d+\.\d+\.\d+$/);
+  const crlf = (path) => readFileSync(path, "utf8").replaceAll("\n", "\r\n");
+  assert.equal(manifestVersion(crlf), manifestVersion());
   assert.throws(() => manifestVersion((path) => path === "package.json" ? '{"version":"9.9.9"}' : path.endsWith(".toml") ? 'version = "1.0.0"' : '{"version":"1.0.0"}'), /disagree/);
 });

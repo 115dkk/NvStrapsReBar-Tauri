@@ -32,7 +32,12 @@ function replaceOnce(text, pattern, replacement, file) {
   return text.replace(pattern, replacement);
 }
 
-/** Rewrites the manifests in `files` (path -> text) and returns the new texts. */
+/**
+ * Rewrites the manifests in `files` (path -> text) and returns the new texts.
+ *
+ * A Windows checkout carries CRLF line endings, so every pattern tolerates a trailing `\r` and
+ * leaves the file's own endings in place.
+ */
 export function rewriteManifests(version, files) {
   if (!SEMVER.test(version)) {
     throw new Error(`"${version}" is not <major>.<minor>.<patch>`);
@@ -40,13 +45,13 @@ export function rewriteManifests(version, files) {
   const out = new Map();
   for (const [file, text] of files) {
     if (file === "package.json" || file === "src-tauri/tauri.conf.json") {
-      out.set(file, replaceOnce(text, /^(\s*"version": )"[^"]+"(,?)$/m, `$1"${version}"$2`, file));
+      out.set(file, replaceOnce(text, /^(\s*"version": )"[^"]+"(,?\r?)$/m, `$1"${version}"$2`, file));
     } else if (file === "package-lock.json") {
       // The root entry and the "" package entry both carry the version, at the top of the file.
       const lines = text.split("\n");
       let replaced = 0;
       for (let index = 0; index < lines.length && replaced < 2; index += 1) {
-        if (/^\s*"version": "[^"]+",?$/.test(lines[index])) {
+        if (/^\s*"version": "[^"]+",?\r?$/.test(lines[index])) {
           lines[index] = lines[index].replace(/"version": "[^"]+"/, `"version": "${version}"`);
           replaced += 1;
         }
@@ -56,9 +61,9 @@ export function rewriteManifests(version, files) {
       }
       out.set(file, lines.join("\n"));
     } else if (file.endsWith("Cargo.toml")) {
-      out.set(file, replaceOnce(text, /^version = "[^"]+"$/m, `version = "${version}"`, file));
+      out.set(file, replaceOnce(text, /^version = "[^"]+"(\r?)$/m, `version = "${version}"$1`, file));
     } else if (file.endsWith(".iss")) {
-      let next = replaceOnce(text, /^(\s*#define AppVersion )"[^"]+"$/m, `$1"${version}"`, file);
+      let next = replaceOnce(text, /^(\s*#define AppVersion )"[^"]+"(\r?)$/m, `$1"${version}"$2`, file);
       next = next.replace(/AppVersion=\d+\.\d+\.\d+/g, `AppVersion=${version}`);
       next = next.replace(/AppVersion defaults to \d+\.\d+\.\d+/, `AppVersion defaults to ${version}`);
       out.set(file, next);
