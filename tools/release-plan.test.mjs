@@ -8,6 +8,7 @@ import {
   isProgramPath,
   manifestVersion,
   messageLevel,
+  packageManifestShipsChange,
   planRelease,
 } from "./release-plan.mjs";
 
@@ -94,4 +95,38 @@ test("the checked-in manifests agree on one semantic version, with LF or CRLF en
   const crlf = (path) => readFileSync(path, "utf8").replaceAll("\n", "\r\n");
   assert.equal(manifestVersion(crlf), manifestVersion());
   assert.throws(() => manifestVersion((path) => path === "package.json" ? '{"version":"9.9.9"}' : path.endsWith(".toml") ? 'version = "1.0.0"' : '{"version":"1.0.0"}'), /disagree/);
+});
+
+test("a package.json edit limited to check and test scripts releases nothing; anything else does", () => {
+  const base = {
+    name: "nvstraps-rebar-tauri",
+    version: "1.0.1",
+    scripts: { build: "vite build", check: "npm run test", "check:ci-scope": "node --test a.test.mjs", test: "vitest run src" },
+    dependencies: { "@tauri-apps/api": "2.0.0" },
+    devDependencies: { vite: "8.2.1" },
+  };
+  const text = (manifest) => JSON.stringify(manifest, null, 2) + "\n";
+  const edit = (change) => text(change(structuredClone(base)));
+  const before = text(base);
+
+  assert.equal(packageManifestShipsChange(before, before), false);
+  assert.equal(packageManifestShipsChange(before, edit((m) => {
+    m.scripts["check:docs"] = "node tools/check-docs.mjs";
+    m.scripts.check = "npm run test && npm run check:docs";
+    m.scripts["check:ci-scope"] += " tools/check-docs.test.mjs";
+    m.scripts["test:e2e"] = "playwright test";
+    m.scripts.lint = "eslint .";
+    m.scripts.typecheck = "tsc --noEmit";
+    return m;
+  })), false);
+  assert.equal(packageManifestShipsChange(before, before.replace(/\n/g, "\r\n")), false, "line endings alone ship nothing");
+
+  assert.equal(packageManifestShipsChange(before, edit((m) => { m.version = "1.0.2"; return m; })), true);
+  assert.equal(packageManifestShipsChange(before, edit((m) => { m.scripts.build = "vite build --mode x"; return m; })), true);
+  assert.equal(packageManifestShipsChange(before, edit((m) => { m.dependencies["@tauri-apps/api"] = "2.1.0"; return m; })), true);
+  assert.equal(packageManifestShipsChange(before, edit((m) => { m.devDependencies.vite = "8.2.2"; return m; })), true);
+  assert.equal(packageManifestShipsChange(before, edit((m) => { m.scripts.checkout = "node fetch.mjs"; return m; })), true,
+    "only check, test, lint and typecheck scripts and their colon variants are exempt");
+  assert.equal(packageManifestShipsChange(null, before), true);
+  assert.equal(packageManifestShipsChange(before, "{ not json"), true);
 });
