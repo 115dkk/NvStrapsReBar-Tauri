@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
@@ -105,18 +105,36 @@ async function waitForSiblings(sha, repo, { timeoutMs = 30 * 60_000, intervalMs 
   }
 }
 
+/** The files tools/apply-version.mjs may have rewritten, and nothing else the build touched. */
+const VERSION_FILES = ["package.json", "package-lock.json", "src-tauri/tauri.conf.json",
+  "installer/NvStrapsReBar.iss", "Cargo.toml", "Cargo.lock", "crates", "src-tauri/Cargo.toml"];
+
+/**
+ * Stages the version files and reports whether the index now differs from HEAD. Staging first
+ * matters on the Windows runner: the Tauri build rewrites src-tauri/Cargo.toml with LF endings in
+ * a CRLF checkout, which `git status` reports as a change although the normalized content is the
+ * same, and a commit of it would fail with nothing to commit.
+ */
+function stageVersionFiles() {
+  const status = git(["status", "--porcelain", "--", ...VERSION_FILES]);
+  if (status) {
+    console.log(`Working tree before staging:\n${status}`);
+  }
+  git(["add", "--", ...VERSION_FILES]);
+  const diff = spawnSync("git", ["diff", "--cached", "--quiet", "--", ...VERSION_FILES], { encoding: "utf8" });
+  if (diff.status !== 0 && diff.status !== 1) {
+    throw new Error(`git diff --cached failed: ${diff.stderr}`);
+  }
+  return diff.status === 1;
+}
+
 function commitVersionBump(tag) {
-  const changed = git(["status", "--porcelain", "--", "package.json", "package-lock.json",
-    "src-tauri/tauri.conf.json", "installer/NvStrapsReBar.iss", "Cargo.toml", "Cargo.lock",
-    "crates", "src-tauri/Cargo.toml"]);
-  if (!changed) {
+  if (!stageVersionFiles()) {
     console.log("The manifests already carry the release version; nothing to commit.");
     return;
   }
   git(["config", "user.name", BOT_NAME]);
   git(["config", "user.email", BOT_EMAIL]);
-  git(["add", "--", "package.json", "package-lock.json", "src-tauri/tauri.conf.json",
-    "installer/NvStrapsReBar.iss", "Cargo.lock", "Cargo.toml", "crates", "src-tauri/Cargo.toml"]);
   git(["commit", "-m", `Release ${tag}`, "-m",
     "Version bump written by the release workflow; the attached build was made from this tree."]);
   // Fails on a non-fast-forward push, which means master moved on; the next push releases.
