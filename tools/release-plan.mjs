@@ -156,17 +156,19 @@ export function planRelease({ eventName, ref, files, messages, latestTag, manife
     return { release: false, level: "none", version: null, tag: null, reason: "only pushes to master release" };
   }
   const { level, reason } = detectLevel({ files, messages });
-  if (level === "none") {
-    return { release: false, level, version: null, tag: null, reason };
-  }
   if (latestTag == null) {
+    // Bootstrap: until the first release exists, every master push publishes the version the
+    // manifests already carry, so a release that failed to publish is retried by the next push.
     return {
       release: true,
       level,
       version: formatVersion(manifest),
       tag: `v${formatVersion(manifest)}`,
-      reason: `${reason}; no release tag exists yet, so the manifests' version is published as is`,
+      reason: `no release tag exists yet, so the manifests' version is published as is (${reason})`,
     };
+  }
+  if (level === "none") {
+    return { release: false, level, version: null, tag: null, reason };
   }
   const base = parseVersion(String(latestTag).replace(/^v/, ""));
   if (!base) {
@@ -185,7 +187,7 @@ export function manifestVersion(readFile = (path) => readFileSync(path, "utf8"))
   const versions = {
     package: JSON.parse(readFile("package.json")).version,
     tauri: JSON.parse(readFile("src-tauri/tauri.conf.json")).version,
-    cargo: readFile("src-tauri/Cargo.toml").match(/^version = "([^"]+)"$/m)?.[1],
+    cargo: readFile("src-tauri/Cargo.toml").match(/^version = "([^"]+)"\r?$/m)?.[1],
   };
   const distinct = new Set(Object.values(versions));
   if (distinct.size !== 1) {
