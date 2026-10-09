@@ -49,6 +49,20 @@ jobs:
           RELEASE_PLAN_HEAD_SHA: ${{ github.sha }}
         run: node tools/release-plan.mjs
 
+  docs:
+    name: Documentation checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Check Markdown links and issue forms
+        run: npm run check:docs
+      - name: Test the CI, documentation and release tooling
+        run: npm run check:ci-scope
+
   frontend:
     name: Frontend and browser checks
     needs: scope
@@ -82,7 +96,7 @@ jobs:
 
   native-windows:
     name: Rust backend, Windows shell and release
-    needs: [scope, frontend]
+    needs: [scope, docs, frontend]
     if: needs.scope.outputs.run-heavy == 'true'
     runs-on: windows-latest
     timeout-minutes: 60
