@@ -5,11 +5,14 @@ injects it into supported firmware volumes without C/C++, EDK2, Python, `pefile`
 `GenFfs`. The former C DXE implementation and native build path have been removed; Rust is the
 canonical implementation.
 
-> **The artifact is not hardware-verified.** OVMF proves automatic DXE dispatch,
-> configuration-variable decoding, and host-bridge hook installation, but no recoverable trial has
-> verified the complete path on real NVIDIA hardware and a pinned vendor firmware image. The
-> injector creates a new output and never overwrites its input; it is an artifact-preparation tool,
-> not a flasher.
+> **Hardware-verified on one board.** The Rust DXE has run on a physical machine: an MSI MAG B660
+> TOMAHAWK WIFI DDR5 (MS-7D41, BIOS 7D41vAO) with an RTX 2060 12GB accepted the injected image
+> through M-FLASH, reported status 40 before configuration, and exposed a 16 GiB BAR1 after the app
+> configured it ([issue #39](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/39)). OVMF proves
+> automatic DXE dispatch, configuration-variable decoding, host-bridge hook installation, S3 Save
+> State protocol access and a complete S3 suspend/resume cycle on every CI run. Each further board
+> is its own trial. The injector creates a new output and never overwrites its input; it is an
+> artifact-preparation tool, not a flasher.
 
 ## Reproducible validation
 
@@ -65,11 +68,35 @@ npm run test:qemu
 ```
 
 The harness builds the release driver, injects it into a copied OVMF image, and rejects a second
-injection of the same file GUID. It boots twice against an isolated copy of the OVMF variable
-store. The first boot proves status 40 (unconfigured), then writes the smallest valid 14-byte test
-configuration. The second boot requires the exact status value 30 with no encoded EFI error,
-which proves that the configured path installed the PCI host-bridge hook. Logs, hashes, and a
-receipt remain under `target/qemu-smoke/`; CI uploads that directory on every Linux run.
+injection of the same file GUID. It then boots four times against an isolated copy of the OVMF
+variable store, each boot driven by a UEFI shell `startup.nsh` from `tests/qemu/`:
+
+1. The first boot proves status 40 (unconfigured), then writes the smallest valid 14-byte test
+   configuration.
+2. The second boot requires the exact status value 30 with no encoded EFI error, which proves
+   that the configured path installed the PCI host-bridge hook. It then writes the same
+   configuration with global mode 1, the registry-driven mode the app uses for "Automatic".
+3. The third boot requires status 20 (configured) with no encoded EFI error. With a GPU mode set,
+   the driver locates and opens the PI S3 Save State protocol before it installs the hook, and a
+   failure there would land in the status variable as EFI error location 19 or 20.
+4. The fourth boot runs `NvStrapsS3Probe.efi`, the test application in `crates/nvstraps-s3-probe`.
+   It reads the status variable, parses the ACPI tables for the FACS, the PM1a control port and the
+   `_S3`/`_S5` sleep types, copies a 32-bit protected-mode stub into a page below 1 MiB, publishes
+   it as `FACS.XFirmwareWakingVector`, and writes `SLP_TYP=S3 | SLP_EN` to the PM1a control port.
+   QEMU suspends; `scripts/qemu-s3-wakeup.mjs` watches the QMP socket, sends `system_wakeup` after
+   the `SUSPEND` event, and requires `WAKEUP` followed by a guest-initiated `SHUTDOWN`. On resume
+   OVMF's PEI phase replays the saved boot script and jumps to the stub, which prints
+   `S3-PROBE: resumed from S3` on the serial port and requests S5.
+
+The probe uses the 32-bit waking vector on purpose. OVMF's X64 PEI phase enters a 16-bit
+real-mode vector through transition code that lives above 1 MiB, and under QEMU's TCG that code
+faults as soon as the instruction pointer is truncated to 16 bits. EDK2 enters the 32-bit vector
+with paging off, flat segments and a valid stack, which needs no mode switch in the stub.
+
+QEMU has no NVIDIA GPU, so the boot script holds no NvStrapsReBar BAR writes; the cycle proves the
+driver's S3 Save State integration and the firmware's own suspend/resume path with the driver
+present, not the BAR restore itself. Logs, QMP events, hashes, and a receipt remain under
+`target/qemu-smoke/`; CI uploads that directory on every Linux run.
 
 Alternative OVMF paths can be supplied through `NVSTRAPS_OVMF_CODE` and
 `NVSTRAPS_OVMF_VARS`. This test never reads or writes the host machine's NVRAM.
@@ -95,10 +122,14 @@ The following implementation gates are complete:
 3. PCI discovery, resizable-BAR programming, NVIDIA strap MMIO, and bridge guards have canonical
    Rust implementations and host-side vectors.
 4. S3 resume writes and setup-variable/CMOS reset guards have Rust implementations and host tests.
-5. QEMU/OVMF proves that the driver is dispatched, remains resident, and installs its hook.
+5. QEMU/OVMF proves that the driver is dispatched, remains resident, installs its hook, opens the
+   S3 Save State protocol, and survives an ACPI S3 suspend/resume cycle.
 6. FFS generation and injection are parsed back independently and duplicate injection is rejected.
 
-The remaining gate is deployment evidence, not a source-porting task: a recoverable physical trial
-must prove the pinned vendor image, boot, EFI configuration write/readback, restart, DXE status, and
-BAR1 result on the exact machine profile. CI artifacts prove their recorded software checks only;
-they are not approval to flash a physical board.
+Deployment evidence exists for one machine profile. The MSI MAG B660 TOMAHAWK WIFI DDR5 trial in
+issue #39 covered the vendor image, M-FLASH, the first boot (status 40), the EFI configuration
+write and readback through the app, the restart, the configured DXE status and the 16 GiB BAR1
+result. That trial does not transfer to other boards: CI artifacts prove their recorded software
+checks only, and each new board needs its own recoverable trial before its image is treated as safe
+to flash. Sleep and resume with the expanded BAR has not been reported from physical hardware;
+the QEMU S3 cycle below covers the firmware side of that path without a GPU.

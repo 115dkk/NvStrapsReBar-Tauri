@@ -55,11 +55,22 @@ changes, so the app does not offer them.
 
 ## Current status
 
-The Rust driver and the firmware tooling are covered by host tests and a QEMU/OVMF boot test, but
-no end-to-end flash on a physical machine has been verified by this project yet. A bad BIOS flash
-can leave a board unbootable; continue only after confirming your recovery route works. For the
-MSI PRO Z690-A DDR4 (MS-7D25) the app prefills the documented M-FLASH install and Flash BIOS
-Button recovery routes; on other boards you choose the routes yourself.
+The driver has been flashed and run on a physical board. On an MSI MAG B660 TOMAHAWK WIFI DDR5
+(MS-7D41, BIOS 7D41vAO) with an RTX 2060 12GB, the image prepared with this project's injector went
+in through MSI's own M-FLASH, the app configured the driver, and both the app and GPU-Z then
+reported a 16 GiB BAR1 ([hardware report](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/39)).
+The per-game switches have been verified against the NVIDIA driver on the maintainer's PC (RTX
+2080 SUPER, driver 616.64). Sleep and resume with the expanded BAR has not been reported from a
+physical board yet.
+
+Every other board is still your own trial. A bad BIOS flash can leave a board unbootable; continue
+only after confirming your recovery route works. For the MSI PRO Z690-A DDR4 (MS-7D25) the app
+prefills the documented M-FLASH install and Flash BIOS Button recovery routes; on other boards you
+choose the routes yourself.
+
+The app runs on Windows x64 only. The NVIDIA driver's per-game settings exist only in the Windows
+driver, and macOS has no NVIDIA driver for Turing GPUs at all. The UEFI driver itself does not care
+which operating system boots afterwards.
 
 ## Checking the result
 
@@ -107,12 +118,25 @@ npm run check:miri   # needs: rustup toolchain install nightly --component miri 
 `npm run check:miri` interprets the host-safe contracts and the volatile BAR1 MMIO code. Windows
 FFI and UEFI protocol boundaries stay covered by compilation, Clippy, native tests, and — on
 Linux with QEMU and OVMF installed — `npm run test:qemu`, which boots an injected OVMF copy with
-an isolated variable store.
+an isolated variable store, configures the driver, and puts the virtual machine through an ACPI S3
+suspend and resume.
 
 The installer wraps the same two files with Inno Setup 7. After `npm run tauri:ci`, run
 `ISCC.exe installer\NvStrapsReBar.iss`; it writes `target\installer\NvStrapsReBar-windows-x64-setup.exe`,
 which shows the MIT license, adds a Start menu shortcut and offers a desktop shortcut. CI publishes
 it next to the portable ZIP.
+
+Releases are automatic. Every push to `master` that changes what ships (the app, the UEFI driver and
+its crates, bundled assets, dependencies, the installer) becomes a stable release once the Linux
+checks, the Windows build, the Rust UEFI validation and Miri have all passed; pushes that only touch
+documentation, CI, tests or test tooling release nothing. The workflow picks the level from the
+change itself: a change to the UEFI driver or its shared contract is a minor release, because users
+must re-flash to get it, and any other program change is a patch. A commit subject can raise it with
+a `feat:` / `minor:` prefix (minor) or `major:` / `breaking:` / `feat!:` (major). The Windows job
+writes the new version into every manifest, builds with it, commits that bump to `master` as
+`github-actions[bot]`, and publishes the tag as the **Latest** release with the build attached,
+using `docs/releases/v<version>.md` as notes when that file exists and generated notes otherwise.
+Nothing goes through the Actions artifact store.
 
 Deeper documentation:
 
@@ -128,6 +152,10 @@ This work builds on the original C/C++
 [ReBarUEFI](https://github.com/xCuri0/ReBarUEFI) project it grew from, and findings from
 [envytools](https://github.com/envytools/envytools), @mupuf, and @Xelafic. The pinned legacy
 patch catalogs retain their upstream provenance and hashes.
+
+Special thanks to @lucianocerantonio2, who flashed the first physical board with this project's
+image, configured it, and reported the 16 GiB result with hashes and screenshots
+([issue #39](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/39)).
 
 ## Licenses
 

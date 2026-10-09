@@ -114,10 +114,21 @@ authoritative. Keep RIIR, deployment automation, and physical-machine proof as s
   assets, legal notices, or any other path make the classifier fail closed and run every job.
 - `workflow_dispatch` always runs the complete CI floor. Do not use GitHub's native `[skip ci]`
   phrases because they can prevent required checks from registering at all.
-- Every `master` push runs the Tauri frontend and native Windows checks, including documentation
-  changes, to publish a portable Windows pre-release for that commit. Documentation-only PRs and
-  the separate Miri/UEFI workflows retain the scope classifier. Pre-releases use unique tags per
-  run attempt and never replace an existing release or the stable Latest release.
+- Releases are automatic and happen only from `master` pushes. `tools/release-plan.mjs` looks at
+  everything since the last `v*` tag: documentation, CI, tests and test tooling (including
+  `crates/nvstraps-s3-probe`) release nothing; a change to `crates/nvstraps-uefi` or
+  `crates/nvstraps-core` is a minor release because users must re-flash; any other program change
+  is a patch; a commit subject prefixed `feat:`/`minor:` raises to minor and `major:`/`breaking:`/
+  `feat!:` or a `BREAKING CHANGE:` footer raises to major. Before the first tag the manifests'
+  version is published as is, and a manual bump past the last tag is published as written.
+- The Windows job runs after the frontend job, writes the planned version into every manifest
+  with `tools/apply-version.mjs` before building, and `tools/publish-release.mjs` then waits for
+  the Rust UEFI validation and Miri runs of the same commit, commits the bump as
+  `github-actions[bot]`, pushes it to `master`, and creates the Latest release with the build
+  attached. Release files never go through the Actions artifact store (its quota is tight); the
+  only uploads left are small diagnostics with a seven-day retention. A push made with the
+  workflow token starts no workflow run, so the bump commit does not release itself. There are no
+  per-commit pre-releases any more.
 
 Use the smallest relevant subset while iterating, then the full applicable floor before handoff:
 
@@ -135,7 +146,10 @@ host contracts and the real volatile BAR1 MMIO read/write boundary. Target-only 
 callbacks and Windows system FFI remain covered by compilation, Clippy, native tests, and QEMU;
 Miri cannot execute those external firmware or operating-system calls.
 
-`npm run test:qemu` is the isolated Linux/OVMF smoke path when QEMU and OVMF are available. The
+`npm run test:qemu` is the isolated Linux/OVMF smoke path when QEMU and OVMF are available: four
+boots that prove dispatch, the configured host-bridge hook, S3 Save State protocol access, and a
+real ACPI S3 suspend/resume cycle driven by the `nvstraps-s3-probe` UEFI application. QEMU has no
+NVIDIA GPU, so none of it proves a BAR change; that proof stays with physical trials. The
 ignored Rust smoke tests require real NVIDIA hardware or network access and must remain explicit,
 opt-in evidence rather than silently joining ordinary validation. `nvidia_profiles::on_pc` runs the
 driver settings handoff against the installed driver; its write tests change real driver profiles,

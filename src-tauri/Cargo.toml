@@ -1,6 +1,6 @@
 [package]
 name = "nvstraps-rebar"
-version = "0.1.0"
+version = "1.0.0"
 description = "Tauri configuration utility for NvStrapsReBar"
 authors = ["NvStrapsReBar contributors"]
 edition = "2024"

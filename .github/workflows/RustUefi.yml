@@ -63,22 +63,22 @@ jobs:
         run: npm run check:riir
 
       - name: Test the portable Rust modules
-        run: cargo test -p nvstraps-core -p nvstraps-deploy -p nvstraps-ffs -p nvstraps-uefi --all-targets
+        run: cargo test -p nvstraps-core -p nvstraps-deploy -p nvstraps-ffs -p nvstraps-uefi -p nvstraps-s3-probe --all-targets
 
       - name: Build, validate, and wrap the Rust boot-service driver
         run: npm run build:firmware
 
       - name: Reject warnings in host-side firmware tooling
-        run: cargo clippy -p nvstraps-ffs -p nvstraps-uefi --all-targets -- -D warnings
+        run: cargo clippy -p nvstraps-ffs -p nvstraps-uefi -p nvstraps-s3-probe --all-targets -- -D warnings
 
       - name: Reject warnings in the UEFI target
-        run: cargo clippy -p nvstraps-uefi --release --target x86_64-unknown-uefi -- -D warnings
+        run: cargo clippy -p nvstraps-uefi -p nvstraps-s3-probe --release --target x86_64-unknown-uefi -- -D warnings
 
       - name: Install OVMF and QEMU
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install --yes ovmf qemu-system-x86
 
-      - name: Prove automatic dispatch and host-bridge hook installation
+      - name: Prove dispatch, the host-bridge hook, S3 protocol access and an S3 suspend/resume cycle
         if: runner.os == 'Linux'
         run: npm run test:qemu
 
@@ -89,3 +89,4 @@ jobs:
           name: rust-uefi-qemu-evidence
           path: target/qemu-smoke/
           if-no-files-found: error
+          retention-days: 7

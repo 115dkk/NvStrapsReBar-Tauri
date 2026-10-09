@@ -50,12 +50,18 @@ Inspector (MIT) because NVIDIA does not publish them. That is a driver-compatibi
 driver that renames or retires those IDs needs an app update, as driver 616.56 already showed by
 adding the NVIDIA app setting `0x000BFA21`.
 
-### Remaining proof gap
+### Proof so far
 
-Rust source replacement is complete at the repository boundary. Real motherboard deployment is
-not thereby proven. The Rust DXE path has host tests and an OVMF boot test, but a recoverable trial
-on the pinned physical machine is still required before claiming that a prepared image is safe to
-flash. Until that trial exists, hardware behavior remains explicitly unverified.
+Rust source replacement is complete at the repository boundary. Real motherboard deployment is a
+separate claim, and it now has one data point: an MSI MAG B660 TOMAHAWK WIFI DDR5 (MS-7D41, BIOS
+7D41vAO) with an RTX 2060 12GB accepted the injected image through M-FLASH, booted the Rust DXE,
+took the app's configuration and exposed a 16 GiB BAR1
+([issue #39](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/39)). The per-game driver
+switches were verified against the installed NVIDIA driver on the maintainer's PC
+([handoff record](NVIDIA_DRIVER_SETTINGS_HANDOFF.md)). GitHub-hosted runners have neither an
+NVIDIA GPU nor the NVIDIA driver, so CI cannot repeat either proof; it covers the host tests, the
+OVMF boot and S3 cycle, and the browser journeys. Every other board still needs its own
+recoverable trial before its prepared image is treated as safe to flash.
 
 ## 2. One-click boundary
 

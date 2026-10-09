@@ -1,19 +1,15 @@
 [package]
-name = "nvstraps-uefi"
+name = "nvstraps-s3-probe"
 version = "1.0.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-build = "build.rs"
 
 [[bin]]
-name = "NvStrapsReBar"
+name = "NvStrapsS3Probe"
 path = "src/main.rs"
 test = false
 bench = false
 
-[dependencies]
-nvstraps-core = { path = "../nvstraps-core", default-features = false }
-
 [target.'cfg(target_os = "uefi")'.dependencies]
-uefi = { version = "0.39.0" }
+uefi = "0.39.0"

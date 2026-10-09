@@ -10,16 +10,21 @@ on:
 permissions:
   contents: read
 
+# Master pushes queue behind each other so two releases never race for the same version.
 concurrency:
-  group: tauri-${{ github.workflow }}-${{ github.event_name == 'push' && github.run_id || github.ref }}
+  group: tauri-${{ github.event_name == 'push' && 'master-release' || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   scope:
-    name: Decide whether heavy CI is required
+    name: Decide whether heavy CI and a release are required
     runs-on: ubuntu-latest
     outputs:
       run-heavy: ${{ steps.scope.outputs.run-heavy }}
+      release: ${{ steps.release.outputs.release }}
+      release-level: ${{ steps.release.outputs.level }}
+      release-version: ${{ steps.release.outputs.version }}
+      release-tag: ${{ steps.release.outputs.tag }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -35,11 +40,19 @@ jobs:
           CI_SCOPE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           CI_SCOPE_TEXT: ${{ github.event.pull_request.title || github.event.head_commit.message || '' }}
         run: node tools/ci-scope.mjs
+      - id: release
+        name: Plan the release
+        env:
+          RELEASE_PLAN_EVENT_NAME: ${{ github.event_name }}
+          RELEASE_PLAN_REF: ${{ github.ref }}
+          RELEASE_PLAN_BASE_SHA: ${{ github.event.before }}
+          RELEASE_PLAN_HEAD_SHA: ${{ github.sha }}
+        run: node tools/release-plan.mjs
 
   frontend:
     name: Frontend and browser checks
     needs: scope
-    if: needs.scope.outputs.run-heavy == 'true' || github.event_name == 'push'
+    if: needs.scope.outputs.run-heavy == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -65,15 +78,20 @@ jobs:
             playwright-report/
             test-results/
           if-no-files-found: ignore
+          retention-days: 7
 
   native-windows:
-    name: Rust backend and Windows shell
-    needs: scope
-    if: needs.scope.outputs.run-heavy == 'true' || github.event_name == 'push'
+    name: Rust backend, Windows shell and release
+    needs: [scope, frontend]
+    if: needs.scope.outputs.run-heavy == 'true'
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -87,6 +105,9 @@ jobs:
           workspaces: . -> target
       - name: Install dependencies
         run: npm ci
+      - name: Write the release version into every manifest
+        if: needs.scope.outputs.release == 'true'
+        run: node tools/apply-version.mjs ${{ needs.scope.outputs.release-version }}
       - name: Enforce the Rust-only source boundary
         run: npm run check:riir
       - name: Build the Rust UEFI resource required by the Tauri manifest
@@ -115,42 +136,25 @@ jobs:
           $version = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
           & "$env:RUNNER_TEMP\InnoSetup7\ISCC.exe" /Qp "/DAppVersion=$version" "/DOutputDir=..\target\release" installer/NvStrapsReBar.iss
           if ($LASTEXITCODE -ne 0) { throw "ISCC failed with $LASTEXITCODE" }
-      - name: Upload native executable
-        uses: actions/upload-artifact@v7
-        with:
-          name: NvStrapsReBar-windows
-          path: |
-            target/release/NvStrapsReBar.exe
-            target/release/NvStrapsReBar.ffs
-            target/release/NvStrapsReBar-windows-x64-setup.exe
-          if-no-files-found: error
-
-  prerelease:
-    name: Publish Windows pre-release
-    needs: [frontend, native-windows]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-      - uses: actions/download-artifact@v8
-        with:
-          name: NvStrapsReBar-windows
-          path: release-files
-      - name: Package portable Windows application
-        working-directory: release-files
+      - name: Package the release files
+        if: needs.scope.outputs.release == 'true'
+        shell: pwsh
         run: |
-          test -s NvStrapsReBar.exe
-          test -s NvStrapsReBar.ffs
-          test -s NvStrapsReBar-windows-x64-setup.exe
-          zip NvStrapsReBar-windows-x64.zip NvStrapsReBar.exe NvStrapsReBar.ffs
-          sha256sum NvStrapsReBar-windows-x64.zip NvStrapsReBar-windows-x64-setup.exe > SHA256SUMS.txt
-      - name: Publish this commit as a pre-release
+          New-Item -ItemType Directory -Force release-files | Out-Null
+          foreach ($file in 'NvStrapsReBar.exe', 'NvStrapsReBar.ffs', 'NvStrapsReBar-windows-x64-setup.exe') {
+            if ((Get-Item "target/release/$file").Length -eq 0) { throw "$file is empty" }
+          }
+          Compress-Archive -Path target/release/NvStrapsReBar.exe, target/release/NvStrapsReBar.ffs -DestinationPath release-files/NvStrapsReBar-windows-x64.zip -Force
+          Copy-Item target/release/NvStrapsReBar-windows-x64-setup.exe release-files/
+          $sums = foreach ($file in 'NvStrapsReBar-windows-x64.zip', 'NvStrapsReBar-windows-x64-setup.exe') {
+            "$((Get-FileHash "release-files/$file" -Algorithm SHA256).Hash.ToLower())  $file"
+          }
+          [System.IO.File]::WriteAllText("$PWD/release-files/SHA256SUMS.txt", ($sums -join "`n") + "`n")
+          Get-Content release-files/SHA256SUMS.txt
+      - name: Commit the version, push master and publish the release
+        if: needs.scope.outputs.release == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node tools/publish-prerelease.mjs
+          RELEASE_VERSION: ${{ needs.scope.outputs.release-version }}
+          RELEASE_LEVEL: ${{ needs.scope.outputs.release-level }}
+        run: node tools/publish-release.mjs

@@ -53,11 +53,21 @@ GTX 1000(Pascal) 이하는 지원하지 않습니다. BAR가 바뀌면 Windows�
 
 ## 지금 상태
 
-Rust 드라이버와 펌웨어 도구는 호스트 테스트와 QEMU/OVMF 부팅 테스트를 통과했지만, 실제
-컴퓨터에서 플래시까지 끝까지 해 본 확인은 아직 없습니다. BIOS 플래시가 잘못되면 보드가 안
-켜질 수 있으니, 복구 방법이 실제로 되는지 확인한 다음에만 진행하세요. MSI PRO Z690-A
-DDR4(MS-7D25)는 문서에 있는 M-FLASH 설치와 Flash BIOS Button 복구 방법을 앱이 미리 채워
-주고, 다른 보드에서는 직접 고릅니다.
+드라이버를 실제 보드에 플래시해 돌린 결과가 있습니다. MSI MAG B660 TOMAHAWK WIFI DDR5(MS-7D41,
+BIOS 7D41vAO)와 RTX 2060 12GB에서, 이 프로젝트의 주입 도구로 만든 이미지가 MSI의 M-FLASH로
+그대로 들어갔고, 앱으로 드라이버를 설정한 뒤 앱과 GPU-Z 모두 BAR1 16 GiB를 보고했습니다
+([하드웨어 보고](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/39)). 게임마다 켜기
+스위치는 유지 관리자의 PC(RTX 2080 SUPER, 드라이버 616.64)에서 실제 NVIDIA 드라이버로
+확인했습니다. 넓어진 BAR를 유지한 채 절전에서 깨어나는 것은 실제 보드에서 아직 보고되지
+않았습니다.
+
+다른 보드는 여전히 각자의 첫 시도입니다. BIOS 플래시가 잘못되면 보드가 안 켜질 수 있으니, 복구
+방법이 실제로 되는지 확인한 다음에만 진행하세요. MSI PRO Z690-A DDR4(MS-7D25)는 문서에 있는
+M-FLASH 설치와 Flash BIOS Button 복구 방법을 앱이 미리 채워 주고, 다른 보드에서는 직접 고릅니다.
+
+앱은 Windows x64에서만 돕니다. NVIDIA 드라이버의 게임별 설정은 Windows 드라이버에만 있고, macOS에는
+Turing GPU용 NVIDIA 드라이버 자체가 없습니다. UEFI 드라이버는 그 뒤에 어떤 운영체제가 부팅되든
+상관하지 않습니다.
 
 ## 결과 확인
 
@@ -104,13 +114,23 @@ npm run check:miri   # 먼저: rustup toolchain install nightly --component miri
 
 `npm run check:miri`는 호스트에서 돌릴 수 있는 계약 코드와 BAR1 MMIO 읽기·쓰기 코드를
 해석합니다. Windows FFI와 UEFI 프로토콜 경계는 컴파일, Clippy, 네이티브 테스트, 그리고 QEMU와
-OVMF가 있는 Linux에서 도는 `npm run test:qemu`(변수 저장소를 분리한 OVMF 사본으로 부팅)가
-맡습니다.
+OVMF가 있는 Linux에서 도는 `npm run test:qemu`가 맡습니다. 이 테스트는 변수 저장소를 분리한
+OVMF 사본으로 부팅해 드라이버를 설정하고, 가상 머신을 ACPI S3 절전과 복귀까지 통과시킵니다.
 
 설치 파일은 같은 두 파일을 Inno Setup 7로 감쌉니다. `npm run tauri:ci` 다음에
 `ISCC.exe installer\NvStrapsReBar.iss`를 실행하면 `target\installer\NvStrapsReBar-windows-x64-setup.exe`가
 나옵니다. 설치할 때 MIT 라이선스를 보여 주고 시작 메뉴 바로가기를 만들며, 바탕화면 바로가기는
 설치하는 사람이 고릅니다. CI는 이 파일을 포터블 ZIP과 함께 올립니다.
+
+릴리스는 자동입니다. 배포물에 들어가는 것(앱, UEFI 드라이버와 그 크레이트, 함께 묶이는 자산,
+의존성, 설치 파일)이 바뀐 `master` 푸시는 Linux 검사, Windows 빌드, Rust UEFI 검증, Miri가 모두
+통과하면 정식 릴리스가 됩니다. 문서, CI, 테스트, 테스트 도구만 바뀐 푸시는 아무것도 올리지
+않습니다. 수준은 변경 자체에서 정합니다. UEFI 드라이버나 그 공용 계약이 바뀌면 사용자가 다시
+플래시해야 하므로 minor, 그 밖의 프로그램 변경은 patch입니다. 커밋 제목의 `feat:`나 `minor:`
+접두어는 minor로, `major:`, `breaking:`, `feat!:`는 major로 올립니다. Windows 작업이 새 버전을 모든
+매니페스트에 써서 빌드하고, 그 버전 올림을 `github-actions[bot]`으로 `master`에 커밋한 뒤, 빌드
+결과를 붙여 태그를 **Latest** 릴리스로 올립니다. `docs/releases/v<버전>.md`가 있으면 그 글을
+노트로 쓰고, 없으면 자동 생성 노트를 씁니다. Actions 아티팩트 저장소는 거치지 않습니다.
 
 더 깊은 문서(영어):
 
@@ -126,6 +146,10 @@ OVMF가 있는 Linux에서 도는 `npm run test:qemu`(변수 저장소를 분리
 [ReBarUEFI](https://github.com/xCuri0/ReBarUEFI) 프로젝트, 그리고
 [envytools](https://github.com/envytools/envytools)와 @mupuf, @Xelafic의 연구 위에 서
 있습니다. 미리 준비해 둔 레거시 패치 목록은 출처와 해시를 그대로 지킵니다.
+
+이 프로젝트의 이미지를 처음으로 실제 보드에 플래시하고 설정한 뒤 16 GiB 결과를 해시와
+스크린샷까지 붙여 알려 주신 @lucianocerantonio2 님께 특별히 감사드립니다
+([이슈 #39](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/39)).
 
 ## 라이선스
 
