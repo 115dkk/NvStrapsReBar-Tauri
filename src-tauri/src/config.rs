@@ -278,7 +278,7 @@ pub(crate) fn validate_dxe_bar0(device: &GpuDevice) -> Result<(), DxeBar0Validat
         .checked_sub(device.bar0_base)
         .and_then(|size| size.checked_add(1))
         .ok_or(DxeBar0ValidationError::InvalidRange)?;
-    if device.bar0_base & 0xF != 0 || bar_size == 0 || device.bar0_base % bar_size != 0 {
+    if device.bar0_base & 0xF != 0 || bar_size == 0 || !device.bar0_base.is_multiple_of(bar_size) {
         return Err(DxeBar0ValidationError::NotNaturallyAligned);
     }
     Ok(())

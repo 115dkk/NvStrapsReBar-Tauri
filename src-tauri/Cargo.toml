@@ -4,7 +4,7 @@ version = "1.0.0"
 description = "Tauri configuration utility for NvStrapsReBar"
 authors = ["NvStrapsReBar contributors"]
 edition = "2024"
-rust-version = "1.85"
+rust-version.workspace = true
 license = "MIT"
 
 [lib]
