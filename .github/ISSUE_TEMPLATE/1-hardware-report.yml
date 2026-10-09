@@ -9,7 +9,7 @@ body:
 
         Every board is its own trial. Before flashing, check [Flasher compatibility](https://github.com/115dkk/NvStrapsReBar-Tauri/blob/master/docs/FLASHER_COMPATIBILITY.md) and keep a recovery route ready.
 
-        Leave out serial numbers, the Windows product key and anything else that identifies you. 한국어로 작성해도 됩니다.
+        Leave out serial numbers, the Windows product key and anything else that identifies you. Do not attach a BIOS image: a dump read with a programmer holds the board's serial number and MAC address, and an official image may not be yours to share ([SECURITY.md](https://github.com/115dkk/NvStrapsReBar-Tauri/blob/master/SECURITY.md)). The SHA-256 hashes below are enough. 한국어로 작성해도 됩니다.
   - type: dropdown
     id: outcome
     attributes:
@@ -62,13 +62,34 @@ body:
     attributes:
       label: Windows version
       placeholder: "Windows 11 24H2 (26100.4061)"
+  - type: dropdown
+    id: board-type
+    attributes:
+      label: Board type
+      description: The first question the app asks. Does BIOS setup have a Re-Size BAR item?
+      options:
+        - "Has Re-Size BAR"
+        - "Only Above 4G Decoding: an older board, extra patches may apply"
+        - "Not sure"
+    validations:
+      required: true
+  - type: checkboxes
+    id: bios-settings
+    attributes:
+      label: BIOS settings
+      description: Look in BIOS setup itself after flashing, not in GPU-Z or Windows, because flashing a new image often resets these settings. Leave a box empty if the setting was different or you did not check it.
+      options:
+        - label: Above 4G Decoding is on
+        - label: CSM is off
+        - label: Re-Size BAR is on (boards that have the item)
   - type: textarea
     id: artifact
     attributes:
       label: What you flashed
-      description: Which release you used, how the image was prepared, and the hashes if you have them.
-      placeholder: |
-        - App release: 1.0.1, guided installation (or: NvStrapsReBar.ffs from 1.0.1 with `nvstraps-ffs inject`)
+      description: Fill in each line. For an older board, list the patches you picked on the extra patches screen (for example Haswell Above 4G), or write none.
+      value: |
+        - App release and route (guided installation, or NvStrapsReBar.ffs with `nvstraps-ffs inject`):
+        - Extra patches (older boards only):
         - Original image SHA-256:
         - Flashed image SHA-256:
         - Cross-check, if any (UEFITool, UEFIExtract):
@@ -94,13 +115,13 @@ body:
     id: results
     attributes:
       label: Results
-      description: Go step by step. Copy the driver status from the app as it is shown.
-      placeholder: |
-        - First boot after flashing: POST OK / no POST
-        - Driver status before configuring: Unconfigured
-        - BAR Settings saved: expansion on, GPU size Automatic, other options
+      description: Fill in each line, step by step. Copy the driver status from the app as it is shown.
+      value: |
+        - First boot after flashing (POST OK / no POST):
+        - Driver status before configuring:
+        - BAR Settings saved (expansion, GPU size, other options):
         - Driver status after the restart:
-        - BAR1 size: app says ..., GPU-Z says ..., nvidia-smi says ...
+        - BAR1 size (app, GPU-Z, nvidia-smi):
     validations:
       required: true
   - type: dropdown
@@ -130,4 +151,14 @@ body:
     id: extra
     attributes:
       label: Anything else
-      description: Screenshots (GPU-Z, the app), logs, and the steps you took to recover if something went wrong.
+      description: >-
+        Screenshots (GPU-Z, the app), logs, and the steps you took to recover if something went wrong.
+        The app writes its logs to `%LOCALAPPDATA%\io.github.nvstrapsrebar.desktop\logs`:
+        `panic.log` if the app crashed, `driver-settings.log` for the per-game switches.
+  - type: checkboxes
+    id: credit
+    attributes:
+      label: Credit
+      description: Optional. The README thanks the people whose reports moved the project forward.
+      options:
+        - label: You may thank me by my GitHub name in the README
