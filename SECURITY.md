@@ -23,9 +23,9 @@ scope; report those to the vendor.
 
 Only the newest stable release, the one GitHub marks as **Latest** on the
 [releases page](https://github.com/115dkk/NvStrapsReBar-Tauri/releases),
-gets security fixes. The pre-releases published for every `master` commit are
-development builds and are not supported. Update first and check whether the
-problem is still there.
+gets security fixes. Older releases and the pre-releases published before
+1.0.0 are not supported. Update first and check whether the problem is still
+there.
 
 ## Reporting a vulnerability
 

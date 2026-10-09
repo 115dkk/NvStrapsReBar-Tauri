@@ -126,11 +126,17 @@ The installer wraps the same two files with Inno Setup 7. After `npm run tauri:c
 which shows the MIT license, adds a Start menu shortcut and offers a desktop shortcut. CI publishes
 it next to the portable ZIP.
 
-Every `master` commit is published as a pre-release for testing. A stable release is a `v<version>`
-tag on a `master` commit: bump the version in `package.json`, `package-lock.json`,
-`src-tauri/tauri.conf.json` and the Cargo manifests, write `docs/releases/v<version>.md`, merge, and
-push the tag once that commit's CI is green. The workflow builds the tagged commit and publishes it
-as the **Latest** release with those notes.
+Releases are automatic. Every push to `master` that changes what ships (the app, the UEFI driver and
+its crates, bundled assets, dependencies, the installer) becomes a stable release once the Linux
+checks, the Windows build, the Rust UEFI validation and Miri have all passed; pushes that only touch
+documentation, CI, tests or test tooling release nothing. The workflow picks the level from the
+change itself: a change to the UEFI driver or its shared contract is a minor release, because users
+must re-flash to get it, and any other program change is a patch. A commit subject can raise it with
+a `feat:` / `minor:` prefix (minor) or `major:` / `breaking:` / `feat!:` (major). The Windows job
+writes the new version into every manifest, builds with it, commits that bump to `master` as
+`github-actions[bot]`, and publishes the tag as the **Latest** release with the build attached,
+using `docs/releases/v<version>.md` as notes when that file exists and generated notes otherwise.
+Nothing goes through the Actions artifact store.
 
 Deeper documentation:
 
@@ -146,6 +152,10 @@ This work builds on the original C/C++
 [ReBarUEFI](https://github.com/xCuri0/ReBarUEFI) project it grew from, and findings from
 [envytools](https://github.com/envytools/envytools), @mupuf, and @Xelafic. The pinned legacy
 patch catalogs retain their upstream provenance and hashes.
+
+Special thanks to @lucianocerantonio2, who flashed the first physical board with this project's
+image, configured it, and reported the 16 GiB result with hashes and screenshots
+([issue #39](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/39)).
 
 ## Licenses
 

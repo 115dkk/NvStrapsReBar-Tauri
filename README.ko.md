@@ -122,11 +122,15 @@ OVMF 사본으로 부팅해 드라이버를 설정하고, 가상 머신을 ACPI 
 나옵니다. 설치할 때 MIT 라이선스를 보여 주고 시작 메뉴 바로가기를 만들며, 바탕화면 바로가기는
 설치하는 사람이 고릅니다. CI는 이 파일을 포터블 ZIP과 함께 올립니다.
 
-`master`의 모든 커밋은 시험용 사전 배포판(pre-release)으로 올라갑니다. 정식 릴리스는 `master`
-커밋에 붙인 `v<버전>` 태그입니다. `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json`,
-Cargo 매니페스트의 버전을 올리고 `docs/releases/v<버전>.md`에 릴리스 노트를 쓴 뒤 병합하고, 그
-커밋의 CI가 통과하면 태그를 올립니다. 워크플로가 태그가 가리키는 커밋을 빌드해 그 노트와 함께
-**Latest** 릴리스로 올립니다.
+릴리스는 자동입니다. 배포물에 들어가는 것(앱, UEFI 드라이버와 그 크레이트, 함께 묶이는 자산,
+의존성, 설치 파일)이 바뀐 `master` 푸시는 Linux 검사, Windows 빌드, Rust UEFI 검증, Miri가 모두
+통과하면 정식 릴리스가 됩니다. 문서, CI, 테스트, 테스트 도구만 바뀐 푸시는 아무것도 올리지
+않습니다. 수준은 변경 자체에서 정합니다. UEFI 드라이버나 그 공용 계약이 바뀌면 사용자가 다시
+플래시해야 하므로 minor, 그 밖의 프로그램 변경은 patch입니다. 커밋 제목의 `feat:`나 `minor:`
+접두어는 minor로, `major:`, `breaking:`, `feat!:`는 major로 올립니다. Windows 작업이 새 버전을 모든
+매니페스트에 써서 빌드하고, 그 버전 올림을 `github-actions[bot]`으로 `master`에 커밋한 뒤, 빌드
+결과를 붙여 태그를 **Latest** 릴리스로 올립니다. `docs/releases/v<버전>.md`가 있으면 그 글을
+노트로 쓰고, 없으면 자동 생성 노트를 씁니다. Actions 아티팩트 저장소는 거치지 않습니다.
 
 더 깊은 문서(영어):
 
@@ -142,6 +146,10 @@ Cargo 매니페스트의 버전을 올리고 `docs/releases/v<버전>.md`에 릴
 [ReBarUEFI](https://github.com/xCuri0/ReBarUEFI) 프로젝트, 그리고
 [envytools](https://github.com/envytools/envytools)와 @mupuf, @Xelafic의 연구 위에 서
 있습니다. 미리 준비해 둔 레거시 패치 목록은 출처와 해시를 그대로 지킵니다.
+
+이 프로젝트의 이미지를 처음으로 실제 보드에 플래시하고 설정한 뒤 16 GiB 결과를 해시와
+스크린샷까지 붙여 알려 주신 @lucianocerantonio2 님께 특별히 감사드립니다
+([이슈 #39](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/39)).
 
 ## 라이선스
 
