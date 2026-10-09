@@ -8,7 +8,7 @@
 Turing GPU는 하드웨어로는 Resizable BAR를 지원하지만 NVIDIA가 끝내 켜 주지 않았고, 오래된
 메인보드에는 BIOS 설정에 ReBAR 항목 자체가 없습니다. NvStrapsReBar가 이 틈을 메웁니다. 부팅
 때 Windows보다 먼저 실행되는 작은 UEFI 드라이버가 GPU의 BAR(CPU가 VRAM을 읽고 쓸 때
-지나가는 메모리 창)를 기본 256 MiB에서 VRAM 전체 크기까지 넓혀 줍니다. 이 저장소는 원본
+거치는 주소 영역)를 기본 256 MiB에서 VRAM 전체 크기까지 넓혀 줍니다. 이 저장소는 원본
 C/C++ [NvStrapsReBar](https://github.com/terminatorul/NvStrapsReBar)를 안정판 Rust로 다시 만든
 것으로, BIOS 이미지를 준비하고 드라이버 설정을 고치는 Rust/Tauri Windows 앱까지 함께 들어
 있습니다.
