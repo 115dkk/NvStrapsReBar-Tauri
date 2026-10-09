@@ -196,6 +196,42 @@ export function manifestVersion(readFile = (path) => readFileSync(path, "utf8"))
   return versions.package;
 }
 
+/** npm scripts that only check or test the code. Changing one changes nothing that ships. */
+const CHECK_SCRIPT = /^(?:check|test|lint|typecheck)(?::|$)/;
+
+function canonical(value) {
+  if (Array.isArray(value)) {
+    return value.map(canonical);
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(value[key])]));
+  }
+  return value;
+}
+
+function withoutCheckScripts(manifest) {
+  const scripts = Object.fromEntries(Object.entries(manifest.scripts ?? {})
+    .filter(([name]) => !CHECK_SCRIPT.test(name)));
+  return canonical({ ...manifest, scripts });
+}
+
+/**
+ * Whether a package.json change can reach what ships. An edit limited to check, test, lint or
+ * typecheck scripts cannot; dependencies, the version, build scripts and every other field can.
+ * A side that is missing or does not parse counts as shipping.
+ */
+export function packageManifestShipsChange(before, after) {
+  if (before == null || after == null) {
+    return true;
+  }
+  try {
+    return JSON.stringify(withoutCheckScripts(JSON.parse(before)))
+      !== JSON.stringify(withoutCheckScripts(JSON.parse(after)));
+  } catch {
+    return true;
+  }
+}
+
 function git(args) {
   return execFileSync("git", args, { encoding: "utf8" }).trim();
 }
@@ -227,6 +263,30 @@ function changedSince(range, head) {
   }
 }
 
+function fileAt(revision, file) {
+  if (!revision) {
+    return null;
+  }
+  try {
+    return execFileSync("git", ["show", `${revision}:${file}`], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+  } catch {
+    return null;
+  }
+}
+
+/** The changed files minus a package.json whose edit cannot reach what ships. */
+function shippedChanges(files, range, head) {
+  if (!files.includes("package.json")) {
+    return files;
+  }
+  return packageManifestShipsChange(fileAt(range, "package.json"), fileAt(head, "package.json"))
+    ? files
+    : files.filter((file) => file !== "package.json");
+}
+
 function messagesSince(range, head) {
   const target = range ? `${range}..${head}` : head;
   const args = ["log", "--format=%B%x00", target];
@@ -251,7 +311,7 @@ export function run(environment = process.env) {
   const plan = planRelease({
     eventName: environment.RELEASE_PLAN_EVENT_NAME ?? "",
     ref: environment.RELEASE_PLAN_REF ?? "",
-    files: changedSince(range, head),
+    files: shippedChanges(changedSince(range, head), range, head),
     messages: messagesSince(range, head),
     latestTag,
     manifestVersion: manifestVersion(),

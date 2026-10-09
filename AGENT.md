@@ -123,7 +123,8 @@ authoritative. Keep RIIR, deployment automation, and physical-machine proof as s
   waits for it.
 - Releases are automatic and happen only from `master` pushes. `tools/release-plan.mjs` looks at
   everything since the last `v*` tag: documentation, CI, tests and test tooling (including
-  `crates/nvstraps-s3-probe`) release nothing; a change to `crates/nvstraps-uefi` or
+  `crates/nvstraps-s3-probe`) release nothing, and neither does a `package.json` edit limited to
+  `check`, `test`, `lint` or `typecheck` scripts; a change to `crates/nvstraps-uefi` or
   `crates/nvstraps-core` is a minor release because users must re-flash; any other program change
   is a patch; a commit subject prefixed `feat:`/`minor:` raises to minor and `major:`/`breaking:`/
   `feat!:` or a `BREAKING CHANGE:` footer raises to major. Before the first tag the manifests'
