@@ -2,12 +2,12 @@
 ; this installs the same two files side by side, because the app resolves NvStrapsReBar.ffs
 ; from its own directory.
 ;
-;   iscc /DAppVersion=0.1.0 installer\NvStrapsReBar.iss
+;   iscc /DAppVersion=1.0.0 installer\NvStrapsReBar.iss
 ;
-; AppVersion defaults to 0.1.0 (CI passes the Tauri version); SourceDir defaults to target\release.
+; AppVersion defaults to 1.0.0 (CI passes the Tauri version); SourceDir defaults to target\release.
 
 #ifndef AppVersion
-  #define AppVersion "0.1.0"
+  #define AppVersion "1.0.0"
 #endif
 #ifndef SourceDir
   #define SourceDir "..\target\release"
