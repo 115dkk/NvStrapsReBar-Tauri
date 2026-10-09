@@ -1,0 +1,133 @@
+name: Hardware report
+description: Report a trial on a real motherboard, whether it worked or not.
+title: "Hardware report: <motherboard> + <GPU>: <works / fails>"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form after you flashed (or tried to flash) a board with the NvStrapsReBar driver. A failed trial is as useful as a working one: it tells the next owner of that board what to avoid. [Issue #39](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/39) is a complete example.
+
+        Every board is its own trial. Before flashing, check [Flasher compatibility](https://github.com/115dkk/NvStrapsReBar-Tauri/blob/master/docs/FLASHER_COMPATIBILITY.md) and keep a recovery route ready.
+
+        Leave out serial numbers, the Windows product key and anything else that identifies you. 한국어로 작성해도 됩니다.
+  - type: dropdown
+    id: outcome
+    attributes:
+      label: Outcome
+      options:
+        - "Works: BAR1 is larger than 256 MiB after configuring"
+        - "Partly works: details below"
+        - "The vendor flasher refused the image"
+        - "Flashed, but the PC did not POST and needed recovery"
+        - "Boots, but the driver status or the BAR1 size is wrong"
+        - "Not finished yet: I will update this issue"
+    validations:
+      required: true
+  - type: input
+    id: motherboard
+    attributes:
+      label: Motherboard
+      description: Model name as printed by the maker, plus the board ID if you know it.
+      placeholder: "MSI MAG B660 TOMAHAWK WIFI (DDR5), MS-7D41"
+    validations:
+      required: true
+  - type: input
+    id: bios
+    attributes:
+      label: BIOS version
+      description: Version, file name and date of the official image you started from.
+      placeholder: "7D41vAO (E7D41IMS.AO0, 2026-09-07)"
+    validations:
+      required: true
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU
+      description: Model and memory, plus the PCI IDs from Device Manager if you have them.
+      placeholder: "RTX 2060 12GB (TU106, 10DE:1F03, subsystem 10DE:1629)"
+    validations:
+      required: true
+  - type: input
+    id: cpu
+    attributes:
+      label: CPU
+      placeholder: "Intel Core i5-12400F"
+  - type: input
+    id: nvidia-driver
+    attributes:
+      label: NVIDIA driver version
+      placeholder: "610.62"
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: "Windows 11 24H2 (26100.4061)"
+  - type: textarea
+    id: artifact
+    attributes:
+      label: What you flashed
+      description: Which release you used, how the image was prepared, and the hashes if you have them.
+      placeholder: |
+        - App release: 1.0.1, guided installation (or: NvStrapsReBar.ffs from 1.0.1 with `nvstraps-ffs inject`)
+        - Original image SHA-256:
+        - Flashed image SHA-256:
+        - Cross-check, if any (UEFITool, UEFIExtract):
+  - type: dropdown
+    id: flash-route
+    attributes:
+      label: Flash route
+      options:
+        - "Flasher in the BIOS setup (M-FLASH, EZ Flash, Q-Flash and similar)"
+        - "USB BIOS Flashback button"
+        - "Vendor tool in Windows"
+        - "External SPI programmer (CH341A or similar)"
+        - "Other: details below"
+    validations:
+      required: true
+  - type: textarea
+    id: flash-details
+    attributes:
+      label: Flash details
+      description: What the flasher said, any warning it showed, and whether you needed recovery.
+      placeholder: "M-FLASH accepted the full image and finished without errors. No programmer needed."
+  - type: textarea
+    id: results
+    attributes:
+      label: Results
+      description: Go step by step. Copy the driver status from the app as it is shown.
+      placeholder: |
+        - First boot after flashing: POST OK / no POST
+        - Driver status before configuring: Unconfigured
+        - BAR Settings saved: expansion on, GPU size Automatic, other options
+        - Driver status after the restart:
+        - BAR1 size: app says ..., GPU-Z says ..., nvidia-smi says ...
+    validations:
+      required: true
+  - type: dropdown
+    id: sleep
+    attributes:
+      label: Sleep and resume (S3)
+      description: Put Windows to sleep, wake it, and read the BAR1 size again.
+      options:
+        - "Not tested"
+        - "Works: BAR1 is still expanded after waking"
+        - "Wakes, but BAR1 is back to 256 MiB"
+        - "Does not wake, or crashes on waking"
+        - "This PC has no S3 sleep"
+    validations:
+      required: true
+  - type: dropdown
+    id: per-game
+    attributes:
+      label: Per-game switches
+      options:
+        - "Not tested"
+        - "Work: the driver reads back the change"
+        - "Do not work: details below"
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Screenshots (GPU-Z, the app), logs, and the steps you took to recover if something went wrong.
