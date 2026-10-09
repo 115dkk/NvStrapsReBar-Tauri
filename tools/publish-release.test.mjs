@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import test from "node:test";
 import { existsSync, readFileSync } from "node:fs";
 
 import { manifestVersion } from "./release-plan.mjs";
-import { RELEASE_FILES, SIBLING_WORKFLOWS, releaseArguments, releaseIdentity, siblingState } from "./publish-release.mjs";
+import { RELEASE_FILES, SIBLING_WORKFLOWS, commandText, releaseArguments, releaseIdentity, siblingState } from "./publish-release.mjs";
 
 const env = { GITHUB_EVENT_NAME: "push", GITHUB_REF: "refs/heads/master",
   GITHUB_SHA: "b".repeat(40), GITHUB_REPOSITORY: "115dkk/NvStrapsReBar-Tauri", RELEASE_VERSION: "1.0.1" };
@@ -67,4 +68,11 @@ test("the workflow releases from the Windows job after the frontend job, without
   for (const upload of workflow.split("uses: actions/upload-artifact").slice(1)) {
     assert.match(upload.split("- name")[0], /retention-days: 7/);
   }
+});
+
+test("a command that prints straight to the log, like the version push, yields empty text", () => {
+  const inherited = execFileSync(process.execPath, ["-e", ""], { encoding: "utf8", stdio: "inherit" });
+  assert.equal(inherited, null);
+  assert.equal(commandText(inherited), "");
+  assert.equal(commandText("0123abcd\r\n"), "0123abcd");
 });

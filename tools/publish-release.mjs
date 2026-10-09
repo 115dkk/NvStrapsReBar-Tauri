@@ -81,8 +81,16 @@ function gh(args, options = {}) {
   return execFileSync("gh", args, { encoding: "utf8", ...options });
 }
 
+/**
+ * The text a command printed. A command run with `stdio: "inherit"` writes straight to the job log
+ * and execFileSync returns null for it, as the push of the version commit does.
+ */
+export function commandText(output) {
+  return typeof output === "string" ? output.trim() : "";
+}
+
 function git(args, options = {}) {
-  return execFileSync("git", args, { encoding: "utf8", ...options }).trim();
+  return commandText(execFileSync("git", args, { encoding: "utf8", ...options }));
 }
 
 async function waitForSiblings(sha, repo, { timeoutMs = 30 * 60_000, intervalMs = 30_000 } = {}) {
