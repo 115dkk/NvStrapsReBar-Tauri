@@ -114,6 +114,13 @@ authoritative. Keep RIIR, deployment automation, and physical-machine proof as s
   assets, legal notices, or any other path make the classifier fail closed and run every job.
 - `workflow_dispatch` always runs the complete CI floor. Do not use GitHub's native `[skip ci]`
   phrases because they can prevent required checks from registering at all.
+- The Tauri workflow's Documentation checks job runs on every event, heavy or not, and finishes in
+  seconds without `npm ci`: `npm run check:docs` requires every relative link and image in a
+  tracked Markdown file to point at a tracked file or directory and every issue form to have its
+  required keys, known field types and unique ids, and `npm run check:ci-scope` runs the CI,
+  documentation and release tooling tests. A documentation-only change therefore stays checked
+  while the build, lint and test jobs stop after scope classification. The Windows release job
+  waits for it.
 - Releases are automatic and happen only from `master` pushes. `tools/release-plan.mjs` looks at
   everything since the last `v*` tag: documentation, CI, tests and test tooling (including
   `crates/nvstraps-s3-probe`) release nothing; a change to `crates/nvstraps-uefi` or

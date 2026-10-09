@@ -53,12 +53,18 @@ test("the checked-in release notes for the manifest version start with the relea
   }
 });
 
-test("the workflow releases from the Windows job after the frontend job, without the artifact store", () => {
+test("the workflow releases from the Windows job after the docs and frontend jobs, without the artifact store", () => {
   const workflow = readFileSync(new URL("../.github/workflows/Tauri.yml", import.meta.url), "utf8");
   assert.ok(!workflow.includes("tags:"), "tag pushes no longer trigger releases");
   assert.ok(!workflow.includes("download-artifact"));
   assert.ok(!workflow.includes("NvStrapsReBar-windows\n"), "release files never go through the artifact store");
-  assert.match(workflow, /needs: \[scope, frontend\]/);
+  assert.match(workflow, /needs: \[scope, docs, frontend\]/);
+  const docs = workflow.split("\n  docs:\n")[1]?.split("\n\n  ")[0] ?? "";
+  assert.ok(docs, "a docs job exists");
+  assert.ok(!docs.includes("needs:") && !docs.includes("if:"), "the docs job runs on every event, heavy or not");
+  assert.match(docs, /npm run check:docs/);
+  assert.match(docs, /npm run check:ci-scope/);
+  assert.ok(!docs.includes("npm ci"), "the docs job needs no dependency install");
   assert.match(workflow, /node tools\/release-plan\.mjs/);
   assert.match(workflow, /node tools\/apply-version\.mjs \$\{\{ needs\.scope\.outputs\.release-version \}\}/);
   assert.match(workflow, /node tools\/publish-release\.mjs/);
