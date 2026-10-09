@@ -53,11 +53,21 @@ GTX 1000(Pascal) 이하는 지원하지 않습니다. BAR가 바뀌면 Windows�
 
 ## 지금 상태
 
-Rust 드라이버와 펌웨어 도구는 호스트 테스트와 QEMU/OVMF 부팅 테스트를 통과했지만, 실제
-컴퓨터에서 플래시까지 끝까지 해 본 확인은 아직 없습니다. BIOS 플래시가 잘못되면 보드가 안
-켜질 수 있으니, 복구 방법이 실제로 되는지 확인한 다음에만 진행하세요. MSI PRO Z690-A
-DDR4(MS-7D25)는 문서에 있는 M-FLASH 설치와 Flash BIOS Button 복구 방법을 앱이 미리 채워
-주고, 다른 보드에서는 직접 고릅니다.
+드라이버를 실제 보드에 플래시해 돌린 결과가 있습니다. MSI MAG B660 TOMAHAWK WIFI DDR5(MS-7D41,
+BIOS 7D41vAO)와 RTX 2060 12GB에서, 이 프로젝트의 주입 도구로 만든 이미지가 MSI의 M-FLASH로
+그대로 들어갔고, 앱으로 드라이버를 설정한 뒤 앱과 GPU-Z 모두 BAR1 16 GiB를 보고했습니다
+([하드웨어 보고](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/39)). 게임마다 켜기
+스위치는 유지 관리자의 PC(RTX 2080 SUPER, 드라이버 616.64)에서 실제 NVIDIA 드라이버로
+확인했습니다. 넓어진 BAR를 유지한 채 절전에서 깨어나는 것은 실제 보드에서 아직 보고되지
+않았습니다.
+
+다른 보드는 여전히 각자의 첫 시도입니다. BIOS 플래시가 잘못되면 보드가 안 켜질 수 있으니, 복구
+방법이 실제로 되는지 확인한 다음에만 진행하세요. MSI PRO Z690-A DDR4(MS-7D25)는 문서에 있는
+M-FLASH 설치와 Flash BIOS Button 복구 방법을 앱이 미리 채워 주고, 다른 보드에서는 직접 고릅니다.
+
+앱은 Windows x64에서만 돕니다. NVIDIA 드라이버의 게임별 설정은 Windows 드라이버에만 있고, macOS에는
+Turing GPU용 NVIDIA 드라이버 자체가 없습니다. UEFI 드라이버는 그 뒤에 어떤 운영체제가 부팅되든
+상관하지 않습니다.
 
 ## 결과 확인
 
@@ -104,13 +114,19 @@ npm run check:miri   # 먼저: rustup toolchain install nightly --component miri
 
 `npm run check:miri`는 호스트에서 돌릴 수 있는 계약 코드와 BAR1 MMIO 읽기·쓰기 코드를
 해석합니다. Windows FFI와 UEFI 프로토콜 경계는 컴파일, Clippy, 네이티브 테스트, 그리고 QEMU와
-OVMF가 있는 Linux에서 도는 `npm run test:qemu`(변수 저장소를 분리한 OVMF 사본으로 부팅)가
-맡습니다.
+OVMF가 있는 Linux에서 도는 `npm run test:qemu`가 맡습니다. 이 테스트는 변수 저장소를 분리한
+OVMF 사본으로 부팅해 드라이버를 설정하고, 가상 머신을 ACPI S3 절전과 복귀까지 통과시킵니다.
 
 설치 파일은 같은 두 파일을 Inno Setup 7로 감쌉니다. `npm run tauri:ci` 다음에
 `ISCC.exe installer\NvStrapsReBar.iss`를 실행하면 `target\installer\NvStrapsReBar-windows-x64-setup.exe`가
 나옵니다. 설치할 때 MIT 라이선스를 보여 주고 시작 메뉴 바로가기를 만들며, 바탕화면 바로가기는
 설치하는 사람이 고릅니다. CI는 이 파일을 포터블 ZIP과 함께 올립니다.
+
+`master`의 모든 커밋은 시험용 사전 배포판(pre-release)으로 올라갑니다. 정식 릴리스는 `master`
+커밋에 붙인 `v<버전>` 태그입니다. `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json`,
+Cargo 매니페스트의 버전을 올리고 `docs/releases/v<버전>.md`에 릴리스 노트를 쓴 뒤 병합하고, 그
+커밋의 CI가 통과하면 태그를 올립니다. 워크플로가 태그가 가리키는 커밋을 빌드해 그 노트와 함께
+**Latest** 릴리스로 올립니다.
 
 더 깊은 문서(영어):
 

@@ -118,6 +118,11 @@ authoritative. Keep RIIR, deployment automation, and physical-machine proof as s
   changes, to publish a portable Windows pre-release for that commit. Documentation-only PRs and
   the separate Miri/UEFI workflows retain the scope classifier. Pre-releases use unique tags per
   run attempt and never replace an existing release or the stable Latest release.
+- A stable release is a `v<version>` tag on a `master` commit. The same workflow builds the tagged
+  commit and `tools/publish-release.mjs` publishes it as the Latest release, after checking that
+  the tag, `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml` agree on the
+  version and that `docs/releases/v<version>.md` holds its notes. Bump every version and write
+  the notes in the PR; push the tag only after that commit's `master` CI is green.
 
 Use the smallest relevant subset while iterating, then the full applicable floor before handoff:
 
@@ -135,7 +140,10 @@ host contracts and the real volatile BAR1 MMIO read/write boundary. Target-only 
 callbacks and Windows system FFI remain covered by compilation, Clippy, native tests, and QEMU;
 Miri cannot execute those external firmware or operating-system calls.
 
-`npm run test:qemu` is the isolated Linux/OVMF smoke path when QEMU and OVMF are available. The
+`npm run test:qemu` is the isolated Linux/OVMF smoke path when QEMU and OVMF are available: four
+boots that prove dispatch, the configured host-bridge hook, S3 Save State protocol access, and a
+real ACPI S3 suspend/resume cycle driven by the `nvstraps-s3-probe` UEFI application. QEMU has no
+NVIDIA GPU, so none of it proves a BAR change; that proof stays with physical trials. The
 ignored Rust smoke tests require real NVIDIA hardware or network access and must remain explicit,
 opt-in evidence rather than silently joining ordinary validation. `nvidia_profiles::on_pc` runs the
 driver settings handoff against the installed driver; its write tests change real driver profiles,

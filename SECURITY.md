@@ -21,10 +21,11 @@ scope; report those to the vendor.
 
 ## Supported versions
 
-Only the newest
-[Windows pre-release](https://github.com/115dkk/NvStrapsReBar-Tauri/releases)
-gets security fixes. Update first and check whether the problem is still
-there.
+Only the newest stable release, the one GitHub marks as **Latest** on the
+[releases page](https://github.com/115dkk/NvStrapsReBar-Tauri/releases),
+gets security fixes. The pre-releases published for every `master` commit are
+development builds and are not supported. Update first and check whether the
+problem is still there.
 
 ## Reporting a vulnerability
 
