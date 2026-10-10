@@ -69,7 +69,7 @@ test("runs heavy CI when code or bundled assets are mixed in", () => {
     ["README.md", ".github/workflows/Tauri.yml"],
   ]) {
     const result = classifyCiScope({
-      eventName: "push",
+      eventName: "pull_request",
       text: "docs: update supporting material",
       files,
     });

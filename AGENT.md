@@ -106,9 +106,9 @@ authoritative. Keep RIIR, deployment automation, and physical-machine proof as s
 
 ### Documentation-only CI scope
 
-- Prefix a documentation-only PR title or the final `master` commit message with `doc:`, `docs:`,
-  `documentation:`, `gallery:`, `capture:`, or `screenshot:` (plural forms and bracketed markers
-  are also accepted) when the heavy build and lint jobs should stop after scope classification.
+- Prefix a documentation-only PR title with `doc:`, `docs:`, `documentation:`, `gallery:`,
+  `capture:`, or `screenshot:` (plural forms and bracketed markers are also accepted) when the
+  heavy build and lint jobs should stop after scope classification.
 - The marker is only a request. Heavy CI is skipped only when every changed path is a recognized
   repository document, issue template, or asset under `docs/`; code, workflow, bundled/public
   assets, legal notices, or any other path make the classifier fail closed and run every job.
