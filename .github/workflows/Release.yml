@@ -1,0 +1,103 @@
+name: Release
+
+# A master push runs no tests again. The pull request that was merged as the push already ran the
+# validation workflows, and tools/release-gate.mjs releases only a tree those runs tested.
+on:
+  push:
+    branches: ["master"]
+
+permissions:
+  contents: read
+
+# Master pushes queue behind each other so two releases never race for the same version.
+concurrency:
+  group: master-release
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Plan the release and check its pull request
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    outputs:
+      release: ${{ steps.release.outputs.release }}
+      release-level: ${{ steps.release.outputs.level }}
+      release-version: ${{ steps.release.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - id: release
+        name: Plan the release
+        env:
+          RELEASE_PLAN_EVENT_NAME: ${{ github.event_name }}
+          RELEASE_PLAN_REF: ${{ github.ref }}
+          RELEASE_PLAN_BASE_SHA: ${{ github.event.before }}
+          RELEASE_PLAN_HEAD_SHA: ${{ github.sha }}
+        run: node tools/release-plan.mjs
+      - name: Require the merged pull request's checks for this tree
+        if: steps.release.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/release-gate.mjs
+
+  release:
+    name: Build and publish the release
+    needs: plan
+    if: needs.plan.outputs.release == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-uefi
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+      - name: Install dependencies
+        run: npm ci
+      - name: Write the release version into every manifest
+        run: node tools/apply-version.mjs ${{ needs.plan.outputs.release-version }}
+      - name: Build the Rust UEFI resource required by the Tauri manifest
+        run: npm run build:firmware
+      - name: Build native application
+        run: npm run tauri:ci
+      - name: Build the installer
+        shell: pwsh
+        run: ./scripts/build-installer.ps1
+      - name: Package the release files
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release-files | Out-Null
+          foreach ($file in 'NvStrapsReBar.exe', 'NvStrapsReBar.ffs', 'NvStrapsReBar-windows-x64-setup.exe') {
+            if ((Get-Item "target/release/$file").Length -eq 0) { throw "$file is empty" }
+          }
+          Compress-Archive -Path target/release/NvStrapsReBar.exe, target/release/NvStrapsReBar.ffs -DestinationPath release-files/NvStrapsReBar-windows-x64.zip -Force
+          Copy-Item target/release/NvStrapsReBar-windows-x64-setup.exe release-files/
+          $sums = foreach ($file in 'NvStrapsReBar-windows-x64.zip', 'NvStrapsReBar-windows-x64-setup.exe') {
+            "$((Get-FileHash "release-files/$file" -Algorithm SHA256).Hash.ToLower())  $file"
+          }
+          [System.IO.File]::WriteAllText("$PWD/release-files/SHA256SUMS.txt", ($sums -join "`n") + "`n")
+          Get-Content release-files/SHA256SUMS.txt
+      - name: Commit the version, push master and publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.plan.outputs.release-version }}
+          RELEASE_LEVEL: ${{ needs.plan.outputs.release-level }}
+        run: node tools/publish-release.mjs

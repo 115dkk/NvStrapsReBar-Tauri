@@ -126,10 +126,11 @@ The installer wraps the same two files with Inno Setup 7. After `npm run tauri:c
 which shows the MIT license, adds a Start menu shortcut and offers a desktop shortcut. CI publishes
 it next to the portable ZIP.
 
-Releases are automatic. Every push to `master` that changes what ships (the app, the UEFI driver and
-its crates, bundled assets, dependencies, the installer) becomes a stable release once the Linux
-checks, the Windows build, the Rust UEFI validation and Miri have all passed; pushes that only touch
-documentation, CI, tests or test tooling release nothing. The workflow picks the level from the
+Releases are automatic. The checks (the Linux and Windows builds and tests, the Rust UEFI validation
+and Miri) run on pull requests, not again on `master`. Every merge into `master` that changes what
+ships (the app, the UEFI driver and its crates, bundled assets, dependencies, the installer) becomes
+a stable release when its pull request passed those checks on exactly the tree that was merged;
+merges that only touch documentation, CI, tests or test tooling release nothing. The workflow picks the level from the
 change itself: a change to the UEFI driver or its shared contract is a minor release, because users
 must re-flash to get it, and any other program change is a patch. A commit subject can raise it with
 a `feat:` / `minor:` prefix (minor) or `major:` / `breaking:` / `feat!:` (major). The Windows job
