@@ -104,8 +104,7 @@ export class FirmwareDeploymentActions {
                                 );
                         if (
                                 preview.profileId !== plan.profileId ||
-                                preview.activeStep !== active.id ||
-                                !preview.confirmationToken
+                                preview.activeStep !== active.id
                         )
                                 throw new Error(
                                         "The deployment plan changed while the restart preview was loading.",
@@ -152,18 +151,10 @@ export class FirmwareDeploymentActions {
                                 );
                         // Confirming the restart dialog is the explicit
                         // unsaved-work acknowledgement the backend requires.
-                        const receipt =
-                                await this.runtime.adapter.rebootToFirmwareSetup(
-                                        preview,
-                                        true,
-                                );
-                        if (
-                                receipt.profileId !== preview.profileId ||
-                                receipt.accepted !== true
-                        )
-                                throw new Error(
-                                        "The firmware restart request returned an invalid acceptance receipt.",
-                                );
+                        await this.runtime.adapter.rebootToFirmwareSetup(
+                                preview,
+                                true,
+                        );
                         tx.success(
                                 message("ui.restartingToFirmwareSetup"),
                         );
