@@ -7,16 +7,15 @@ import { manifestVersion } from "./release-plan.mjs";
 /**
  * Publishes the stable release for a master push, from the Windows job that built it.
  *
- * It waits for the sibling workflows of the same commit to pass, commits the version bump that
- * `tools/apply-version.mjs` wrote (if anything changed), pushes that commit to master, and creates
- * the GitHub release as Latest with the built files attached. Nothing goes through the Actions
+ * `tools/release-gate.mjs` has already tied the push to the pull request whose checks tested this
+ * tree. This commits the version bump that `tools/apply-version.mjs` wrote (if anything changed),
+ * pushes that commit to master, and creates the GitHub release as Latest with the built files
+ * attached. Nothing goes through the Actions
  * artifact store. A push made with the workflow token starts no new workflow run, so the bump
  * commit does not release itself.
  */
 
 const SEMVER = /^\d+\.\d+\.\d+$/;
-/** The other workflows this push starts; the release needs every one of them green. */
-export const SIBLING_WORKFLOWS = ["Rust UEFI validation", "Miri"];
 export const RELEASE_FILES = [
   "release-files/NvStrapsReBar-windows-x64.zip",
   "release-files/NvStrapsReBar-windows-x64-setup.exe",
@@ -54,29 +53,6 @@ export function releaseArguments({ version, tag, repo }, { target, notesFile }) 
   return args;
 }
 
-/**
- * Reduces `gh run list` rows for one commit to the state of the sibling workflows:
- * "success" when every sibling has a successful completed run, "failed" when any run concluded
- * otherwise, "pending" while a sibling has not finished or has not appeared yet.
- */
-export function siblingState(runs, siblings = SIBLING_WORKFLOWS) {
-  let pending = false;
-  for (const workflow of siblings) {
-    const rows = runs.filter((run) => run.workflowName === workflow);
-    if (rows.length === 0) {
-      pending = true;
-      continue;
-    }
-    if (rows.some((run) => run.status === "completed" && run.conclusion !== "success" && run.conclusion !== "skipped")) {
-      return { state: "failed", workflow };
-    }
-    if (!rows.some((run) => run.status === "completed")) {
-      pending = true;
-    }
-  }
-  return { state: pending ? "pending" : "success" };
-}
-
 function gh(args, options = {}) {
   return execFileSync("gh", args, { encoding: "utf8", ...options });
 }
@@ -91,26 +67,6 @@ export function commandText(output) {
 
 function git(args, options = {}) {
   return commandText(execFileSync("git", args, { encoding: "utf8", ...options }));
-}
-
-async function waitForSiblings(sha, repo, { timeoutMs = 30 * 60_000, intervalMs = 30_000 } = {}) {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    const runs = JSON.parse(gh(["run", "list", "--repo", repo, "--commit", sha, "--limit", "50",
-      "--json", "workflowName,status,conclusion,databaseId"]));
-    const result = siblingState(runs);
-    if (result.state === "success") {
-      return;
-    }
-    if (result.state === "failed") {
-      throw new Error(`${result.workflow} did not pass for ${sha}; not releasing.`);
-    }
-    if (Date.now() >= deadline) {
-      throw new Error(`Timed out waiting for ${SIBLING_WORKFLOWS.join(" and ")} on ${sha}.`);
-    }
-    console.log(`Waiting for ${SIBLING_WORKFLOWS.join(" and ")} to finish for ${sha}...`);
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
-  }
 }
 
 /** The files tools/apply-version.mjs may have rewritten, and nothing else the build touched. */
@@ -160,7 +116,6 @@ export async function main(env = process.env) {
       throw new Error(`Release file is empty or missing: ${file}`);
     }
   }
-  await waitForSiblings(identity.sha, identity.repo);
   commitVersionBump(identity.tag);
   const target = git(["rev-parse", "HEAD"]);
   const notesFile = `docs/releases/${identity.tag}.md`;

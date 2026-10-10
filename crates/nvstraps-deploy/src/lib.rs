@@ -1171,6 +1171,10 @@ impl DeploymentPlan {
                             actual: evidence.kind,
                         });
                     }
+                    // Deserialization skips StepEvidence::new, so stored evidence must rebuild to itself.
+                    if StepEvidence::new(evidence.kind, evidence.value.as_str())? != *evidence {
+                        return Err(PlanError::EvidenceValueMismatch(step.id));
+                    }
                     self.validate_evidence(step.id, evidence)?;
                 }
                 StepState::Completed => return Err(PlanError::InvalidStepState),
@@ -2323,6 +2327,47 @@ mod tests {
         assert!(matches!(
             tampered.validate(),
             Err(ProfileError::ProfileIdMismatch)
+        ));
+    }
+
+    #[test]
+    fn deserialized_evidence_must_be_what_step_evidence_new_builds() {
+        let machine = profile(BoardPath::NativeResizableBar);
+        let mut plan = DeploymentPlan::for_profile(&machine).unwrap();
+        plan.complete_with_value(StepId::VerifyProfile, machine.profile_id.clone())
+            .unwrap();
+        plan.complete_with_value(
+            StepId::ConfirmRecovery,
+            machine.recovery.method.evidence_value(),
+        )
+        .unwrap();
+        plan.complete_with_value(
+            StepId::PreserveOriginalFirmware,
+            machine.original_firmware.sha256.to_string(),
+        )
+        .unwrap();
+        plan.complete_with_value(StepId::PrepareRustDriver, "ab".repeat(32))
+            .unwrap();
+        plan.validate_for(&machine).unwrap();
+
+        let driver = plan
+            .steps
+            .iter()
+            .position(|step| step.id == StepId::PrepareRustDriver)
+            .unwrap();
+        let with_value = |value: &str| {
+            let mut tampered = plan.clone();
+            tampered.steps[driver].evidence.as_mut().unwrap().value = value.into();
+            tampered.validate_for(&machine)
+        };
+        assert!(matches!(with_value(""), Err(PlanError::MissingEvidence)));
+        assert!(matches!(
+            with_value("not-a-digest"),
+            Err(PlanError::MalformedDigest(EvidenceKind::RustDriverSha256))
+        ));
+        assert!(matches!(
+            with_value(&format!(" {} ", "ab".repeat(32))),
+            Err(PlanError::EvidenceValueMismatch(StepId::PrepareRustDriver))
         ));
     }
 

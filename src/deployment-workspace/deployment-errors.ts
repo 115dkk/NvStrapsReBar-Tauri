@@ -14,30 +14,9 @@ const firmwareInjectionDiagnostic = (
 ): FirmwareInjectionDiagnostic | null => {
         if (typeof error !== "object" || error === null) return null;
         const candidate = error as Partial<ApiError>;
-        if (
-                candidate.code !== "firmware_injection_failed" ||
-                typeof candidate.firmwareInjection !== "object" ||
-                candidate.firmwareInjection === null
-        )
-                return null;
-        return candidate.firmwareInjection as FirmwareInjectionDiagnostic;
+        if (candidate.code !== "firmware_injection_failed") return null;
+        return candidate.firmwareInjection!;
 };
-
-const hasCapacityValues = (
-        diagnostic:
-                | Extract<
-                          FirmwareInjectionDiagnostic,
-                          { kind: "insufficientDxeSpace" }
-                  >
-                | Extract<
-                          FirmwareInjectionDiagnostic,
-                          { kind: "recompressedContainerTooLarge" }
-                  >,
-) =>
-        typeof diagnostic.availableBytes === "number" &&
-        Number.isFinite(diagnostic.availableBytes) &&
-        typeof diagnostic.requiredBytes === "number" &&
-        Number.isFinite(diagnostic.requiredBytes);
 
 export const formatDeploymentError = (error: unknown): MessageDescriptor => {
         const fallback = () =>
@@ -86,30 +65,20 @@ export const formatDeploymentError = (error: unknown): MessageDescriptor => {
                 case "noDxeVolume":
                         return message("ui.firmwareInjectionNoDxeVolume");
                 case "insufficientDxeSpace":
-                        return hasCapacityValues(diagnostic)
-                                ? message(
-                                          "ui.firmwareInjectionInsufficientDxeSpace",
-                                          {
-                                                  availableBytes:
-                                                          diagnostic.availableBytes,
-                                                  requiredBytes:
-                                                          diagnostic.requiredBytes,
-                                          },
-                                  )
-                                : fallback();
+                        return message(
+                                "ui.firmwareInjectionInsufficientDxeSpace",
+                                {
+                                        availableBytes: diagnostic.availableBytes,
+                                        requiredBytes: diagnostic.requiredBytes,
+                                },
+                        );
                 case "recompressedContainerTooLarge":
-                        return hasCapacityValues(diagnostic)
-                                ? message(
-                                          "ui.firmwareInjectionRecompressedContainerTooLarge",
-                                          {
-                                                  availableBytes:
-                                                          diagnostic.availableBytes,
-                                                  requiredBytes:
-                                                          diagnostic.requiredBytes,
-                                          },
-                                  )
-                                : fallback();
-                default:
-                        return fallback();
+                        return message(
+                                "ui.firmwareInjectionRecompressedContainerTooLarge",
+                                {
+                                        availableBytes: diagnostic.availableBytes,
+                                        requiredBytes: diagnostic.requiredBytes,
+                                },
+                        );
         }
 };

@@ -171,7 +171,7 @@ describe("guided session actions", () => {
                 expect(view.activeStep?.id).toBe("rebootAfterConfiguration");
         });
 
-        it("advances only after the boot time is later than the saved configuration", async () => {
+        it("advances to the BAR check once the restart is recorded", async () => {
                 const session = await start("rebootAfterConfiguration", {
                         verifyConfigurationReboot: async () => ({ plan: planAt("verifyResizableBar"), configurationSavedAtUnixMs: "1000", bootedAtUnixMs: "2000" }),
                 });

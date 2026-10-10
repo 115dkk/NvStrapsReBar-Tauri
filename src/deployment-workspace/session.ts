@@ -2,10 +2,6 @@ import { message, type MessageDescriptor } from "../i18n-catalog";
 import type { SystemSnapshot } from "../types";
 import { formatDeploymentError } from "./deployment-errors";
 import type { DeploymentAdapter } from "./adapter";
-import {
-        assertPlanProjection,
-        assertRecommendation,
-} from "./deployment-receipts";
 import { previewDeploymentAdapter } from "./preview-adapter";
 import { DeploymentSessionActions } from "./session-actions";
 import type { SessionActionTransaction } from "./session-action-runtime";
@@ -179,15 +175,6 @@ class Session implements DeploymentWorkspaceSession {
                                 this.state.selectedProfileId !== profileId
                         )
                                 return;
-                        const profile = this.state.profiles.find(
-                                (candidate) =>
-                                        candidate.profileId === profileId,
-                        );
-                        if (!profile)
-                                throw new Error(
-                                        "The selected deployment profile is unavailable.",
-                                );
-                        assertPlanProjection(profile, plan);
                         this.patch({ plan });
                         void this.loadRecommendation();
                 } catch (error) {
@@ -277,11 +264,10 @@ class Session implements DeploymentWorkspaceSession {
                         guardedConfigConfirmed: false,
                 });
                 try {
-                        const value = assertRecommendation(
+                        const value =
                                 await this.adapter.getRecommendedDeploymentConfig(
                                         plan.profileId,
-                                ),
-                        );
+                                );
                         if (
                                 generation !== this.generation ||
                                 this.state.plan?.profileId !== plan.profileId ||

@@ -125,55 +125,6 @@ describe("browser preview deployment fixture ledger", () => {
                 expect(restored?.firmwareTargetPolicy).toBe("requireUnique");
         });
 
-        it("injects malformed receipt faults without persisting the bad cursor", async () => {
-                const bundle = await createProfile();
-                await previewDeploymentAdapter.prepareFirmwareArtifact(
-                        bundle.profile.profileId,
-                );
-                const flash =
-                        await previewDeploymentAdapter.previewManualDeploymentStep(
-                                bundle.profile.profileId,
-                        );
-                await previewDeploymentAdapter.confirmManualDeploymentStep(
-                        flash,
-                );
-                const setup =
-                        await previewDeploymentAdapter.previewManualDeploymentStep(
-                                bundle.profile.profileId,
-                        );
-                await previewDeploymentAdapter.confirmManualDeploymentStep(
-                        setup,
-                );
-                await previewDeploymentAdapter.verifyDeploymentDriver(
-                        bundle.profile.profileId,
-                );
-                const recommendation =
-                        await previewDeploymentAdapter.getRecommendedDeploymentConfig(
-                                bundle.profile.profileId,
-                        );
-                sessionStorage.setItem(
-                        "nvstraps-preview-malformed-receipt",
-                        "profile",
-                );
-                const receipt =
-                        await previewDeploymentAdapter.saveDeploymentConfig(
-                                bundle.profile.profileId,
-                                recommendation.draft,
-                        );
-                expect(receipt.plan.profileId).not.toBe(
-                        bundle.profile.profileId,
-                );
-                const restored =
-                        await previewDeploymentAdapter.getDeploymentPlan(
-                                bundle.profile.profileId,
-                        );
-                expect(restored.revision).toBe(10);
-                expect(
-                        restored.steps.find((step) => step.state === "ready")
-                                ?.id,
-                ).toBe("writeNvstrapsConfiguration");
-        });
-
         it("rejects a manual token that is not bound to the fixture revision", async () => {
                 const bundle = await createProfile();
                 await previewDeploymentAdapter.prepareFirmwareArtifact(

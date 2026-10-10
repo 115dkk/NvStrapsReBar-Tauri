@@ -1,33 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { button, evidence, open, reachGuide, reachTurnOn } from "./support";
-
-test("a malformed plan-changing receipt becomes an error without false success", async ({ page }) => {
-        await reachTurnOn(page);
-        await page.evaluate(() => sessionStorage.setItem("nvstraps-preview-malformed-receipt", "profile"));
-        await button(page, "Save these settings").click();
-        await expect(page.getByRole("alert")).toContainText("The backend returned a deployment receipt for a different profile contract.");
-        await expect(page.getByText("Settings saved", { exact: true })).toHaveCount(0);
-        await expect(page.getByRole("heading", { name: "Ready to turn on Resizable BAR" })).toBeVisible();
-});
-
-test("an unexpected receipt revision is rejected without advancing the step", async ({ page }) => {
-        await reachTurnOn(page);
-        await page.evaluate(() => sessionStorage.setItem("nvstraps-preview-malformed-receipt", "revision"));
-        await button(page, "Save these settings").click();
-        await expect(page.getByRole("alert")).toContainText("The backend returned an unexpected deployment plan revision.");
-        await expect(page.getByRole("heading", { name: "Ready to turn on Resizable BAR" })).toBeVisible();
-});
-
-test("a recommendation without the guard fields cannot be saved", async ({ page }) => {
-        await page.addInitScript(() => sessionStorage.setItem("nvstraps-preview-malformed-recommendation", "guarded-fields"));
-        await reachTurnOn(page);
-        await expect(page.getByRole("alert")).toContainText("inconsistent deployment configuration recommendation");
-        // The only action reads the recommendation again; nothing can be saved from it.
-        await expect(button(page, "Save these settings")).toHaveCount(0);
-        await button(page, "Read again").click();
-        await expect(page.getByRole("alert")).toContainText("inconsistent deployment configuration recommendation");
-        await expect(button(page, "Save these settings")).toHaveCount(0);
-});
+import { button, evidence, open, reachGuide } from "./support";
 
 test("an unregistered Turing GPU gets a fallback rule at its exact slot", async ({ page }) => {
         await page.setViewportSize({ width: 1180, height: 760 });

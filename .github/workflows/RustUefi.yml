@@ -1,10 +1,9 @@
 name: Rust UEFI validation
 
 on:
-  push:
-    branches: ["master"]
   pull_request:
     branches: ["master"]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -26,20 +25,18 @@ jobs:
         name: Classify the change
         env:
           CI_SCOPE_EVENT_NAME: ${{ github.event_name }}
-          CI_SCOPE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-          CI_SCOPE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          CI_SCOPE_TEXT: ${{ github.event.pull_request.title || github.event.head_commit.message || '' }}
+          CI_SCOPE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CI_SCOPE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          CI_SCOPE_TEXT: ${{ github.event.pull_request.title || '' }}
         run: node tools/ci-scope.mjs
 
   validate-rust-uefi:
-    name: Validate Rust DXE port (${{ matrix.os }})
+    # Linux only: the Tauri workflow's native-windows job already tests, lints and builds the whole
+    # workspace and the driver on Windows, and UEFI-target lints do not depend on the host.
+    name: Validate Rust DXE port
     needs: scope
     if: needs.scope.outputs.run-heavy == 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     timeout-minutes: 20
 
     steps:
@@ -75,15 +72,13 @@ jobs:
         run: cargo clippy -p nvstraps-uefi -p nvstraps-s3-probe --release --target x86_64-unknown-uefi -- -D warnings
 
       - name: Install OVMF and QEMU
-        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install --yes ovmf qemu-system-x86
 
       - name: Prove dispatch, the host-bridge hook, S3 protocol access and an S3 suspend/resume cycle
-        if: runner.os == 'Linux'
         run: npm run test:qemu
 
       - name: Upload QEMU evidence
-        if: runner.os == 'Linux' && always()
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: rust-uefi-qemu-evidence

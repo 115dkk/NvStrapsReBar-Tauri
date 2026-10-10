@@ -1,5 +1,4 @@
 import { message } from "../i18n-catalog";
-import { assertPlanProjection } from "./deployment-receipts";
 import {
         analyzeLegacyFirmware,
         inspectFirmware,
@@ -119,7 +118,6 @@ export class ProfileSourceActions {
                                 await this.runtime.adapter.createMachineProfile(
                                         buildMachineProfileRequest(view),
                                 );
-                        assertPlanProjection(bundle.profile, bundle.plan);
                         tx.patch({
                                 profiles: [
                                         bundle.profile,

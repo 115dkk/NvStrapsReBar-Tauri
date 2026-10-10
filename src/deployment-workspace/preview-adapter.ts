@@ -940,12 +940,7 @@ export const previewDeploymentAdapter: DeploymentAdapter = {
                 return {
                         draft: {
                                 globalMode: 1,
-                                targetPciBarSize:
-                                        sessionStorage.getItem(
-                                                "nvstraps-preview-malformed-recommendation",
-                                        ) === "guarded-fields"
-                                                ? 1
-                                                : 0,
+                                targetPciBarSize: 0,
                                 skipS3Resume: false,
                                 overrideBarSizeMask: false,
                                 guardSetupChanges: true,
@@ -972,16 +967,7 @@ export const previewDeploymentAdapter: DeploymentAdapter = {
                 );
                 sessionStorage.removeItem(restartedKey(profileId));
                 saveCursor(profileId, "configured");
-                const next = planSnapshot(profile);
-                const receiptPlan = clone(next);
-                const fault = sessionStorage.getItem(
-                        "nvstraps-preview-malformed-receipt",
-                );
-                if (fault === "profile")
-                        receiptPlan.profileId = "nvstraps-malformed-receipt";
-                else if (fault === "revision") receiptPlan.revision += 1;
-                if (fault) saveCursor(profileId, "driver");
-                return { plan: receiptPlan, save };
+                return { plan: planSnapshot(profile), save };
         },
         previewConfigurationReboot: async (profileId) => {
                 const plan = planSnapshot(profileFor(profileId));

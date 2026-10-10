@@ -106,9 +106,9 @@ authoritative. Keep RIIR, deployment automation, and physical-machine proof as s
 
 ### Documentation-only CI scope
 
-- Prefix a documentation-only PR title or the final `master` commit message with `doc:`, `docs:`,
-  `documentation:`, `gallery:`, `capture:`, or `screenshot:` (plural forms and bracketed markers
-  are also accepted) when the heavy build and lint jobs should stop after scope classification.
+- Prefix a documentation-only PR title with `doc:`, `docs:`, `documentation:`, `gallery:`,
+  `capture:`, or `screenshot:` (plural forms and bracketed markers are also accepted) when the
+  heavy build and lint jobs should stop after scope classification.
 - The marker is only a request. Heavy CI is skipped only when every changed path is a recognized
   repository document, issue template, or asset under `docs/`; code, workflow, bundled/public
   assets, legal notices, or any other path make the classifier fail closed and run every job.
@@ -119,8 +119,11 @@ authoritative. Keep RIIR, deployment automation, and physical-machine proof as s
   tracked Markdown file to point at a tracked file or directory and every issue form to have its
   required keys, known field types and unique ids, and `npm run check:ci-scope` runs the CI,
   documentation and release tooling tests. A documentation-only change therefore stays checked
-  while the build, lint and test jobs stop after scope classification. The Windows release job
-  waits for it.
+  while the build, lint and test jobs stop after scope classification.
+- Validation runs once, on the pull request. The Tauri application, Rust UEFI validation and Miri
+  workflows run on pull requests and `workflow_dispatch`, never on a `master` push; a test added
+  to one of them is a pull request check. Do not add a `push` trigger to them:
+  `tools/release-gate.test.mjs` fails on it.
 - Releases are automatic and happen only from `master` pushes. `tools/release-plan.mjs` looks at
   everything since the last `v*` tag: documentation, CI, tests and test tooling (including
   `crates/nvstraps-s3-probe`) release nothing, and neither does a `package.json` edit limited to
@@ -129,14 +132,19 @@ authoritative. Keep RIIR, deployment automation, and physical-machine proof as s
   is a patch; a commit subject prefixed `feat:`/`minor:` raises to minor and `major:`/`breaking:`/
   `feat!:` or a `BREAKING CHANGE:` footer raises to major. Before the first tag the manifests'
   version is published as is, and a manual bump past the last tag is published as written.
-- The Windows job runs after the frontend job, writes the planned version into every manifest
-  with `tools/apply-version.mjs` before building, and `tools/publish-release.mjs` then waits for
-  the Rust UEFI validation and Miri runs of the same commit, commits the bump as
-  `github-actions[bot]`, pushes it to `master`, and creates the Latest release with the build
-  attached. Release files never go through the Actions artifact store (its quota is tight); the
-  only uploads left are small diagnostics with a seven-day retention. A push made with the
-  workflow token starts no workflow run, so the bump commit does not release itself. There are no
-  per-commit pre-releases any more.
+- A `master` push runs only the Release workflow. Its plan job runs `tools/release-plan.mjs` and,
+  when a release is due, `tools/release-gate.mjs`, which requires a pull request merged as the
+  pushed commit, the pushed tree to equal that pull request's head tree, and the head's
+  pull_request runs of all three validation workflows to have passed. A direct push to `master`,
+  or a pull request merged while `master` had moved past its head, therefore releases nothing:
+  merge `master` into a pull request before merging it. The Windows job then writes the planned
+  version into every manifest with `tools/apply-version.mjs`, builds the driver, the application
+  and the installer (`scripts/build-installer.ps1`, shared with pull request validation), and
+  `tools/publish-release.mjs` commits the bump as `github-actions[bot]`, pushes it to `master`, and
+  creates the Latest release with the build attached. Release files never go through the Actions
+  artifact store (its quota is tight); the only uploads left are small diagnostics with a
+  seven-day retention. A push made with the workflow token starts no workflow run, so the bump
+  commit does not release itself. There are no per-commit pre-releases any more.
 
 Use the smallest relevant subset while iterating, then the full applicable floor before handoff:
 

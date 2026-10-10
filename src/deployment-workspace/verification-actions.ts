@@ -290,14 +290,12 @@ export class VerificationActions {
                 const state = this.runtime.state();
                 const before = state.plan!;
                 const preview = state.configurationRebootPreview!;
-                const selectedProfileId = state.selectedProfileId;
                 this.runtime.patch({ showConfigurationReboot: false });
                 return this.runtime.run("configuration-reboot", async (tx) => {
                         await requestConfigurationReboot(
                                 this.runtime.adapter,
                                 before,
                                 preview,
-                                selectedProfileId,
                                 // Confirming the restart dialog is the
                                 // explicit unsaved-work acknowledgement.
                                 true,

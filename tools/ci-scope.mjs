@@ -104,18 +104,6 @@ function changedFiles(environment) {
     return gitLines(["diff", "--no-renames", "--name-only", `${base}...${head}`]);
   }
 
-  if (eventName === "push") {
-    if (base && !/^0+$/u.test(base)) {
-      return gitLines(["diff", "--no-renames", "--name-only", base, head]);
-    }
-
-    try {
-      return gitLines(["diff", "--no-renames", "--name-only", `${head}^`, head]);
-    } catch {
-      return gitLines(["ls-tree", "-r", "--name-only", head]);
-    }
-  }
-
   return [];
 }
 

@@ -94,19 +94,6 @@ export function presentResizableBarStatus(
                                         ? state.inspection.gpus.map(presentGpu)
                                         : [],
                 };
-        if (
-                state.inspection.gpus.length === 0 ||
-                state.inspection.gpus.some(
-                        (gpu) => gpu.bar1TotalBytes === null,
-                )
-        )
-                return {
-                        tone: "unavailable",
-                        headingId: "ui.resizableBarStatusUnavailable",
-                        aggregateSymbol: null,
-                        driverVersion: null,
-                        gpus: state.inspection.gpus.map(presentGpu),
-                };
         if (state.inspection.state === "mixed")
                 return {
                         tone: "mixed",

@@ -4,31 +4,15 @@ import type {
         DeploymentConfigRecommendation,
         DeploymentPlan,
         ManualDeploymentStepPreview,
-        StepId,
 } from "./contract";
-import { assertPlanAdvance } from "./deployment-receipts";
 
 const activeStep = (plan: DeploymentPlan) =>
         plan.steps.find((step) => step.state === "ready");
 
-export const prepareFirmwareArtifact = async (
+export const prepareFirmwareArtifact = (
         adapter: DeploymentAdapter,
         before: DeploymentPlan,
-) => {
-        const active = activeStep(before)!;
-        const start = before.steps.findIndex((step) => step.id === active.id);
-        const end = before.steps.findIndex(
-                (step) => step.id === "verifyPatchedArtifact",
-        );
-        const expected = before.steps
-                .slice(start, end + 1)
-                .map((step) => step.id);
-        const preparation = await adapter.prepareFirmwareArtifact(
-                before.profileId,
-        );
-        assertPlanAdvance(before, preparation.plan, expected);
-        return preparation;
-};
+) => adapter.prepareFirmwareArtifact(before.profileId);
 
 export const loadManualStepPreview = async (
         adapter: DeploymentAdapter,
@@ -41,8 +25,7 @@ export const loadManualStepPreview = async (
         if (
                 preview.profileId !== before.profileId ||
                 preview.planRevision !== before.revision ||
-                preview.stepId !== active.id ||
-                !preview.confirmationToken
+                preview.stepId !== active.id
         )
                 throw new Error(
                         "The deployment plan changed while the consequence preview was loading. Review the current step again.",
@@ -62,49 +45,23 @@ export const confirmManualStep = async (
                 preview.stepId !== active?.id
         )
                 throw new Error("The manual confirmation preview is stale.");
-        const receipt = await adapter.confirmManualDeploymentStep(preview);
-        if (
-                receipt.plan.profileId !== before.profileId ||
-                receipt.stepId !== preview.stepId
-        )
-                throw new Error(
-                        "The backend returned a stale manual-step receipt.",
-                );
-        assertPlanAdvance(before, receipt.plan, [preview.stepId]);
-        return receipt;
+        return adapter.confirmManualDeploymentStep(preview);
 };
 
-export const verifyDeploymentDriver = async (
+export const verifyDeploymentDriver = (
         adapter: DeploymentAdapter,
         before: DeploymentPlan,
-) => {
-        const active = activeStep(before)!;
-        const expected: StepId[] =
-                active.id === "rebootAfterFirmware"
-                        ? ["rebootAfterFirmware", "verifyDriverLoaded"]
-                        : ["verifyDriverLoaded"];
-        const receipt = await adapter.verifyDeploymentDriver(before.profileId);
-        assertPlanAdvance(before, receipt.plan, expected);
-        return receipt;
-};
+) => adapter.verifyDeploymentDriver(before.profileId);
 
-export const saveRecommendedConfig = async (
+export const saveRecommendedConfig = (
         adapter: DeploymentAdapter,
         before: DeploymentPlan,
         recommendation: DeploymentConfigRecommendation,
-) => {
-        const draft = structuredClone(recommendation.draft);
-        const receipt = await adapter.saveDeploymentConfig(
+) =>
+        adapter.saveDeploymentConfig(
                 before.profileId,
-                draft,
+                structuredClone(recommendation.draft),
         );
-        assertPlanAdvance(before, receipt.plan, ["writeNvstrapsConfiguration"]);
-        if (JSON.stringify(receipt.save.draft) !== JSON.stringify(draft))
-                throw new Error(
-                        "The configuration read-back receipt does not match the recommended draft that was submitted.",
-                );
-        return receipt;
-};
 
 export const loadConfigurationRebootPreview = async (
         adapter: DeploymentAdapter,
@@ -127,66 +84,22 @@ export const requestConfigurationReboot = async (
         adapter: DeploymentAdapter,
         before: DeploymentPlan,
         preview: ConfigurationRebootPreview,
-        selectedProfileId: string,
         savedWork: boolean,
 ) => {
         if (
                 preview.profileId !== before.profileId ||
-                preview.planRevision !== before.revision ||
-                !preview.confirmationToken
+                preview.planRevision !== before.revision
         )
                 throw new Error("The configuration reboot preview is stale.");
-        const receipt = await adapter.rebootAfterConfiguration(
-                preview,
-                savedWork,
-        );
-        if (
-                receipt.profileId !== selectedProfileId ||
-                receipt.accepted !== true ||
-                receipt.planAdvanced !== false
-        )
-                throw new Error(
-                        "The restart request returned an invalid plan-advancement receipt.",
-                );
-        return receipt;
+        return adapter.rebootAfterConfiguration(preview, savedWork);
 };
 
-export const verifyConfigurationBoot = async (
+export const verifyConfigurationBoot = (
         adapter: DeploymentAdapter,
         before: DeploymentPlan,
-) => {
-        const receipt = await adapter.verifyConfigurationReboot(
-                before.profileId,
-        );
-        assertPlanAdvance(before, receipt.plan, ["rebootAfterConfiguration"]);
-        const savedEvidence = before.steps.find(
-                (step) => step.id === "writeNvstrapsConfiguration",
-        )?.evidence?.value;
-        if (
-                receipt.configurationSavedAtUnixMs !== savedEvidence ||
-                Number(receipt.bootedAtUnixMs) <=
-                        Number(receipt.configurationSavedAtUnixMs)
-        )
-                throw new Error(
-                        "The returned boot receipt is not later than the configuration read-back.",
-                );
-        return receipt;
-};
+) => adapter.verifyConfigurationReboot(before.profileId);
 
-export const collectResizableBarEvidence = async (
+export const collectResizableBarEvidence = (
         adapter: DeploymentAdapter,
         before: DeploymentPlan,
-) => {
-        const receipt = await adapter.collectNvidiaSmiEvidence(
-                before.profileId,
-        );
-        if (
-                receipt.evidence.profileId !== before.profileId ||
-                !receipt.evidence.allProfileGpusObserved
-        )
-                throw new Error(
-                        "NVIDIA telemetry is missing one or more GPUs from the selected profile.",
-                );
-        assertPlanAdvance(before, receipt.plan, ["verifyResizableBar"]);
-        return receipt;
-};
+) => adapter.collectNvidiaSmiEvidence(before.profileId);

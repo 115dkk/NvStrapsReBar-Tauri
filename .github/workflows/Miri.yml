@@ -1,8 +1,6 @@
 name: Miri
 
 on:
-  push:
-    branches: ["master"]
   pull_request:
     branches: ["master"]
   workflow_dispatch:
@@ -27,9 +25,9 @@ jobs:
         name: Classify the change
         env:
           CI_SCOPE_EVENT_NAME: ${{ github.event_name }}
-          CI_SCOPE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-          CI_SCOPE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          CI_SCOPE_TEXT: ${{ github.event.pull_request.title || github.event.head_commit.message || '' }}
+          CI_SCOPE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CI_SCOPE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          CI_SCOPE_TEXT: ${{ github.event.pull_request.title || '' }}
         run: node tools/ci-scope.mjs
 
   interpret-unsafe-contracts:
