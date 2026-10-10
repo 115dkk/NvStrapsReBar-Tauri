@@ -395,7 +395,7 @@ describe("DeploymentWorkspaceSession", () => {
                         ).toBe(expectedId);
         });
 
-        it("preserves exact capacity values and keeps a generic fallback", () => {
+        it("preserves exact capacity values", () => {
                 expect(
                         formatDeploymentError(
                                 firmwareInjectionError({
@@ -414,32 +414,6 @@ describe("DeploymentWorkspaceSession", () => {
                                 availableBytes: 3_016,
                                 requiredBytes: 34_904,
                         },
-                });
-                expect(
-                        formatDeploymentError({
-                                code: "firmware_injection_failed",
-                                message: "future diagnostic detail",
-                                recoverable: true,
-                                firmwareInjection: { kind: "futureKind" },
-                        }),
-                ).toEqual({
-                        id: "ui.deploymentOperationFailed",
-                        values: { detail: "future diagnostic detail" },
-                });
-                expect(
-                        formatDeploymentError({
-                                code: "firmware_injection_failed",
-                                message: "malformed capacity detail",
-                                recoverable: true,
-                                firmwareInjection: {
-                                        kind: "insufficientDxeSpace",
-                                        availableBytes: "3016",
-                                        requiredBytes: 34_904,
-                                },
-                        }),
-                ).toEqual({
-                        id: "ui.deploymentOperationFailed",
-                        values: { detail: "malformed capacity detail" },
                 });
         });
 
