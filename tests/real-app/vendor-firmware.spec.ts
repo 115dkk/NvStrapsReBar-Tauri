@@ -135,7 +135,9 @@ for (const image of images) {
     await app.step("Record installation and save the backend's 8 GiB recommendation", async () => {
       const page = app.page;
       await button(page, "Record install and settings").click();
-      await expect(heading(page, "Ready to turn on Resizable BAR")).toBeVisible();
+      // Recording the flash runs the injector again in both its preview and its confirmation, to
+      // prove the saved file is still what it would build; a debug build on a runner needs minutes.
+      await expect(heading(page, "Ready to turn on Resizable BAR")).toBeVisible({ timeout: 180_000 });
       await expect(page.getByText("NvStrapsReBar is running", { exact: true })).toBeVisible();
       await expect(page.locator(".nv-gpu .nv-size.target")).toHaveText("8 GiB");
       await button(page, "Save these settings").click();
