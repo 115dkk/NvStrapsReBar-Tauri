@@ -17,6 +17,13 @@ const dataDirectory = join(localData, dataName);
 const panicPath = join(dataDirectory, "logs", "panic.log");
 export const runFile = promisify(execFile);
 
+/** The application and WebView2 processes, for a launch that never reached the page. */
+async function processList() {
+  const { stdout } = await runFile("tasklist.exe", ["/FO", "CSV", "/NH"]).catch(() => ({ stdout: "" }));
+  const rows = stdout.split(/\r?\n/).filter(row => /NvStrapsReBar|msedgewebview2|WerFault/i.test(row));
+  return `Processes:\n${rows.join("\n") || "(no NvStrapsReBar, msedgewebview2 or WerFault process)"}`;
+}
+
 export const button = (page: Page, name: string) => page.getByRole("button", { name, exact: true });
 export const heading = (page: Page, name: string) => page.getByRole("heading", { name, exact: true });
 
@@ -130,7 +137,10 @@ export class RealApp {
       } catch { /* The WebView has not started listening yet. */ }
       await delay(100);
     }
-    if (!available) throw new Error("Tauri WebView CDP endpoint did not answer within 60 seconds");
+    if (!available) {
+      await this.desktopEvidence();
+      throw new Error(`Tauri WebView CDP endpoint did not answer within 60 seconds\n${await processList()}`);
+    }
     const browser = await chromium.connectOverCDP(endpoint, { timeout: 15_000 });
     this.browser = browser;
     browser.on("disconnected", () => {
@@ -162,6 +172,21 @@ export class RealApp {
       return window.fetch === host.__nvstrapsRealDialogFetch;
     }), { message: "the native dialog bridge must survive Tauri initialization" }).toBe(true);
     this.assertHealthy();
+  }
+
+  /** Without a WebView there is no page to capture; the desktop shows any dialog the app raised. */
+  private async desktopEvidence() {
+    await mkdir(this.info.outputDir, { recursive: true });
+    const script = [
+      "Add-Type -AssemblyName System.Windows.Forms, System.Drawing",
+      "$bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen",
+      "$bitmap = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height",
+      "[System.Drawing.Graphics]::FromImage($bitmap).CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)",
+      `$bitmap.Save('${this.info.outputPath("desktop.png").replaceAll("'", "''")}')`,
+    ].join("; ");
+    await runFile("powershell.exe", ["-NoProfile", "-Command", script]).catch(error => {
+      console.error(`Desktop screenshot unavailable: ${String(error)}`);
+    });
   }
 
   queueFolder(folder: string) {

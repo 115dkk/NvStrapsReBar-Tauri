@@ -152,6 +152,15 @@ jobs:
           key: vendor-firmware-${{ hashFiles('tests/real-app/vendor-firmware.json') }}
       - name: Download and verify vendor firmware
         run: node tools/fetch-vendor-firmware.mjs
+      - name: Report the WebView2 runtime
+        shell: pwsh
+        run: |
+          # The runner image lists Edge but not the Evergreen WebView2 runtime the app needs.
+          $versions = 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}',
+            'HKCU:\Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}' |
+            ForEach-Object { (Get-ItemProperty $_ -ErrorAction SilentlyContinue).pv } | Where-Object { $_ }
+          if (-not $versions) { throw 'The WebView2 runtime is not installed on this runner' }
+          "WebView2 runtime $($versions -join ', ')"
       - name: Build the application on a simulated machine
         run: npm run tauri:simulated
       - name: Drive the real application
