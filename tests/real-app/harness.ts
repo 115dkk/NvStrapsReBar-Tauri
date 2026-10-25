@@ -48,6 +48,8 @@ function installDialogBridge() {
     __nvstrapsRealDialog?: () => Promise<string>;
     __nvstrapsRealDialogFetch?: typeof fetch;
   };
+  // An init script also runs in the WebView's first blank document, where storage access throws.
+  if (location.origin !== "http://tauri.localhost") return;
   localStorage.setItem("nvstraps-rebar.ui.language", "en");
   if (window.fetch === host.__nvstrapsRealDialogFetch) return;
   const dialogUrl = `http://ipc.localhost/${encodeURIComponent("plugin:dialog|open")}`;
