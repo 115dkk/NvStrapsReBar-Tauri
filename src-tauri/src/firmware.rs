@@ -9,7 +9,13 @@ pub struct FirmwareAccess {
     pub privilege_enabled: bool,
 }
 
+#[cfg_attr(feature = "simulated-machine", allow(unreachable_code))]
 pub fn inspect_access() -> FirmwareAccess {
+    #[cfg(feature = "simulated-machine")]
+    {
+        return crate::simulated_machine::inspect_access();
+    }
+
     #[cfg(windows)]
     {
         windows_impl::inspect_access()
@@ -25,7 +31,13 @@ pub fn inspect_access() -> FirmwareAccess {
     }
 }
 
+#[cfg_attr(feature = "simulated-machine", allow(unreachable_code))]
 pub fn read_variable(name: &'static str) -> BackendResult<Option<Vec<u8>>> {
+    #[cfg(feature = "simulated-machine")]
+    {
+        return crate::simulated_machine::read_variable(name);
+    }
+
     #[cfg(windows)]
     {
         windows_impl::read_variable(name)
@@ -38,7 +50,13 @@ pub fn read_variable(name: &'static str) -> BackendResult<Option<Vec<u8>>> {
     }
 }
 
+#[cfg_attr(feature = "simulated-machine", allow(unreachable_code))]
 pub fn write_variable(name: &'static str, value: &[u8]) -> BackendResult<()> {
+    #[cfg(feature = "simulated-machine")]
+    {
+        return crate::simulated_machine::write_variable(name, value);
+    }
+
     #[cfg(windows)]
     {
         windows_impl::write_variable(name, value)
@@ -51,7 +69,13 @@ pub fn write_variable(name: &'static str, value: &[u8]) -> BackendResult<()> {
     }
 }
 
+#[cfg_attr(feature = "simulated-machine", allow(unreachable_code))]
 pub fn relaunch_elevated() -> BackendResult<()> {
+    #[cfg(feature = "simulated-machine")]
+    {
+        return crate::simulated_machine::relaunch_elevated();
+    }
+
     #[cfg(windows)]
     {
         windows_impl::relaunch_elevated()

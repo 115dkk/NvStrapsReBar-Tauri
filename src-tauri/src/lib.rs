@@ -1,3 +1,6 @@
+#[cfg(all(feature = "simulated-machine", not(debug_assertions)))]
+compile_error!("the simulated machine must never be built into a release; build it with --debug");
+
 use tauri::Manager;
 
 mod app;
@@ -16,15 +19,30 @@ mod reboot;
 mod resizable_bar;
 mod resizable_bar_commands;
 mod settings_snapshot;
+#[cfg(feature = "simulated-machine")]
+mod simulated_machine;
 mod status;
 
 pub fn run() {
+    #[cfg_attr(not(feature = "simulated-machine"), allow(unused_mut))]
+    let mut context = tauri::generate_context!();
+    #[cfg(feature = "simulated-machine")]
+    simulated_machine::open_devtools_port(&mut context);
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             match app.path().app_local_data_dir() {
                 Ok(root) => nvidia_profiles::install_panic_log(root.join("logs").join("panic.log")),
                 Err(error) => eprintln!("NvStrapsReBar panic log is unavailable: {error}"),
+            }
+            #[cfg(feature = "simulated-machine")]
+            {
+                simulated_machine::load()
+                    .unwrap_or_else(|error| panic!("simulated machine startup failed: {error}"));
+                app.get_webview_window("main")
+                    .expect("the simulated machine needs the main window")
+                    .set_title("NvStrapsReBar (simulated machine)")
+                    .expect("failed to set the simulated-machine window title");
             }
             Ok(())
         })
@@ -63,6 +81,6 @@ pub fn run() {
             nvidia_profiles::set_nvidia_all_games_rebar,
             nvidia_profiles::undo_nvidia_game_changes,
         ])
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("failed to run NvStrapsReBar");
 }

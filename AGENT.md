@@ -12,6 +12,10 @@ authoritative. Keep RIIR, deployment automation, and physical-machine proof as s
   transitions are BIOS version/release date plus BAR0 before the first proven post-flash boot, and
   BAR0 alone across the later configuration reboot; each successful boot must immediately pin a
   new `BootObservation` and restore exact comparison.
+- Correcting a file the injector left broken is not a signature bypass. A patched image must stay
+  internally consistent: recomputing a checksum, hash or layout record that the image itself
+  carries and that anyone can recompute without a key is repair. A check that needs a vendor's
+  private key is a signature, and the project stops there.
 - Do not execute a real EFI write, restart, flash, firmware-setting change, or hardware smoke test
   during development unless the user explicitly authorizes that exact consequential operation on
   the pinned machine. Test adapters and pure decision logic instead.
@@ -155,7 +159,19 @@ npm run check:rust
 npm run check:miri
 npm run check:firmware
 npm run tauri:ci
+npm run tauri:simulated
+node tools/fetch-vendor-firmware.mjs
+npm run test:real-app
 ```
+
+`npm run test:e2e` drives the screens against the browser preview adapter, so no Rust command runs
+in it. `npm run test:real-app` drives the real application built by `npm run tauri:simulated`
+through the guided deployment with retail vendor BIOS images, with only the machine's hardware,
+firmware variables, reboots and `nvidia-smi` simulated; see
+[docs/REAL_APP_E2E.md](docs/REAL_APP_E2E.md). The `simulated-machine` feature compiles only with
+debug assertions and must never reach a release or installer build. Never upload a vendor image, an
+archive or anything the application derived from one as a workflow artifact; CI keeps the archives
+in the Actions cache only.
 
 `npm run check:miri` requires nightly Rust with the `miri` component. It interprets the shared
 host contracts and the real volatile BAR1 MMIO read/write boundary. Target-only UEFI protocol
