@@ -6,7 +6,7 @@
 use std::{
     fmt,
     fs::File,
-    io::{self, BufReader, Read},
+    io::{self, Read},
     path::Path,
 };
 
@@ -76,19 +76,16 @@ pub struct FirmwareFingerprint {
 impl FirmwareFingerprint {
     pub fn inspect(path: impl AsRef<Path>) -> Result<Self, ProfileError> {
         let path = path.as_ref();
-        let file = File::open(path).map_err(ProfileError::ReadFirmware)?;
+        let mut file = File::open(path).map_err(ProfileError::ReadFirmware)?;
         let byte_length = file.metadata().map_err(ProfileError::ReadFirmware)?.len();
         if byte_length == 0 {
             return Err(ProfileError::EmptyFirmwareImage);
         }
 
-        let mut reader = BufReader::new(file);
         let mut hasher = Sha256::new();
-        let mut buffer = [0_u8; 1024 * 1024];
+        let mut buffer = vec![0_u8; 1024 * 1024];
         loop {
-            let count = reader
-                .read(&mut buffer)
-                .map_err(ProfileError::ReadFirmware)?;
+            let count = file.read(&mut buffer).map_err(ProfileError::ReadFirmware)?;
             if count == 0 {
                 break;
             }
@@ -2237,6 +2234,30 @@ mod tests {
         );
         assert_eq!(legacy.steps.len(), modern.steps.len() + 1);
         assert_eq!(legacy.active_step().unwrap().id, StepId::VerifyProfile);
+    }
+
+    #[test]
+    fn firmware_inspection_fits_a_small_thread_stack() {
+        // Tauri runs synchronous commands on the main thread, whose stack is 1 MiB on Windows.
+        let path = std::env::temp_dir().join(format!(
+            "nvstraps-deploy-inspect-{}.bin",
+            std::process::id()
+        ));
+        std::fs::write(&path, b"firmware").unwrap();
+        let inspected = std::thread::Builder::new()
+            .stack_size(256 * 1024)
+            .spawn({
+                let path = path.clone();
+                move || FirmwareFingerprint::inspect(path)
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        let inspected = inspected.unwrap();
+        assert_eq!(inspected.byte_length, 8);
+        assert_eq!(inspected.sha256, Sha256Digest::from_bytes(b"firmware"));
     }
 
     #[test]
