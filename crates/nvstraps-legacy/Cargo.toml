@@ -1,6 +1,6 @@
 [package]
 name = "nvstraps-legacy"
-version = "1.0.2"
+version = "1.0.3"
 description = "Pinned legacy firmware catalog authority for NvStrapsReBar"
 edition.workspace = true
 rust-version.workspace = true
