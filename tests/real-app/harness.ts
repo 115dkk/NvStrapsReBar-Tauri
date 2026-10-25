@@ -17,11 +17,18 @@ const dataDirectory = join(localData, dataName);
 const panicPath = join(dataDirectory, "logs", "panic.log");
 export const runFile = promisify(execFile);
 
-/** The application and WebView2 processes, for a launch that never reached the page. */
+/**
+ * For a launch that never reached the page: the WebView2 command lines show whether the debugging
+ * port argument arrived, and the policy keys show whether the machine overrides it.
+ */
 async function processList() {
-  const { stdout } = await runFile("tasklist.exe", ["/FO", "CSV", "/NH"]).catch(() => ({ stdout: "" }));
-  const rows = stdout.split(/\r?\n/).filter(row => /NvStrapsReBar|msedgewebview2|WerFault/i.test(row));
-  return `Processes:\n${rows.join("\n") || "(no NvStrapsReBar, msedgewebview2 or WerFault process)"}`;
+  const script = [
+    "Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'NvStrapsReBar|msedgewebview2|WerFault' } | ForEach-Object { \"$($_.ProcessId) $($_.Name) $($_.CommandLine)\" }",
+    "'Policies:'",
+    "'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge', 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge\\WebView2', 'HKCU:\\SOFTWARE\\Policies\\Microsoft\\Edge\\WebView2' | ForEach-Object { if (Test-Path $_) { $_; Get-ItemProperty $_ | Format-List | Out-String } }",
+  ].join("; ");
+  const { stdout } = await runFile("powershell.exe", ["-NoProfile", "-Command", script], { maxBuffer: 4 * 1024 * 1024 }).catch(error => ({ stdout: `(process list unavailable: ${String(error)})` }));
+  return `Processes:\n${stdout.trim() || "(no NvStrapsReBar, msedgewebview2 or WerFault process)"}`;
 }
 
 export const button = (page: Page, name: string) => page.getByRole("button", { name, exact: true });
