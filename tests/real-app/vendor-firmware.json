@@ -1,0 +1,131 @@
+{
+  "schema": 1,
+  "images": [
+    {
+      "id": "msi-mag-z790-tomahawk-wifi-7d91vhj",
+      "url": "https://download.msi.com/bos_exe/mb/7D91vHJ.zip",
+      "archiveSha256": "5c2b4343235569080d57dbf614ccd292d580a7aec9468b9cd27809288230b676",
+      "archiveBytes": 10386573,
+      "member": "E7D91IMS.HJ0",
+      "imageSha256": "fdd8bbf24b06370478261a58b8034dca7d713aea4e41be0e2080efe9fd5b38fe",
+      "imageBytes": 33554432,
+      "identity": {
+        "boardManufacturer": "Micro-Star International Co., Ltd.",
+        "boardProduct": "MAG Z790 TOMAHAWK WIFI (MS-7D91)",
+        "boardVersion": "1.0",
+        "biosVendor": "American Megatrends International, LLC.",
+        "biosVersion": "1.H0",
+        "biosReleaseDate": "09/14/2026"
+      },
+      "outcome": "prepared"
+    },
+    {
+      "id": "msi-mag-b660-tomahawk-wifi-7d41vao",
+      "url": "https://download.msi.com/bos_exe/mb/7D41vAO.zip",
+      "archiveSha256": "aa0692802303facf9492456fe75c6df0797033e7e815ecb4b513768ae555d186",
+      "archiveBytes": 10969216,
+      "member": "E7D41IMS.AO0",
+      "imageSha256": "9eb8c8a30c01f6bd764412596bff4990e680ce5f36d8739669db0155d40df775",
+      "imageBytes": 33554432,
+      "identity": {
+        "boardManufacturer": "Micro-Star International Co., Ltd.",
+        "boardProduct": "MAG B660 TOMAHAWK WIFI (MS-7D41)",
+        "boardVersion": "1.0",
+        "biosVendor": "American Megatrends International, LLC.",
+        "biosVersion": "A.O0",
+        "biosReleaseDate": "09/01/2026"
+      },
+      "outcome": "prepared"
+    },
+    {
+      "id": "gigabyte-z490-aorus-elite-f22",
+      "url": "https://download.gigabyte.com/FileList/BIOS/mb_bios_z490-aorus-elite_f22.zip",
+      "archiveSha256": "58b6ebaec47b324866b7ff7fe73c06aa414da878120350567936c0d420528799",
+      "archiveBytes": 11179255,
+      "member": "Z490AORUSELITE.F22",
+      "imageSha256": "cff56791e24d0922a9f089c717b5dc5892f8d02d41d8a67007553ed135295161",
+      "imageBytes": 33554432,
+      "identity": {
+        "boardManufacturer": "Gigabyte Technology Co., Ltd.",
+        "boardProduct": "Z490 AORUS ELITE",
+        "boardVersion": "x.x",
+        "biosVendor": "American Megatrends Inc.",
+        "biosVersion": "F22",
+        "biosReleaseDate": "12/07/2021"
+      },
+      "outcome": "prepared"
+    },
+    {
+      "id": "msi-b450-tomahawk-7c02vhd",
+      "url": "https://download.msi.com/bos_exe/mb/7C02vHD.zip",
+      "archiveSha256": "a9e6850cc30bba15f2de33aa74f05ebe808c02aace6c02a60e14a93eac5bba4c",
+      "archiveBytes": 18437982,
+      "member": "7C02vHD/E7C02AMS.HD0",
+      "imageSha256": "70c49e19806cbe12900979bd0a2a76d8bdf167e4a2794972096766e302b1a358",
+      "imageBytes": 33554432,
+      "identity": {
+        "boardManufacturer": "Micro-Star International Co., Ltd.",
+        "boardProduct": "B450 TOMAHAWK (MS-7C02)",
+        "boardVersion": "1.0",
+        "biosVendor": "American Megatrends Inc.",
+        "biosVersion": "H.D0",
+        "biosReleaseDate": "07/24/2024"
+      },
+      "outcome": "preparedEveryDomain"
+    },
+    {
+      "id": "asus-tuf-b450m-pro-gaming-4401",
+      "url": "https://dlcdnets.asus.com/pub/ASUS/mb/BIOS/TUF-B450M-PRO-GAMING-ASUS-4401.zip",
+      "archiveSha256": "ae24f0791b9da673d6a5ed5d8f8cba57fca5a17b7246efca4037688ee9a3e02c",
+      "archiveBytes": 11380090,
+      "member": "TUF-B450M-PRO-GAMING-ASUS-4401.CAP",
+      "imageSha256": "69198026bae867d74929e8fa1060100d890bc18e7fb329272ca756b6026fcebd",
+      "imageBytes": 16779264,
+      "identity": {
+        "boardManufacturer": "ASUSTeK COMPUTER INC.",
+        "boardProduct": "TUF B450M-PRO GAMING",
+        "boardVersion": "Rev X.0x",
+        "biosVendor": "American Megatrends Inc.",
+        "biosVersion": "4401",
+        "biosReleaseDate": "09/04/2023"
+      },
+      "outcome": "refusedSignedCapsule"
+    },
+    {
+      "id": "asus-prime-z490-a-2701",
+      "url": "https://dlcdnets.asus.com/pub/ASUS/mb/BIOS/PRIME-Z490-A-ASUS-2701.zip",
+      "archiveSha256": "c9b7f1ad3811809912a8730a4a6453eb5707f3a4a3a6165df48040094ba3deb1",
+      "archiveBytes": 9616779,
+      "member": "PRIME-Z490-A-ASUS-2701.CAP",
+      "imageSha256": "c92d67bb843746c7f5b82b6ce492b55f1ce5df6bf594a289bdacb379192c0c7c",
+      "imageBytes": 16781312,
+      "identity": {
+        "boardManufacturer": "ASUSTeK COMPUTER INC.",
+        "boardProduct": "PRIME Z490-A",
+        "boardVersion": "Rev 1.xx",
+        "biosVendor": "American Megatrends Inc.",
+        "biosVersion": "2701",
+        "biosReleaseDate": "12/27/2022"
+      },
+      "outcome": "refusedSignedCapsule"
+    },
+    {
+      "id": "asus-tuf-gaming-x570-plus-4408",
+      "url": "https://dlcdnets.asus.com/pub/ASUS/mb/BIOS/TUF-GAMING-X570-PLUS-ASUS-4408.zip",
+      "archiveSha256": "ce5d2ee9dc117725129283df77721e56e108884531f801c24b41babe7d5baf2e",
+      "archiveBytes": 21655396,
+      "member": "TUF-GAMING-X570-PLUS-ASUS-4408.CAP",
+      "imageSha256": "135b170ef698704b32439de7919ca860868d0aa977caf0f3ab19b0566aa8e438",
+      "imageBytes": 33558528,
+      "identity": {
+        "boardManufacturer": "ASUSTeK COMPUTER INC.",
+        "boardProduct": "TUF GAMING X570-PLUS",
+        "boardVersion": "Rev X.0x",
+        "biosVendor": "American Megatrends Inc.",
+        "biosVersion": "4408",
+        "biosReleaseDate": "10/28/2022"
+      },
+      "outcome": "refusedSignedCapsule"
+    }
+  ]
+}

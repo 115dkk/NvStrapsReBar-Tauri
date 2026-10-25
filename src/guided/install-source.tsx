@@ -8,7 +8,7 @@ import { messages, type StaticMessageId } from "../i18n-catalog";
 import { translateMessage } from "../i18n";
 import { Icon } from "./icons";
 import type { InstallContext } from "./install-context";
-import { ActionBar, FileCard, RouteCard, Step, Steps, TaskPanel } from "./ui";
+import { ActionBar, FileCard, Notice, RouteCard, Step, Steps, TaskPanel } from "./ui";
 
 export const installMethodIds: Record<FirmwareInstallMethod, { title: StaticMessageId; detail: StaticMessageId }> = {
         firmwareSetupUtility: { title: "ui.methodSetupUtility", detail: "ui.methodSetupUtilityDetail" },
@@ -42,6 +42,16 @@ const ChosenFile = ({ ctx }: { ctx: InstallContext }) => {
 const stageLabel = (ctx: InstallContext, question?: 1 | 2 | 3) =>
         question ? ctx.t("ui.stageLabelPrepareQuestion", { number: question }) : ctx.t("ui.stageLabelPrepare");
 
+/**
+ * Reading the file and making the record start on these screens, so their failures show here too,
+ * the BIOS-file refusals (signed capsule, several DXE areas) included: no later screen is reached.
+ */
+const SourceFailure = ({ ctx }: { ctx: InstallContext }) => {
+        const { t, locale, view } = ctx;
+        if (view.activity?.tone !== "error") return null;
+        return <Notice title={t("ui.taskDidNotFinish")}>{translateMessage(locale, view.activity.message)}</Notice>;
+};
+
 export const PickFirmware = ({ ctx }: { ctx: InstallContext }) => {
         const { t, view, commands, busy, msi, boardName, navigation } = ctx;
         const manualId = useId();
@@ -59,6 +69,7 @@ export const PickFirmware = ({ ctx }: { ctx: InstallContext }) => {
                                 />
                         }
                 >
+                        <SourceFailure ctx={ctx} />
                         <Steps>
                                 <Step title={t(msi ? "ui.pickFirmwareStepDownloadMsi" : "ui.pickFirmwareStepDownload")} detail={t(msi ? "ui.pickFirmwareStepDownloadDetailMsi" : "ui.pickFirmwareStepDownloadDetail")} />
                                 <Step title={t(msi ? "ui.pickFirmwareStepChooseMsi" : "ui.pickFirmwareStepChoose")} detail={t(msi ? "ui.pickFirmwareStepChooseDetailMsi" : "ui.pickFirmwareStepChooseDetail")} />
@@ -279,6 +290,7 @@ export const Routes = ({ ctx }: { ctx: InstallContext }) => {
                                 />
                         }
                 >
+                        <SourceFailure ctx={ctx} />
                         <ChosenFile ctx={ctx} />
                         <div className="nv-group">
                                 <RouteCard icon="tool" label={t("ui.routeInstall")} title={t("ui.routeInstallMsiTitle")} detail={t("ui.routeInstallMsiDetail")} />
@@ -348,6 +360,7 @@ export const RecoveryQuestion = ({ ctx }: { ctx: InstallContext }) => {
                                 />
                         }
                 >
+                        <SourceFailure ctx={ctx} />
                         <Choices
                                 name="recovery-method"
                                 legend={t("ui.recoveryQuestionTitle")}
