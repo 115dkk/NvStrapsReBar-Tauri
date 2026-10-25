@@ -309,10 +309,17 @@ fn api_error(error: BackendError, journal: &Journal) -> ApiError {
     api
 }
 
+#[cfg_attr(feature = "simulated-machine", allow(unreachable_code))]
 fn with_driver<T>(
     journal: &Journal,
     action: impl FnOnce(&LoggedDriver<'_, NvapiDriver<'_>>) -> BackendResult<T>,
 ) -> BackendResult<T> {
+    #[cfg(feature = "simulated-machine")]
+    {
+        let _ = (journal, &action);
+        return crate::simulated_machine::nvidia_driver_settings_unavailable();
+    }
+
     let _guard = DRS_LOCK.lock().unwrap_or_else(|poisoned| {
         journal.warn(
             "drs.lock",

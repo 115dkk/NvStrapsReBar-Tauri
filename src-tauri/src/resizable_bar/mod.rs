@@ -1,5 +1,5 @@
 mod assessment;
-mod nvidia_smi;
+pub(crate) mod nvidia_smi;
 
 use nvstraps_core::registry;
 use nvstraps_deploy::{FirmwareFingerprint, Sha256Digest};

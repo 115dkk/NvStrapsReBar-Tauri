@@ -42,7 +42,13 @@ pub struct GpuDevice {
     pub effective_bar_size_selector: Option<u8>,
 }
 
+#[cfg_attr(feature = "simulated-machine", allow(unreachable_code))]
 pub fn enumerate_gpus() -> BackendResult<Vec<GpuDevice>> {
+    #[cfg(feature = "simulated-machine")]
+    {
+        return crate::simulated_machine::enumerate_gpus();
+    }
+
     #[cfg(windows)]
     {
         windows_impl::enumerate_gpus()
@@ -584,6 +590,7 @@ mod windows_impl {
             assert_eq!(ids.subsystem_vendor_id, 0x1462);
         }
 
+        #[cfg(not(feature = "simulated-machine"))]
         #[test]
         fn inventory_api_returns_only_nvidia_adapters() {
             let devices = enumerate_gpus().expect("read-only GPU inventory should succeed");

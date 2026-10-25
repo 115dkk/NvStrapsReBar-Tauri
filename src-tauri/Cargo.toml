@@ -7,6 +7,9 @@ edition = "2024"
 rust-version.workspace = true
 license = "MIT"
 
+[features]
+simulated-machine = ["dep:base64"]
+
 [lib]
 name = "nvstraps_rebar_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
@@ -19,6 +22,7 @@ path = "src/main.rs"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+base64 = { version = "0.22.1", optional = true }
 nvstraps-core = { path = "../crates/nvstraps-core" }
 nvstraps-deploy = { path = "../crates/nvstraps-deploy" }
 nvstraps-ffs = { path = "../crates/nvstraps-ffs" }

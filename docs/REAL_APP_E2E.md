@@ -30,8 +30,10 @@ The `simulated-machine` Cargo feature of `src-tauri` replaces these functions, a
 | `nvidia_profiles::with_driver` | an error; the games page is not part of these journeys |
 
 Native file dialogs are the operating system's, so the harness answers `plugin:dialog|open` in the
-page instead of the user. The source image is entered through the existing "Type the file location
-instead" field, as a user without the dialog would.
+page instead of the user. Tauri defines `__TAURI_INTERNALS__.invoke` as read-only, so the answer is
+given where its IPC script posts the command, `fetch("http://ipc.localhost/plugin%3Adialog%7Copen")`;
+every other command still reaches the backend. The source image is entered through the existing
+"Type the file location instead" field, as a user without the dialog would.
 
 ### Keeping it out of releases
 
@@ -100,12 +102,17 @@ in the same folder.
 `tests/real-app` starts the simulated build with
 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=<port>` and attaches Playwright with
 `chromium.connectOverCDP`. A "restart" is the harness closing the application after a recorded
-reboot request, changing the machine file the way the hardware would have, and starting it again:
+reboot request, changing the machine file the way the hardware would have, and starting it again.
+It closes the window first, as Windows does before a restart, and forces the process only if it
+hangs: a forced kill loses what WebView2 has not yet written of its local storage.
 
-- After the firmware-setup reboot, the board now runs the install BIOS file: the boot time moves
-  forward and `NvStrapsReBarStatus` holds the status the unconfigured driver writes.
-- After the configuration reboot, the boot time moves forward again, the status reports the
-  configured GPU, and `bar1Bytes` and `nvidia-smi` report the size the saved configuration asks for.
+- After the firmware-setup reboot, the board now runs the install BIOS file: the machine booted
+  just after the request, and `NvStrapsReBarStatus` holds the status the unconfigured driver
+  writes (40, `Unconfigured`).
+- After the configuration reboot, the machine booted just after that request, the status reports
+  the configured GPU (100, `GpuStrapsConfirm`, at its PCI location: the guarded recommendation
+  programs the straps without a PCI resize), and `bar1Bytes` and `nvidia-smi` report the 8 GiB the
+  saved recommendation asked for.
 
 The harness never flashes anything. What it checks about the install BIOS file is checked on the
 bytes the application saved: the exported image has the size of the source image, differs from it,

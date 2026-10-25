@@ -14,8 +14,9 @@
     "test": "vitest run src --passWithNoTests",
     "test:watch": "vitest src",
     "test:e2e": "playwright test",
+    "test:real-app": "playwright test --config playwright.real-app.config.ts",
     "check": "npm run typecheck && npm run test && npm run build && npm run check:third-party && npm run check:docs && npm run check:ci-scope",
-    "check:ci-scope": "node --test tools/ci-scope.test.mjs tools/release-plan.test.mjs tools/apply-version.test.mjs tools/publish-release.test.mjs tools/release-gate.test.mjs tools/check-docs.test.mjs",
+    "check:ci-scope": "node --test tools/ci-scope.test.mjs tools/release-plan.test.mjs tools/apply-version.test.mjs tools/publish-release.test.mjs tools/release-gate.test.mjs tools/check-docs.test.mjs tools/fetch-vendor-firmware.test.mjs",
     "check:docs": "node tools/check-docs.mjs",
     "check:third-party": "node tools/check-third-party-assets.mjs",
     "check:riir": "node tools/check-riir.mjs",
@@ -27,7 +28,8 @@
     "check:firmware": "cargo test -p nvstraps-ffs && npm run build:firmware",
     "test:qemu": "bash scripts/qemu-smoke.sh",
     "tauri": "tauri",
-    "tauri:ci": "tauri build --no-bundle"
+    "tauri:ci": "tauri build --no-bundle",
+    "tauri:simulated": "tauri build --debug --no-bundle --features simulated-machine --config src-tauri/tauri.simulated.conf.json -- --config profile.dev.package.nvstraps-ffs.opt-level=3 --config profile.dev.package.lzma-sdk-rs.opt-level=3 --config profile.dev.package.oxiarc-lzma.opt-level=3 --config profile.dev.package.flate2.opt-level=3 --config profile.dev.package.zlib-rs.opt-level=3 --config profile.dev.package.sha2.opt-level=3"
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.1",

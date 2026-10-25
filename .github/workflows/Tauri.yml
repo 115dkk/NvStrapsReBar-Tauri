@@ -119,3 +119,50 @@ jobs:
       - name: Build the installer
         shell: pwsh
         run: ./scripts/build-installer.ps1
+
+  # Drives the real application, not the browser preview, through the guided deployment with retail
+  # vendor BIOS images. Only the machine's hardware, firmware variables, reboots and nvidia-smi are
+  # simulated (docs/REAL_APP_E2E.md). The archives stay in the Actions cache; no step uploads an
+  # image, an archive or a file the application derived from one.
+  real-app:
+    name: Real app with vendor firmware
+    needs: scope
+    if: needs.scope.outputs.run-heavy == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-uefi
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+          key: real-app
+      - name: Install dependencies
+        run: npm ci
+      - name: Restore vendor firmware archives
+        uses: actions/cache@v6
+        with:
+          path: .cache/vendor-firmware/archives
+          key: vendor-firmware-${{ hashFiles('tests/real-app/vendor-firmware.json') }}
+      - name: Download and verify vendor firmware
+        run: node tools/fetch-vendor-firmware.mjs
+      - name: Build the application on a simulated machine
+        run: npm run tauri:simulated
+      - name: Drive the real application
+        run: npm run test:real-app
+      - name: Upload screenshots and logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: real-app-diagnostics
+          path: |
+            test-results/real-app/**/*.png
+            test-results/real-app/**/*.log
+          if-no-files-found: ignore
+          retention-days: 7

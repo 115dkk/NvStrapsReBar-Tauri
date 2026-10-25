@@ -265,7 +265,23 @@ fn validate_configuration_confirmation(
 }
 
 #[cfg(windows)]
+#[cfg_attr(feature = "simulated-machine", allow(unreachable_code))]
 fn execute_reboot(arguments: &[&str], description: &str) -> BackendResult<()> {
+    #[cfg(feature = "simulated-machine")]
+    {
+        let _ = arguments;
+        let kind = match description {
+            "firmware setup" => crate::simulated_machine::RebootKind::FirmwareSetup,
+            "configuration" => crate::simulated_machine::RebootKind::Configuration,
+            _ => {
+                return Err(BackendError::Deployment(format!(
+                    "unknown simulated reboot kind: {description}"
+                )));
+            }
+        };
+        return crate::simulated_machine::execute_reboot(kind);
+    }
+
     use std::os::windows::process::CommandExt;
 
     let executable = shutdown_executable()?;
@@ -292,7 +308,13 @@ fn execute_reboot(arguments: &[&str], description: &str) -> BackendResult<()> {
 }
 
 #[cfg(windows)]
+#[cfg_attr(feature = "simulated-machine", allow(unreachable_code))]
 fn ensure_firmware_reboot_available() -> BackendResult<std::path::PathBuf> {
+    #[cfg(feature = "simulated-machine")]
+    {
+        return crate::simulated_machine::ensure_reboot_available();
+    }
+
     use windows_sys::Win32::System::SystemInformation::{FirmwareTypeUefi, GetFirmwareType};
 
     let mut firmware_type = 0;
@@ -310,7 +332,13 @@ fn ensure_firmware_reboot_available() -> BackendResult<std::path::PathBuf> {
 }
 
 #[cfg(windows)]
+#[cfg_attr(feature = "simulated-machine", allow(unreachable_code))]
 fn ensure_configuration_reboot_available() -> BackendResult<std::path::PathBuf> {
+    #[cfg(feature = "simulated-machine")]
+    {
+        return crate::simulated_machine::ensure_reboot_available();
+    }
+
     shutdown_executable()
 }
 

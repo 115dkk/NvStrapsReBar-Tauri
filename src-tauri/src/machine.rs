@@ -5,7 +5,13 @@ use crate::{
     error::{BackendError, BackendResult},
 };
 
+#[cfg_attr(feature = "simulated-machine", allow(unreachable_code))]
 pub fn collect_machine_identity(devices: &[GpuDevice]) -> BackendResult<MachineIdentity> {
+    #[cfg(feature = "simulated-machine")]
+    {
+        return crate::simulated_machine::collect_machine_identity(devices);
+    }
+
     #[cfg(windows)]
     {
         windows_impl::collect(devices)
@@ -18,7 +24,7 @@ pub fn collect_machine_identity(devices: &[GpuDevice]) -> BackendResult<MachineI
     }
 }
 
-fn gpu_fingerprint(device: &GpuDevice) -> GpuFingerprint {
+pub(crate) fn gpu_fingerprint(device: &GpuDevice) -> GpuFingerprint {
     GpuFingerprint {
         vendor_id: device.vendor_id,
         device_id: device.device_id,
@@ -39,7 +45,7 @@ fn gpu_fingerprint(device: &GpuDevice) -> GpuFingerprint {
     }
 }
 
-fn normalize_bios_date(value: String) -> String {
+pub(crate) fn normalize_bios_date(value: String) -> String {
     let value = value.trim();
     let mut parts = value.split('/');
     let (Some(month), Some(day), Some(year), None) =
@@ -163,7 +169,7 @@ mod tests {
         assert_eq!(normalize_bios_date("13/40/2026".into()), "13/40/2026");
     }
 
-    #[cfg(windows)]
+    #[cfg(all(windows, not(feature = "simulated-machine")))]
     #[test]
     fn current_windows_bios_identity_is_readable_without_elevation() {
         let identity = collect_machine_identity(&[device()]).unwrap();

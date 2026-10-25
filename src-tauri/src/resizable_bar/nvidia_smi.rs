@@ -1,6 +1,8 @@
+use std::path::PathBuf;
+
+#[cfg(not(feature = "simulated-machine"))]
 use std::{
     io::Read,
-    path::PathBuf,
     process::{Command, Stdio},
     thread,
     time::{Duration, Instant},
@@ -11,56 +13,68 @@ use serde::Deserialize;
 
 use crate::error::{BackendError, BackendResult};
 
+#[cfg(not(feature = "simulated-machine"))]
 const NVIDIA_SMI_ARGUMENTS: [&str; 2] = ["-q", "-x"];
+#[cfg(not(feature = "simulated-machine"))]
 const NVIDIA_SMI_TIMEOUT: Duration = Duration::from_secs(10);
+#[cfg(not(feature = "simulated-machine"))]
 const MAX_CAPTURE_BYTES: u64 = 8 * 1024 * 1024;
 
-pub(super) struct NvidiaSmiCapture {
-    pub(super) executable: PathBuf,
-    pub(super) tool: FirmwareFingerprint,
-    pub(super) xml: Vec<u8>,
+pub(crate) struct NvidiaSmiCapture {
+    pub(crate) executable: PathBuf,
+    pub(crate) tool: FirmwareFingerprint,
+    pub(crate) xml: Vec<u8>,
 }
 
 #[derive(Debug, Deserialize)]
-pub(super) struct NvidiaSmiLog {
-    pub(super) driver_version: String,
-    pub(super) timestamp: String,
+pub(crate) struct NvidiaSmiLog {
+    pub(crate) driver_version: String,
+    pub(crate) timestamp: String,
     #[serde(default)]
-    pub(super) gpu: Vec<NvidiaSmiGpu>,
+    pub(crate) gpu: Vec<NvidiaSmiGpu>,
 }
 
 #[derive(Debug, Deserialize)]
-pub(super) struct NvidiaSmiGpu {
-    pub(super) product_name: String,
-    pub(super) pci: NvidiaSmiPci,
-    pub(super) fb_memory_usage: NvidiaSmiMemory,
-    pub(super) bar1_memory_usage: NvidiaSmiMemory,
+pub(crate) struct NvidiaSmiGpu {
+    pub(crate) product_name: String,
+    pub(crate) pci: NvidiaSmiPci,
+    pub(crate) fb_memory_usage: NvidiaSmiMemory,
+    pub(crate) bar1_memory_usage: NvidiaSmiMemory,
 }
 
 #[derive(Debug, Deserialize)]
-pub(super) struct NvidiaSmiPci {
-    pub(super) pci_bus_id: String,
+pub(crate) struct NvidiaSmiPci {
+    pub(crate) pci_bus_id: String,
 }
 
 #[derive(Debug, Deserialize)]
-pub(super) struct NvidiaSmiMemory {
-    pub(super) total: String,
-    pub(super) used: String,
-    pub(super) free: String,
+pub(crate) struct NvidiaSmiMemory {
+    pub(crate) total: String,
+    pub(crate) used: String,
+    pub(crate) free: String,
 }
 
+#[cfg_attr(feature = "simulated-machine", allow(clippy::needless_return))]
 pub(super) fn capture() -> BackendResult<NvidiaSmiCapture> {
-    let executable = nvidia_smi_path()?;
-    let tool = FirmwareFingerprint::inspect(&executable)?;
-    let xml = run_nvidia_smi(&executable)?;
-    Ok(NvidiaSmiCapture {
-        executable,
-        tool,
-        xml,
-    })
+    #[cfg(feature = "simulated-machine")]
+    {
+        return crate::simulated_machine::capture_nvidia_smi();
+    }
+
+    #[cfg(not(feature = "simulated-machine"))]
+    {
+        let executable = nvidia_smi_path()?;
+        let tool = FirmwareFingerprint::inspect(&executable)?;
+        let xml = run_nvidia_smi(&executable)?;
+        Ok(NvidiaSmiCapture {
+            executable,
+            tool,
+            xml,
+        })
+    }
 }
 
-pub(super) fn decode_xml(xml: &[u8]) -> BackendResult<NvidiaSmiLog> {
+pub(crate) fn decode_xml(xml: &[u8]) -> BackendResult<NvidiaSmiLog> {
     let text = std::str::from_utf8(xml).map_err(|error| {
         BackendError::Deployment(format!("nvidia-smi XML is not valid UTF-8: {error}"))
     })?;
@@ -69,7 +83,7 @@ pub(super) fn decode_xml(xml: &[u8]) -> BackendResult<NvidiaSmiLog> {
     })
 }
 
-pub(super) fn parse_memory_bytes(value: &str) -> BackendResult<Option<u64>> {
+pub(crate) fn parse_memory_bytes(value: &str) -> BackendResult<Option<u64>> {
     let value = value.trim();
     if value.eq_ignore_ascii_case("N/A") {
         return Ok(None);
@@ -130,7 +144,7 @@ pub(super) fn parse_pci_bus_id(value: &str) -> BackendResult<(u8, u8, u8)> {
     Ok((bus, device, function))
 }
 
-#[cfg(windows)]
+#[cfg(all(not(feature = "simulated-machine"), windows))]
 fn nvidia_smi_path() -> BackendResult<PathBuf> {
     use std::{ffi::OsString, os::windows::ffi::OsStringExt};
 
@@ -157,12 +171,12 @@ fn nvidia_smi_path() -> BackendResult<PathBuf> {
     Ok(path)
 }
 
-#[cfg(not(windows))]
+#[cfg(all(not(feature = "simulated-machine"), not(windows)))]
 fn nvidia_smi_path() -> BackendResult<PathBuf> {
     Err(BackendError::UnsupportedPlatform)
 }
 
-#[cfg(windows)]
+#[cfg(all(not(feature = "simulated-machine"), windows))]
 fn run_nvidia_smi(executable: &std::path::Path) -> BackendResult<Vec<u8>> {
     use std::os::windows::process::CommandExt;
 
@@ -222,11 +236,12 @@ fn run_nvidia_smi(executable: &std::path::Path) -> BackendResult<Vec<u8>> {
     Ok(stdout)
 }
 
-#[cfg(not(windows))]
+#[cfg(all(not(feature = "simulated-machine"), not(windows)))]
 fn run_nvidia_smi(_executable: &std::path::Path) -> BackendResult<Vec<u8>> {
     Err(BackendError::UnsupportedPlatform)
 }
 
+#[cfg(not(feature = "simulated-machine"))]
 fn read_limited(reader: impl Read) -> std::io::Result<Vec<u8>> {
     let mut bytes = Vec::new();
     reader.take(MAX_CAPTURE_BYTES + 1).read_to_end(&mut bytes)?;
@@ -238,6 +253,7 @@ fn read_limited(reader: impl Read) -> std::io::Result<Vec<u8>> {
     Ok(bytes)
 }
 
+#[cfg(not(feature = "simulated-machine"))]
 fn join_reader(
     reader: thread::JoinHandle<std::io::Result<Vec<u8>>>,
     stream: &str,
@@ -263,7 +279,7 @@ mod tests {
         assert!(parse_pci_bus_id("00000000:01:20.0").is_err());
     }
 
-    #[cfg(windows)]
+    #[cfg(all(windows, not(feature = "simulated-machine")))]
     #[test]
     #[ignore = "read-only hardware smoke test for a machine with an NVIDIA driver"]
     fn installed_nvidia_smi_xml_matches_the_guarded_contract() {

@@ -359,7 +359,13 @@ fn boot_proves_configuration_reboot(configuration_saved_at: u64, booted_at: u64)
 }
 
 #[cfg(windows)]
+#[cfg_attr(feature = "simulated-machine", allow(unreachable_code))]
 pub(crate) fn current_boot_time_unix_ms() -> BackendResult<u64> {
+    #[cfg(feature = "simulated-machine")]
+    {
+        return crate::simulated_machine::current_boot_time_unix_ms();
+    }
+
     use windows_sys::Win32::System::SystemInformation::GetTickCount64;
 
     let now: u64 = SystemTime::now()

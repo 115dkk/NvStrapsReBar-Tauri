@@ -1860,6 +1860,7 @@ dependencies = [
 name = "nvstraps-rebar"
 version = "1.0.3"
 dependencies = [
+ "base64 0.22.1",
  "nvstraps-core",
  "nvstraps-deploy",
  "nvstraps-ffs",
