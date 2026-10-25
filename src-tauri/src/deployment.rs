@@ -139,8 +139,15 @@ fn legacy_patch_catalog_views() -> CommandResult<Vec<LegacyPatchCatalogView>> {
 }
 
 #[tauri::command]
-pub fn inspect_firmware_image(path: String) -> CommandResult<FirmwareFingerprint> {
-    inspect_firmware_path(&path).map_err(ApiError::from)
+pub async fn inspect_firmware_image(path: String) -> CommandResult<FirmwareFingerprint> {
+    tauri::async_runtime::spawn_blocking(move || inspect_firmware_path(&path))
+        .await
+        .map_err(|error| {
+            ApiError::from(BackendError::Deployment(format!(
+                "firmware inspection worker failed: {error}"
+            )))
+        })?
+        .map_err(ApiError::from)
 }
 
 #[tauri::command]
