@@ -12,6 +12,10 @@ authoritative. Keep RIIR, deployment automation, and physical-machine proof as s
   transitions are BIOS version/release date plus BAR0 before the first proven post-flash boot, and
   BAR0 alone across the later configuration reboot; each successful boot must immediately pin a
   new `BootObservation` and restore exact comparison.
+- Correcting a file the injector left broken is not a signature bypass. A patched image must stay
+  internally consistent: recomputing a checksum, hash or layout record that the image itself
+  carries and that anyone can recompute without a key is repair. A check that needs a vendor's
+  private key is a signature, and the project stops there.
 - Do not execute a real EFI write, restart, flash, firmware-setting change, or hardware smoke test
   during development unless the user explicitly authorizes that exact consequential operation on
   the pinned machine. Test adapters and pure decision logic instead.
