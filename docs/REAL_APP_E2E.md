@@ -99,9 +99,10 @@ in the same folder.
 
 ## The physical world in the harness
 
-`tests/real-app` starts the simulated build with
-`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=<port>` and attaches Playwright with
-`chromium.connectOverCDP`. A "restart" is the harness closing the application after a recorded
+`tests/real-app` starts the simulated build with `NVSTRAPS_SIMULATED_DEVTOOLS_PORT=<port>`, which the
+build passes to WebView2 as `--remote-debugging-port` through the window's browser arguments, and
+attaches Playwright with `chromium.connectOverCDP`. `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` cannot do
+this: WebView2 ignores it when the host runs elevated, and a CI runner starts every process elevated. A "restart" is the harness closing the application after a recorded
 reboot request, changing the machine file the way the hardware would have, and starting it again.
 It closes the window first, as Windows does before a restart, and forces the process only if it
 hangs: a forced kill loses what WebView2 has not yet written of its local storage.

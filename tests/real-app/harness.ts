@@ -17,16 +17,9 @@ const dataDirectory = join(localData, dataName);
 const panicPath = join(dataDirectory, "logs", "panic.log");
 export const runFile = promisify(execFile);
 
-/**
- * For a launch that never reached the page: the WebView2 command lines show whether the debugging
- * port argument arrived, and the policy keys show whether the machine overrides it.
- */
+/** For a launch that never reached the page: the WebView2 command lines show whether the debugging port arrived. */
 async function processList() {
-  const script = [
-    "Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'NvStrapsReBar|msedgewebview2|WerFault' } | ForEach-Object { \"$($_.ProcessId) $($_.Name) $($_.CommandLine)\" }",
-    "'Policies:'",
-    "'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge', 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge\\WebView2', 'HKCU:\\SOFTWARE\\Policies\\Microsoft\\Edge\\WebView2' | ForEach-Object { if (Test-Path $_) { $_; Get-ItemProperty $_ | Format-List | Out-String } }",
-  ].join("; ");
+  const script = "Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'NvStrapsReBar|msedgewebview2|WerFault' } | ForEach-Object { \"$($_.ProcessId) $($_.Name) $($_.CommandLine)\" }";
   const { stdout } = await runFile("powershell.exe", ["-NoProfile", "-Command", script], { maxBuffer: 4 * 1024 * 1024 }).catch(error => ({ stdout: `(process list unavailable: ${String(error)})` }));
   return `Processes:\n${stdout.trim() || "(no NvStrapsReBar, msedgewebview2 or WerFault process)"}`;
 }
@@ -120,7 +113,7 @@ export class RealApp {
       env: {
         ...process.env,
         NVSTRAPS_SIMULATED_MACHINE: this.machineFile,
-        WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}`,
+        NVSTRAPS_SIMULATED_DEVTOOLS_PORT: String(port),
       },
       stdio: ["ignore", "pipe", "pipe"],
     });

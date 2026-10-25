@@ -129,6 +129,28 @@ pub(crate) fn load() -> BackendResult<MachineFile> {
     load_from(&machine_file_path()?)
 }
 
+/// Opens the WebView2 DevTools port the real-app harness names in `NVSTRAPS_SIMULATED_DEVTOOLS_PORT`.
+/// WebView2 ignores `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` when the host runs elevated, as it does
+/// on a CI runner, but honours arguments the application passes through its API.
+pub(crate) fn open_devtools_port<R: tauri::Runtime>(context: &mut tauri::Context<R>) {
+    let Some(value) = std::env::var_os("NVSTRAPS_SIMULATED_DEVTOOLS_PORT") else {
+        return;
+    };
+    let port = value
+        .to_str()
+        .and_then(|value| value.parse::<u16>().ok())
+        .filter(|port| *port != 0)
+        .unwrap_or_else(|| {
+            panic!("NVSTRAPS_SIMULATED_DEVTOOLS_PORT must be a TCP port, not {value:?}")
+        });
+    for window in &mut context.config_mut().app.windows {
+        // Any argument replaces wry's defaults, so they are repeated ahead of the port.
+        window.additional_browser_args = Some(format!(
+            "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --autoplay-policy=no-user-gesture-required --remote-debugging-port={port}"
+        ));
+    }
+}
+
 fn load_from(path: &Path) -> BackendResult<MachineFile> {
     let bytes = fs::read(path).map_err(|error| {
         simulated_error(format!(

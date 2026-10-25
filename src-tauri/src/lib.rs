@@ -24,6 +24,10 @@ mod simulated_machine;
 mod status;
 
 pub fn run() {
+    #[cfg_attr(not(feature = "simulated-machine"), allow(unused_mut))]
+    let mut context = tauri::generate_context!();
+    #[cfg(feature = "simulated-machine")]
+    simulated_machine::open_devtools_port(&mut context);
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
@@ -77,6 +81,6 @@ pub fn run() {
             nvidia_profiles::set_nvidia_all_games_rebar,
             nvidia_profiles::undo_nvidia_game_changes,
         ])
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("failed to run NvStrapsReBar");
 }
