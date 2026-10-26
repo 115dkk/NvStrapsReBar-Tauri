@@ -27,6 +27,8 @@
     "prepare:desktop": "rustup target add x86_64-unknown-uefi && npm run build:firmware",
     "check:firmware": "cargo test -p nvstraps-ffs && npm run build:firmware",
     "test:qemu": "bash scripts/qemu-smoke.sh",
+    "build:external": "node scripts/build-external.mjs",
+    "test:qemu:external": "bash scripts/qemu-external.sh",
     "tauri": "tauri",
     "tauri:ci": "tauri build --no-bundle",
     "tauri:simulated": "tauri build --debug --no-bundle --features simulated-machine --config src-tauri/tauri.simulated.conf.json -- --config profile.dev.package.nvstraps-ffs.opt-level=3 --config profile.dev.package.lzma-sdk-rs.opt-level=3 --config profile.dev.package.oxiarc-lzma.opt-level=3 --config profile.dev.package.flate2.opt-level=3 --config profile.dev.package.zlib-rs.opt-level=3 --config profile.dev.package.sha2.opt-level=3"

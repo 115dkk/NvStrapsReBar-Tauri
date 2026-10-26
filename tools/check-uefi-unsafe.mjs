@@ -4,10 +4,12 @@ import { readFileSync } from "node:fs";
 // The DXE driver that ships in firmware images, and the QEMU/OVMF test application that puts
 // the injected firmware through an S3 cycle. Both run with no safety net, so every unsafe site is
 // budgeted here and ratcheted on purpose.
-const roots = ["crates/nvstraps-uefi/src/", "crates/nvstraps-s3-probe/src/"];
+const roots = ["crates/nvstraps-uefi/src/", "crates/nvstraps-s3-probe/src/", "crates/nvstraps-external-efi/src/"];
 const driver = roots[0];
 const probe = roots[1];
 const budgets = new Map([
+  ["crates/nvstraps-external-efi/src/crt.rs", { blocks: 1, functions: 1, implementations: 0, traits: 0, attributes: 1 }],
+  ["crates/nvstraps-external-efi/src/native.rs", { blocks: 15, functions: 9, implementations: 0, traits: 0, attributes: 1 }],
   [`${driver}exclusive.rs`, { blocks: 1, functions: 0, implementations: 0, traits: 0, attributes: 0 }],
   [`${driver}host_bridge.rs`, { blocks: 3, functions: 2, implementations: 0, traits: 0, attributes: 1 }],
   [`${driver}main.rs`, { blocks: 5, functions: 0, implementations: 0, traits: 0, attributes: 0 }],
