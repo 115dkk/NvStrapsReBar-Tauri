@@ -17,14 +17,23 @@ readonly TOOL="${REPO_ROOT}/target/debug/nvstraps-external-tool"
 
 run_vm() {
   local folder="$1" label="$2"
+  local disk="${RUN}/${label}.fat.img"
+  # vvfat's writable directory bridge can mis-reconstruct newly allocated files.
+  # Use a real FAT image and read the guest's bytes back through mtools instead.
+  truncate -s 128M "${disk}"
+  mkfs.vfat -F 32 "${disk}"
+  mcopy -s -i "${disk}" "${folder}"/* ::/
   cp -- "${VARS}" "${RUN}/${label}.vars.fd"
   timeout --signal=TERM 75s qemu-system-x86_64 \
     -machine q35,accel=tcg -m 512 \
     -drive "if=pflash,format=raw,unit=0,readonly=on,file=${CODE}" \
     -drive "if=pflash,format=raw,unit=1,file=${RUN}/${label}.vars.fd" \
-    -drive "format=raw,file=fat:rw:${folder}" \
+    -drive "format=raw,file=${disk}" \
     -display none -serial stdio -monitor none -net none -no-reboot \
     2>&1 | tee "${RUN}/logs/${label}.log"
+  if [[ "${label}" == *-diagnostic ]]; then
+    mcopy -i "${disk}" ::/NvStrapsDiagnostic.json "${folder}/NvStrapsDiagnostic.json"
+  fi
 }
 
 cp -- "${RELEASE}/NvStrapsDiagnostic.efi" "${RUN}/native/probe.efi"
