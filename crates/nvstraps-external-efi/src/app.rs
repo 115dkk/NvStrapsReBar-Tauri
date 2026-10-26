@@ -105,6 +105,9 @@ pub fn diagnostic() -> Status {
     let snapshot = crate::native::capture();
     #[cfg(feature = "qemu-model")]
     let snapshot = crate::model::Model::new().source;
+    for error in &snapshot.errors {
+        uefi::println!("EXTERNAL-DIAGNOSTIC: incomplete: {error}");
+    }
     match serde_json::to_vec_pretty(&snapshot)
         .map_err(|_| "diagnostic encoding failed")
         .and_then(|bytes| save_new(REPORT, &bytes))
@@ -229,7 +232,9 @@ fn run() -> Result<(), &'static str> {
             uefi::println!(
                 "EXTERNAL-MODEL: shared executor and chainload PASS; no physical GPU proof"
             );
-            return Ok(());
+            // The debug-only CI payload is the removable-media boot target. Returning
+            // SUCCESS opens OVMF's setup UI; shut down the test VM after verified undo.
+            uefi::runtime::reset(uefi::runtime::ResetType::SHUTDOWN, Status::SUCCESS, None);
         }
     }
     Err("successor returned instead of booting")

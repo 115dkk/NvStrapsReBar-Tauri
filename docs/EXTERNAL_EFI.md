@@ -85,7 +85,8 @@ firmware-injected driver.
   position and failed restoration. Miri interprets these portable tests.
 - The original OVMF hash stays unchanged. Uploaded evidence contains only logs/reports.
 
-`qemu-model` cannot compile without debug assertions. Model evidence does not emulate
+`qemu-model` cannot compile without debug assertions and shuts down its test VM after
+successful handoff and restoration. Model evidence does not emulate
 NVIDIA silicon or exercise native PCI writes. Native adapter evidence is UEFI target
 compilation and the read-only QEMU diagnostic. Physical Turing writes, Windows and
 sleep/resume require hardware trials. The existing injected-driver/S3 suite is retained.
