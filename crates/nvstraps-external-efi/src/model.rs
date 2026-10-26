@@ -8,6 +8,8 @@ pub struct Model {
     pub source: Snapshot,
     regs: [u32; 5],
     reserved: bool,
+    pub fail_writes: bool,
+    writes: usize,
 }
 impl Model {
     pub fn new() -> Self {
@@ -79,6 +81,8 @@ impl Model {
             },
             regs: [6, 12, 1, 0x80008000, 0x80000000],
             reserved: false,
+            fail_writes: false,
+            writes: 0,
         }
     }
 }
@@ -115,6 +119,10 @@ impl Machine for Model {
         Ok(self.regs[index(r)])
     }
     fn write(&mut self, r: Register, v: u32) -> Result<(), &'static str> {
+        self.writes += 1;
+        if self.fail_writes && self.writes >= 3 {
+            return Err("model permanent write failure");
+        }
         self.regs[index(r)] = v;
         Ok(())
     }

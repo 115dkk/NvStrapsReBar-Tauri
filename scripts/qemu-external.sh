@@ -24,13 +24,15 @@ run_vm() {
   mkfs.vfat -F 32 "${disk}"
   mcopy -s -i "${disk}" "${folder}"/* ::/
   cp -- "${VARS}" "${RUN}/${label}.vars.fd"
-  timeout --signal=TERM 75s qemu-system-x86_64 \
+  local result=0
+  timeout --signal=TERM "${3:-75}s" qemu-system-x86_64 \
     -machine q35,accel=tcg -m 512 \
     -drive "if=pflash,format=raw,unit=0,readonly=on,file=${CODE}" \
     -drive "if=pflash,format=raw,unit=1,file=${RUN}/${label}.vars.fd" \
     -drive "format=raw,file=${disk}" \
     -display none -serial stdio -monitor none -net none -no-reboot \
-    2>&1 | tee "${RUN}/logs/${label}.log"
+    2>&1 | tee "${RUN}/logs/${label}.log" || result=$?
+  if [[ "${result}" != 0 ]]; then return "${result}"; fi
   if [[ "${label}" == *-diagnostic ]]; then
     mcopy -i "${disk}" ::/NvStrapsDiagnostic.json "${folder}/NvStrapsDiagnostic.json"
   fi
@@ -69,6 +71,19 @@ printf 'fs0:\\loader.efi\r\nreset -s\r\n' > "${RUN}/tampered/startup.nsh"
 run_vm "${RUN}/tampered" successor-reject
 node tools/check-external-evidence.mjs rejection "${RUN}/logs/successor-reject.log" 'pinned successor missing or changed'
 
+mkdir -p "${RUN}/restore-failure/EFI/NvStraps"
+cp -- "${MODEL}/NvStrapsLoader.efi" "${RUN}/restore-failure/loader.efi"
+cp -- "${RUN}/plan.json" "${RUN}/restore-failure/EFI/NvStraps/plan.json"
+cp -- "${MODEL}/NvStrapsHandoffProbe.efi" "${RUN}/restore-failure/EFI/NvStraps/Next.efi"
+printf 'permanent-write-failure' > "${RUN}/restore-failure/EFI/NvStraps/model-fault.txt"
+printf 'fs0:\\loader.efi\r\nreset -s\r\n' > "${RUN}/restore-failure/startup.nsh"
+if run_vm "${RUN}/restore-failure" restore-failure 20; then
+  echo 'failed restoration unexpectedly returned to firmware' >&2; exit 1
+else
+  test "$?" -eq 124
+fi
+node tools/check-external-evidence.mjs rejection "${RUN}/logs/restore-failure.log" 'RESTORE FAILED; halted before firmware fallback'
+
 test "${BEFORE}" = "$(sha256sum "${CODE}" | cut -d ' ' -f 1)"
 cp -- "${RUN}/package/manifest.json" "${RUN}/logs/package-manifest.json"
 printf '%s\n' \
@@ -76,6 +91,7 @@ printf '%s\n' \
   'PASS: diagnostic -> host plan -> immutable package -> EFI loader -> actual successor LoadImage/StartImage' \
   'PASS: shared transaction resized a synthetic Turing register model to 8 GiB and restored it on successor return' \
   'PASS: production loader rejects synthetic plans; altered successor rejected before mutation' \
+  'PASS: permanent write/restore failure halts before firmware fallback (expected VM timeout)' \
   'GPU model is synthetic. No claim about physical Turing, vendor flash, Windows or S3 resume.' \
   "OVMF code SHA-256 unchanged: ${BEFORE}" > "${RUN}/logs/RECEIPT.txt"
 cat "${RUN}/logs/RECEIPT.txt"

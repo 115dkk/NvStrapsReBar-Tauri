@@ -175,7 +175,12 @@ fn run() -> Result<(), &'static str> {
         crate::native::NativeMachine::new(plan.target)?
     };
     #[cfg(feature = "qemu-model")]
-    let mut machine = crate::model::Model::new();
+    let mut machine = {
+        let mut model = crate::model::Model::new();
+        model.fail_writes = read_file(own_device()?, "\\EFI\\NvStraps\\model-fault.txt", 64)
+            .is_ok_and(|v| v == b"permanent-write-failure");
+        model
+    };
     let current = machine.snapshot()?;
     validate_plan(&plan, &current).map_err(|_| "fresh diagnostic does not match plan")?;
     let next = prepare_handoff(&plan.handoff)?;
@@ -193,6 +198,9 @@ fn run() -> Result<(), &'static str> {
                 e.reason,
                 e.rollback_failed
             );
+            if e.rollback_failed {
+                halt_failed_restore();
+            }
             return Err(e.reason);
         }
     };
@@ -217,6 +225,9 @@ fn run() -> Result<(), &'static str> {
         let rollback = execute::restore(&mut machine, applied.saved, applied.destination);
         let _ = boot::unload_image(next);
         uefi::println!("EXTERNAL-LOADER: receipt failure; rollback={rollback:?}");
+        if rollback.is_err() {
+            halt_failed_restore();
+        }
         return Err(e);
     }
     let result = boot::start_image(next);
@@ -225,7 +236,9 @@ fn run() -> Result<(), &'static str> {
     let rollback = execute::restore(&mut machine, applied.saved, applied.destination);
     let _ = boot::unload_image(next);
     uefi::println!("EXTERNAL-LOADER: successor returned={result:?}; restored={rollback:?}");
-    rollback?;
+    if rollback.is_err() {
+        halt_failed_restore();
+    }
     #[cfg(feature = "qemu-model")]
     {
         if result.is_ok() {
@@ -250,5 +263,14 @@ pub fn loader() -> Status {
             uefi::println!("EXTERNAL-LOADER: stopped: {e}");
             Status::ABORTED
         }
+    }
+}
+
+fn halt_failed_restore() -> ! {
+    uefi::println!(
+        "EXTERNAL-LOADER: RESTORE FAILED; halted before firmware fallback; cold power-off required"
+    );
+    loop {
+        core::hint::spin_loop();
     }
 }

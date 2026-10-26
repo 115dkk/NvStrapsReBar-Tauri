@@ -16,7 +16,8 @@ The loader moves BAR1 into an aligned, exclusively reserved GCD MMIO extent insi
 all existing root and ancestor-bridge decode windows. It validates a fresh diagnostic,
 reserves the exact destination, disables DMA, relocates BAR1, changes the straps,
 disables decoding, measures the actual BAR mask, and verifies register readback.
-Failure restores the registers. Failed restoration retains the reservation and stops.
+Failure restores the registers. Failed restoration retains the reservation and halts
+the EFI application, preventing firmware from silently trying the next Windows entry.
 
 The target must have no bound UEFI driver and no GOP on its PCI_IO handle or framebuffer
 overlapping its BARs. Active
@@ -81,6 +82,8 @@ firmware-injected driver.
   fields to measure 8 GiB, and uses actual `LoadImage`/`StartImage` to run a successor.
   Return from the successor exercises restoration.
 - Production rejects synthetic plans; a changed successor is refused before mutation.
+- A permanent modeled write/restore failure halts before firmware fallback. CI requires
+  the fatal marker, absence of handoff, and an expected VM timeout for that case.
 - Portable tests cover stale identity, collisions, bridge limits, each write-failure
   position and failed restoration. Miri interprets these portable tests.
 - The original OVMF hash stays unchanged. Uploaded evidence contains only logs/reports.
