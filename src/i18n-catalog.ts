@@ -632,6 +632,8 @@ export const messages = {
         "ui.legacyAnalysisFailed": { en: "Analyze the file again", ko: "파일을 다시 분석하세요" },
         "ui.advancedOptions": { en: "Advanced options", ko: "고급 설정" },
         "ui.patchEveryDxeDomainNeedsFlashbackOrSpi": { en: "To use this, choose USB Flashback or an external SPI programmer as the recovery method.", ko: "이 항목을 쓰려면 복구 방법으로 USB Flashback이나 외부 SPI 프로그래머를 고르세요." },
+        "ui.signedFirmwareWarningTitle": { en: "The maker's signature covers this part of the BIOS", ko: "제조사 서명이 걸린 BIOS입니다" },
+        "ui.signedFirmwareWarningDetail": { en: "NvStrapsReBar has to change a part of this BIOS file that the maker signed. A BIOS updater that checks that signature, such as M-FLASH on MSI boards, refuses the changed file.", ko: "NvStrapsReBar가 고쳐야 하는 부분에 제조사 서명이 걸려 있습니다. MSI 보드의 M-FLASH처럼 이 서명을 확인하는 BIOS 업데이트 도구는 고친 파일을 받지 않습니다." },
         "ui.routesTitle": { en: "Check the install and recovery methods", ko: "설치와 복구 방법을 확인하세요" },
         "ui.routesLead": { en: "The methods for this motherboard are selected.", ko: "이 메인보드에 맞는 방법이 선택되어 있습니다." },
         "ui.routesHint": { en: "Pressing it records your check, keeps the original, and makes the install BIOS file.", ko: "누르면 확인했다고 기록하고 원본을 보관한 뒤 설치용 BIOS 파일을 만듭니다." },

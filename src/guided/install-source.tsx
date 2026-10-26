@@ -8,7 +8,7 @@ import { messages, type StaticMessageId } from "../i18n-catalog";
 import { translateMessage } from "../i18n";
 import { Icon } from "./icons";
 import type { InstallContext } from "./install-context";
-import { ActionBar, FileCard, Notice, RouteCard, Step, Steps, TaskPanel } from "./ui";
+import { ActionBar, Caution, FileCard, Notice, RouteCard, Step, Steps, TaskPanel } from "./ui";
 
 export const installMethodIds: Record<FirmwareInstallMethod, { title: StaticMessageId; detail: StaticMessageId }> = {
         firmwareSetupUtility: { title: "ui.methodSetupUtility", detail: "ui.methodSetupUtilityDetail" },
@@ -50,6 +50,13 @@ const SourceFailure = ({ ctx }: { ctx: InstallContext }) => {
         const { t, locale, view } = ctx;
         if (view.activity?.tone !== "error") return null;
         return <Notice title={t("ui.taskDidNotFinish")}>{translateMessage(locale, view.activity.message)}</Notice>;
+};
+
+/** The screens that make the file say so first when the maker's signature covers what the driver changes. */
+const SignedFirmwareWarning = ({ ctx }: { ctx: InstallContext }) => {
+        const { t, view } = ctx;
+        if (!view.signedUpdateCoversDriver) return null;
+        return <Caution title={t("ui.signedFirmwareWarningTitle")}>{t("ui.signedFirmwareWarningDetail")}</Caution>;
 };
 
 export const PickFirmware = ({ ctx }: { ctx: InstallContext }) => {
@@ -292,6 +299,7 @@ export const Routes = ({ ctx }: { ctx: InstallContext }) => {
                 >
                         <SourceFailure ctx={ctx} />
                         <ChosenFile ctx={ctx} />
+                        <SignedFirmwareWarning ctx={ctx} />
                         <div className="nv-group">
                                 <RouteCard icon="tool" label={t("ui.routeInstall")} title={t("ui.routeInstallMsiTitle")} detail={t("ui.routeInstallMsiDetail")} />
                                 <RouteCard icon="undo" label={t("ui.routeRecovery")} title={t("ui.routeRecoveryMsiTitle")} detail={t("ui.routeRecoveryMsiDetail")} />
@@ -361,6 +369,7 @@ export const RecoveryQuestion = ({ ctx }: { ctx: InstallContext }) => {
                         }
                 >
                         <SourceFailure ctx={ctx} />
+                        <SignedFirmwareWarning ctx={ctx} />
                         <Choices
                                 name="recovery-method"
                                 legend={t("ui.recoveryQuestionTitle")}

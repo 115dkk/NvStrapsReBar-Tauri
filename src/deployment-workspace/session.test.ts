@@ -176,7 +176,10 @@ const preparationPlan = (owner: MachineProfile): DeploymentPlan => ({
         ],
 });
 const adapter = (overrides: Partial<DeploymentAdapter>): DeploymentAdapter =>
-        new Proxy(overrides as DeploymentAdapter, {
+        new Proxy({
+                inspectSignedFirmwareUpdate: async () => ({ coversDriver: false }),
+                ...overrides,
+        } as DeploymentAdapter, {
                 get(target, property) {
                         if (property in target)
                                 return target[
@@ -188,6 +191,182 @@ const adapter = (overrides: Partial<DeploymentAdapter>): DeploymentAdapter =>
 
 describe("DeploymentWorkspaceSession", () => {
         beforeEach(() => vi.restoreAllMocks());
+
+        it.each(["chooseFirmware", "inspectFirmware"] as const)(
+                "%s publishes the signed-update warning after fingerprinting",
+                async (type) => {
+                        const path = "C:\\firmware\\signed.bin";
+                        const firmware = profile("a").originalFirmware;
+                        const inspectFirmwareImage = vi.fn(async () => firmware);
+                        const inspectSignedFirmwareUpdate = vi.fn(async () => {
+                                expect(inspectFirmwareImage).toHaveResolvedWith(firmware);
+                                return { coversDriver: true };
+                        });
+                        const session = createDeploymentWorkspaceSession(
+                                snapshot,
+                                adapter({
+                                        listMachineProfiles: async () => [],
+                                        selectFirmwareImage: async () => path,
+                                        inspectFirmwareImage,
+                                        inspectSignedFirmwareUpdate,
+                                }),
+                        );
+                        await tick();
+                        expect(session.view()).toMatchObject({
+                                signedFirmwareUpdate: null,
+                                signedUpdateCoversDriver: false,
+                        });
+                        if (type === "inspectFirmware")
+                                await session.dispatch({ type: "setFirmwarePath", value: path });
+
+                        await session.dispatch({ type });
+
+                        expect(inspectSignedFirmwareUpdate).toHaveBeenCalledExactlyOnceWith(path);
+                        expect(session.view()).toMatchObject({
+                                firmwarePath: path,
+                                firmware,
+                                signedFirmwareUpdate: { coversDriver: true },
+                                signedUpdateCoversDriver: true,
+                                activity: { tone: "success" },
+                        });
+                },
+        );
+
+        it.each(["chooseFirmware", "inspectFirmware"] as const)(
+                "%s treats a rejected signed-update check as unknown without an error notice",
+                async (type) => {
+                        const path = "C:\\firmware\\vendor.bin";
+                        const firmware = profile("a").originalFirmware;
+                        const session = createDeploymentWorkspaceSession(
+                                snapshot,
+                                adapter({
+                                        listMachineProfiles: async () => [],
+                                        selectFirmwareImage: async () => path,
+                                        inspectFirmwareImage: async () => firmware,
+                                        inspectSignedFirmwareUpdate: async () => {
+                                                throw new Error("unreadable signed-update check");
+                                        },
+                                }),
+                        );
+                        await tick();
+                        if (type === "inspectFirmware")
+                                await session.dispatch({ type: "setFirmwarePath", value: path });
+
+                        await session.dispatch({ type });
+
+                        expect(session.view()).toMatchObject({
+                                firmwarePath: path,
+                                firmware,
+                                signedFirmwareUpdate: null,
+                                signedUpdateCoversDriver: false,
+                                activity: { tone: "success" },
+                                busyAction: "",
+                        });
+                },
+        );
+
+        it.each([false, null])(
+                "replaces the previous file's signed-update result with %s atomically",
+                async (nextResult) => {
+                        const firstPath = "C:\\firmware\\signed.bin";
+                        const secondPath = "C:\\firmware\\other.bin";
+                        const firstFirmware = profile("a").originalFirmware;
+                        const secondFirmware = profile("b").originalFirmware;
+                        const secondCheck = deferred<{ coversDriver: boolean }>();
+                        const session = createDeploymentWorkspaceSession(
+                                snapshot,
+                                adapter({
+                                        listMachineProfiles: async () => [],
+                                        selectFirmwareImage: vi.fn()
+                                                .mockResolvedValueOnce(firstPath)
+                                                .mockResolvedValueOnce(secondPath),
+                                        inspectFirmwareImage: vi.fn()
+                                                .mockResolvedValueOnce(firstFirmware)
+                                                .mockResolvedValueOnce(secondFirmware),
+                                        inspectSignedFirmwareUpdate: vi.fn()
+                                                .mockResolvedValueOnce({ coversDriver: true })
+                                                .mockImplementationOnce(() => secondCheck.promise),
+                                }),
+                        );
+                        await tick();
+                        await session.dispatch({ type: "chooseFirmware" });
+                        expect(session.view().signedUpdateCoversDriver).toBe(true);
+                        const observed: boolean[] = [];
+                        const unsubscribe = session.subscribe(() => {
+                                if (session.view().firmwarePath === secondPath)
+                                        observed.push(session.view().signedUpdateCoversDriver);
+                        });
+                        const pending = session.dispatch({ type: "chooseFirmware" });
+                        await tick();
+                        expect(session.view().firmware).toEqual(firstFirmware);
+                        if (nextResult === null)
+                                secondCheck.reject(new Error("check failed"));
+                        else
+                                secondCheck.resolve({ coversDriver: nextResult });
+                        await pending;
+                        unsubscribe();
+
+                        expect(session.view()).toMatchObject({
+                                firmwarePath: secondPath,
+                                firmware: secondFirmware,
+                                signedFirmwareUpdate: nextResult === null ? null : { coversDriver: false },
+                                signedUpdateCoversDriver: false,
+                                activity: { tone: "success" },
+                        });
+                        expect(observed.length).toBeGreaterThan(0);
+                        expect(observed.every((value) => value === false)).toBe(true);
+                },
+        );
+
+        it.each(["", "C:\\firmware\\other.bin"])(
+                "clears the signed-update check when the firmware path becomes %s",
+                async (value) => {
+                        const session = createDeploymentWorkspaceSession(
+                                snapshot,
+                                adapter({
+                                        listMachineProfiles: async () => [],
+                                        selectFirmwareImage: async () => "C:\\firmware\\signed.bin",
+                                        inspectFirmwareImage: async () => profile("a").originalFirmware,
+                                        inspectSignedFirmwareUpdate: async () => ({ coversDriver: true }),
+                                }),
+                        );
+                        await tick();
+                        await session.dispatch({ type: "chooseFirmware" });
+                        await session.dispatch({ type: "setFirmwarePath", value });
+
+                        expect(session.view()).toMatchObject({
+                                firmwarePath: value,
+                                firmware: null,
+                                signedFirmwareUpdate: null,
+                                signedUpdateCoversDriver: false,
+                        });
+                },
+        );
+
+        it("clears the signed-update check when another profile is selected", async () => {
+                const first = profile("a");
+                const second = profile("b");
+                const session = createDeploymentWorkspaceSession(
+                        snapshot,
+                        adapter({
+                                listMachineProfiles: async () => [first, second],
+                                getDeploymentPlan: async (id) => plan(id === "a" ? first : second, 0),
+                                selectFirmwareImage: async () => "C:\\firmware\\signed.bin",
+                                inspectFirmwareImage: async () => first.originalFirmware,
+                                inspectSignedFirmwareUpdate: async () => ({ coversDriver: true }),
+                        }),
+                );
+                await tick();
+                await session.dispatch({ type: "chooseFirmware" });
+                expect(session.view().signedUpdateCoversDriver).toBe(true);
+                await session.dispatch({ type: "setSelectedProfile", value: second.profileId });
+
+                expect(session.view()).toMatchObject({
+                        selectedProfileId: second.profileId,
+                        signedFirmwareUpdate: null,
+                        signedUpdateCoversDriver: false,
+                });
+        });
 
         it("defaults to a unique DXE target and preserves an explicit all-domain policy intent", async () => {
                 const session = createDeploymentWorkspaceSession(

@@ -11,8 +11,9 @@ pub use firmware::{
     LegacyFirmwarePatch, LegacyFirmwarePatchApplication, LegacyFirmwarePatchChange,
     LegacyFirmwarePatchError, LegacyFirmwarePatchPath, LegacyFirmwareRuleAnalysis,
     LegacyFirmwareRuleDisposition, LegacyPatchSelection, MalformedCapsuleHeader, UefiCapsuleHeader,
-    UefiCapsuleKind, analyze_legacy_firmware, inject_ffs, inject_ffs_all_targets,
-    inject_ffs_with_plan, inspect_firmware_envelope, patch_legacy_firmware, plan_ffs_injection,
+    UefiCapsuleKind, analyze_legacy_firmware, aptio_signed_ranges, inject_ffs,
+    inject_ffs_all_targets, inject_ffs_with_plan, inspect_firmware_envelope, patch_legacy_firmware,
+    plan_ffs_injection, signed_update_covers_injection,
 };
 pub use legacy_patch::{
     LegacyPatchApplication, LegacyPatchCatalog, LegacyPatchChange, LegacyPatchError,

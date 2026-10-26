@@ -27,6 +27,7 @@ export const createInitialDeploymentState = (
                 boardPath: "nativeResizableBar",
                 firmwarePath: "",
                 firmware: null,
+                signedFirmwareUpdate: null,
                 recoveryMethod: msi ? "usbFlashback" : "vendorRecovery",
                 firmwareTargetPolicy: "requireUnique",
                 installMethod: "firmwareSetupUtility",
@@ -80,6 +81,7 @@ export const resetProfileProjection = (
         selectedProfileId: string,
 ): Partial<DeploymentWorkspaceState> => ({
         selectedProfileId,
+        signedFirmwareUpdate: null,
         plan: null,
         preflightExact: null,
         preparation: null,
@@ -115,6 +117,7 @@ export const reduceLocalDeploymentIntent = (
                                 ...legacyReset,
                                 firmwarePath: intent.value,
                                 firmware: null,
+                                signedFirmwareUpdate: null,
                         };
                 case "setRecoveryMethod":
                         return { recoveryMethod: intent.value };

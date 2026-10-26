@@ -19,6 +19,7 @@ import type {
         NvidiaSmiEvidenceReceipt,
         ProfileComparison,
         SaveDeploymentConfigReceipt,
+        SignedFirmwareUpdate,
 } from "./contract";
 
 /** Privileged deployment seam. Only the Session consumes this interface. */
@@ -26,6 +27,7 @@ export interface DeploymentAdapter {
         selectFirmwareImage(): Promise<string | null>;
         selectDestinationDirectory(): Promise<string | null>;
         inspectFirmwareImage(path: string): Promise<FirmwareFingerprint>;
+        inspectSignedFirmwareUpdate(path: string): Promise<SignedFirmwareUpdate>;
         analyzeLegacyFirmware(path: string): Promise<LegacyFirmwareAnalysis>;
         createMachineProfile(
                 request: CreateProfileRequest,

@@ -19,6 +19,7 @@ export class ProfileSourceActions {
                         tx.patch({
                                 firmwarePath: inspected.path,
                                 firmware: inspected.firmware,
+                                signedFirmwareUpdate: inspected.signedUpdate,
                                 legacyAnalysis: null,
                                 legacyAnalysisStatus: "idle",
                                 legacyAnalysisError: "",
@@ -41,6 +42,7 @@ export class ProfileSourceActions {
                         );
                         tx.patch({
                                 firmware: inspected.firmware,
+                                signedFirmwareUpdate: inspected.signedUpdate,
                                 legacyAnalysis: null,
                                 legacyAnalysisStatus: "idle",
                                 legacyAnalysisError: "",

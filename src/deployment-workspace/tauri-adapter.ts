@@ -44,6 +44,8 @@ export const createTauriDeploymentAdapter = (
         },
         inspectFirmwareImage: (path) =>
                 invokeCommand("inspect_firmware_image", { path }),
+        inspectSignedFirmwareUpdate: (path) =>
+                invokeCommand("inspect_signed_firmware_update", { path }),
         analyzeLegacyFirmware: (path) =>
                 invokeCommand("analyze_legacy_firmware", { path }),
         createMachineProfile: (request) =>

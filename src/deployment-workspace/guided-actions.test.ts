@@ -75,7 +75,10 @@ const planAt = (active: StepId): DeploymentPlan => {
 };
 
 const adapter = (overrides: Partial<DeploymentAdapter>): DeploymentAdapter =>
-        new Proxy(overrides as DeploymentAdapter, {
+        new Proxy({
+                inspectSignedFirmwareUpdate: async () => ({ coversDriver: false }),
+                ...overrides,
+        } as DeploymentAdapter, {
                 get(target, property) {
                         if (property in target) return target[property as keyof DeploymentAdapter];
                         return vi.fn(async () => null);

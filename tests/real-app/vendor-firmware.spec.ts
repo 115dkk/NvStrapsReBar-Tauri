@@ -14,6 +14,8 @@ const sha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex
 const recoveryHeading = "Choose how to recover if the BIOS install fails";
 const ambiguousMessage = "This BIOS has multiple boot or recovery areas. To change all of them, choose USB Flashback or External SPI programmer as the recovery method, confirm the instructions, select “Add the driver to all boot and recovery areas,” then create the profile again.";
 const capsuleMessage = "This BIOS update file cannot be used here. Use a full BIOS backup read from the motherboard, or a BIOS-region backup with a verified region map. Do not extract and reuse part of this update file.";
+// Images whose AMI signed-update layout signs the DXE container the driver is added to.
+const signedUpdateWarnings = new Set(["msi-mag-z790-tomahawk-wifi-7d91vhj", "gigabyte-z490-aorus-elite-f22"]);
 
 async function verifyPackage(app: RealApp, image: VendorImage) {
   const directories = (await readdir(app.exportFolder, { withFileTypes: true })).filter(entry => entry.isDirectory());
@@ -81,6 +83,9 @@ for (const image of images) {
       await button(page, "Next").click();
       await expect(heading(page, recoveryHeading)).toBeVisible();
       await expect(page.getByRole("radio", { name: /^Maker's recovery feature/ })).toBeChecked();
+      const signedWarning = page.getByRole("note").filter({ hasText: "The maker's signature covers this part of the BIOS" });
+      if (signedUpdateWarnings.has(image.id)) await expect(signedWarning).toBeVisible();
+      else await expect(signedWarning).toHaveCount(0);
       await button(page, "Checked · make the file").click();
     });
 

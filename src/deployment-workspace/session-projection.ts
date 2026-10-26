@@ -164,6 +164,9 @@ export const projectDeploymentWorkspace = (
 
         return {
                 ...state,
+                signedUpdateCoversDriver:
+                        state.firmware !== null &&
+                        state.signedFirmwareUpdate?.coversDriver === true,
                 selectedProfile,
                 activeStep,
                 nextStep,
