@@ -18,7 +18,8 @@ reserves the exact destination, disables DMA, relocates BAR1, changes the straps
 disables decoding, measures the actual BAR mask, and verifies register readback.
 Failure restores the registers. Failed restoration retains the reservation and stops.
 
-The target must have no bound UEFI driver and no GOP on its PCI_IO handle. Active
+The target must have no bound UEFI driver and no GOP on its PCI_IO handle or framebuffer
+overlapping its BARs. Active
 display/GOP targets are refused. Missing SMBIOS3 identity, incomplete resource census,
 translated resources and insufficient MMIO also prevent execution. This version does
 not detach GOP, expand bridge windows, rewrite ACPI or restart the whole PCI bus.
@@ -46,7 +47,9 @@ Choose the exact target from the report. PCI address numbers below are decimal e
 
 The successor file is read only to pin its SHA-256. The packager does not copy Windows
 Boot Manager or its BCD store to the USB. It creates `EFI/BOOT/BOOTX64.EFI`, the diagnostic,
-the plan and a hash manifest. Copy a successful package onto a dedicated FAT USB and
+the plan and a hash manifest. Interrupted packaging can resume only with the same
+owner manifest and identical bytes; existing different files and reparse paths are refused.
+Copy a successful package onto a dedicated FAT USB and
 select it for a one-time boot; preserve the normal Windows entry.
 
 The loader requires exactly one file-system handle with the pinned successor path/hash.

@@ -206,7 +206,13 @@ pub fn validate_snapshot(s: &Snapshot) -> Result<(), PlanError> {
             return Err(PlanError::InvalidReport);
         }
         for (j, b) in d.bars.iter().enumerate() {
-            if b.index > 5 || !b.span.valid() || d.bars[..j].iter().any(|x| x.index == b.index) {
+            if b.index > 5
+                || !b.span.valid()
+                || d.bars[..j].iter().any(|x| x.index == b.index)
+                || !(b.span.end - b.span.start).is_power_of_two()
+                || !b.span.start.is_multiple_of(b.span.end - b.span.start)
+                || (b.width64 && (!b.memory || b.index == 5))
+            {
                 return Err(PlanError::InvalidReport);
             }
         }

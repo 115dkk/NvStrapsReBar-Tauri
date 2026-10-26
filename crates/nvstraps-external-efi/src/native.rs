@@ -354,13 +354,33 @@ pub fn capture() -> Snapshot {
         "e857caf6-c046-45dc-be3f-ee0765fba887"
     )))
     .is_ok();
+    let mut gop_handles = Vec::new();
     let mut gop_spans = Vec::new();
-    if let Ok(list) = handles::<uefi::proto::console::gop::GraphicsOutput>() {
-        for h in list {
-            if let Ok(g) = open::<uefi::proto::console::gop::GraphicsOutput>(h) {
-                let mode = g.current_mode_info();
-                let _ = mode; /* GOP ownership below also excludes bound targets. */
-                gop_spans.push(h);
+    match handles::<uefi::proto::console::gop::GraphicsOutput>() {
+        Err(e) => s.errors.push(e.into()),
+        Ok(list) => {
+            for h in list {
+                match open::<uefi::proto::console::gop::GraphicsOutput>(h) {
+                    Ok(mut g) => {
+                        gop_handles.push(h);
+                        if g.current_mode_info().pixel_format()
+                            != uefi::proto::console::gop::PixelFormat::BltOnly
+                        {
+                            let mut fb = g.frame_buffer();
+                            if let Some(span) =
+                                Span::from_size(fb.as_mut_ptr() as u64, fb.size() as u64)
+                            {
+                                gop_spans.push(span);
+                            } else {
+                                s.errors.push("invalid GOP framebuffer extent".into());
+                            }
+                        } else {
+                            s.errors
+                                .push("GOP framebuffer ownership indeterminate".into());
+                        }
+                    }
+                    Err(e) => s.errors.push(e.into()),
+                }
             }
         }
     }
@@ -368,7 +388,7 @@ pub fn capture() -> Snapshot {
         Err(e) => s.errors.push(e.into()),
         Ok(list) => {
             for h in list {
-                match capture_device(h, &gop_spans) {
+                match capture_device(h, &gop_handles, &gop_spans) {
                     Ok(d) => s.devices.push(d),
                     Err(e) => s.errors.push(format!("PCI: {e}")),
                 }
@@ -448,7 +468,11 @@ pub fn capture() -> Snapshot {
     s
 }
 
-fn capture_device(h: Handle, gops: &[Handle]) -> Result<Device, &'static str> {
+fn capture_device(
+    h: Handle,
+    gops: &[Handle],
+    framebuffers: &[Span],
+) -> Result<Device, &'static str> {
     let mut io = open::<PciIo>(h)?;
     let io = io.get_mut().ok_or("null PCI_IO")?;
     let slot = location(io)?;
@@ -471,8 +495,17 @@ fn capture_device(h: Handle, gops: &[Handle]) -> Result<Device, &'static str> {
     let bridge = if header == 1 {
         let buses = cfg(io, 0x18)?;
         let prefetch = cfg(io, 0x24)?;
-        let base = u64::from(prefetch & 0xfff0) << 16 | u64::from(cfg(io, 0x28)?) << 32;
-        let limit = u64::from(prefetch & 0xfff00000) | 0xfffff | u64::from(cfg(io, 0x2c)?) << 32;
+        let kind = prefetch & 15;
+        if kind > 1 || ((prefetch >> 16) & 15) != kind {
+            return Err("unsupported bridge prefetch window type");
+        }
+        let (upper_base, upper_limit) = if kind == 1 {
+            (cfg(io, 0x28)?, cfg(io, 0x2c)?)
+        } else {
+            (0, 0)
+        };
+        let base = u64::from(prefetch & 0xfff0) << 16 | u64::from(upper_base) << 32;
+        let limit = u64::from(prefetch & 0xfff00000) | 0xfffff | u64::from(upper_limit) << 32;
         Some(Bridge {
             secondary: (buses >> 8) as u8,
             subordinate: (buses >> 16) as u8,
@@ -497,6 +530,10 @@ fn capture_device(h: Handle, gops: &[Handle]) -> Result<Device, &'static str> {
     } else {
         None
     };
+    let console = gops.contains(&h)
+        || bars
+            .iter()
+            .any(|b| b.memory && framebuffers.iter().any(|f| f.overlaps(b.span)));
     Ok(Device {
         slot,
         vendor,
@@ -507,7 +544,7 @@ fn capture_device(h: Handle, gops: &[Handle]) -> Result<Device, &'static str> {
         bars,
         bridge,
         driver_count: drivers(h)?,
-        console: gops.contains(&h),
+        console,
         straps,
     })
 }
