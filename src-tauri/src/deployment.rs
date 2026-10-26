@@ -125,6 +125,12 @@ const MAX_FIRMWARE_IMAGE_BYTES: u64 = 512 * 1024 * 1024;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SignedFirmwareUpdate {
+    pub covers_driver: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LegacyFirmwareAnalysisView {
     pub firmware: FirmwareFingerprint,
     pub upstream_commit: String,
@@ -145,6 +151,21 @@ pub async fn inspect_firmware_image(path: String) -> CommandResult<FirmwareFinge
         .map_err(|error| {
             ApiError::from(BackendError::Deployment(format!(
                 "firmware inspection worker failed: {error}"
+            )))
+        })?
+        .map_err(ApiError::from)
+}
+
+#[tauri::command]
+pub async fn inspect_signed_firmware_update(
+    app: AppHandle,
+    path: String,
+) -> CommandResult<SignedFirmwareUpdate> {
+    tauri::async_runtime::spawn_blocking(move || inspect_signed_firmware_update_path(&app, &path))
+        .await
+        .map_err(|error| {
+            ApiError::from(BackendError::Deployment(format!(
+                "signed firmware update inspection worker failed: {error}"
             )))
         })?
         .map_err(ApiError::from)
@@ -343,6 +364,31 @@ fn read_bundled_driver(app: &AppHandle) -> BackendResult<Vec<u8>> {
             "bundled Rust driver could not be read at {}: {error}",
             driver_path.display()
         ))
+    })
+}
+
+fn inspect_signed_firmware_update_path(
+    app: &AppHandle,
+    path: &str,
+) -> BackendResult<SignedFirmwareUpdate> {
+    let path = canonical_firmware_path(path)?;
+    let firmware = read_firmware_image_bytes(&path)?;
+    let driver = read_bundled_driver(app)?;
+    if !matches!(
+        nvstraps_ffs::inspect_firmware_envelope(&firmware),
+        nvstraps_ffs::FirmwareEnvelope::RawOrVendorImage
+    ) {
+        return Ok(SignedFirmwareUpdate {
+            covers_driver: false,
+        });
+    }
+    let Ok(plan) = nvstraps_ffs::plan_ffs_injection(&firmware, &driver) else {
+        return Ok(SignedFirmwareUpdate {
+            covers_driver: false,
+        });
+    };
+    Ok(SignedFirmwareUpdate {
+        covers_driver: nvstraps_ffs::signed_update_covers_injection(&firmware, &plan),
     })
 }
 
@@ -878,6 +924,18 @@ fn analyze_legacy_firmware_bytes(
 }
 
 fn read_firmware_image(path: &Path, expected: &FirmwareFingerprint) -> BackendResult<Vec<u8>> {
+    let bytes = read_firmware_image_bytes(path)?;
+    if bytes.len() as u64 != expected.byte_length
+        || Sha256Digest::from_bytes(&bytes) != expected.sha256
+    {
+        return Err(BackendError::Deployment(
+            "firmware image changed while it was being analyzed".into(),
+        ));
+    }
+    Ok(bytes)
+}
+
+fn read_firmware_image_bytes(path: &Path) -> BackendResult<Vec<u8>> {
     let length = path
         .metadata()
         .map_err(|error| {
@@ -898,11 +956,9 @@ fn read_firmware_image(path: &Path, expected: &FirmwareFingerprint) -> BackendRe
             path.display()
         ))
     })?;
-    if bytes.len() as u64 != expected.byte_length
-        || Sha256Digest::from_bytes(&bytes) != expected.sha256
-    {
+    if bytes.len() as u64 != length {
         return Err(BackendError::Deployment(
-            "firmware image changed while it was being analyzed".into(),
+            "firmware image changed while it was being read".into(),
         ));
     }
     Ok(bytes)

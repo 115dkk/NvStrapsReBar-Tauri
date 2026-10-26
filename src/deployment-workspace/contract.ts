@@ -10,6 +10,9 @@ export type FirmwareFingerprint = {
         byteLength: number;
         sha256: string;
 };
+export interface SignedFirmwareUpdate {
+        coversDriver: boolean;
+}
 export type BoardPath = "nativeResizableBar" | "legacyAbove4g";
 export type RecoveryMethod =
         | "dualBios"

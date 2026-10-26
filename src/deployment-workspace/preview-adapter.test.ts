@@ -51,6 +51,14 @@ describe("browser preview deployment fixture ledger", () => {
                 vi.stubGlobal("sessionStorage", new MemoryStorage());
         });
 
+        it("keeps the signed firmware warning off in browser previews", async () => {
+                await expect(
+                        previewDeploymentAdapter.inspectSignedFirmwareUpdate(
+                                "C:\\Firmware\\E7D25IMS.1N0",
+                        ),
+                ).resolves.toEqual({ coversDriver: false });
+        });
+
         it("restores the canned receipt cursor after a client reload", async () => {
                 const bundle = await createProfile();
                 const preparation =

@@ -1,17 +1,23 @@
 import type { DeploymentAdapter } from "./adapter";
-import type { FirmwareFingerprint } from "./contract";
+import type { FirmwareFingerprint, SignedFirmwareUpdate } from "./contract";
 import { firmwareFingerprintsMatch, legacyRuleKey } from "./session-projection";
 
 export const selectAndInspectFirmware = async (adapter: DeploymentAdapter) => {
         const path = await adapter.selectFirmwareImage();
         if (!path) throw new Error("Firmware selection was cancelled.");
-        return { path, firmware: await adapter.inspectFirmwareImage(path) };
+        return inspectFirmware(adapter, path);
 };
 
 export const inspectFirmware = async (
         adapter: DeploymentAdapter,
         path: string,
-) => ({ path, firmware: await adapter.inspectFirmwareImage(path) });
+) => {
+        const firmware = await adapter.inspectFirmwareImage(path);
+        const signedUpdate: SignedFirmwareUpdate | null = await adapter
+                .inspectSignedFirmwareUpdate(path)
+                .catch(() => null);
+        return { path, firmware, signedUpdate };
+};
 
 export const analyzeLegacyFirmware = async (
         adapter: DeploymentAdapter,

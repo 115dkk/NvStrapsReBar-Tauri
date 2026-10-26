@@ -57,6 +57,7 @@ pub fn run() {
             settings_snapshot::inspect_bar_settings_snapshot,
             app::request_elevation,
             deployment::inspect_firmware_image,
+            deployment::inspect_signed_firmware_update,
             deployment::analyze_legacy_firmware,
             deployment::create_machine_profile,
             deployment::list_machine_profiles,

@@ -1,3 +1,4 @@
+use core::ops::Range;
 use std::{collections::HashSet, fmt, io::Read};
 
 use flate2::read::ZlibDecoder;
@@ -26,6 +27,7 @@ const FV_EXT_HEADER_MINIMUM_SIZE: usize = 20;
 const FV_EXT_ENTRY_USED_SIZE: u16 = 0x0003;
 const FV_USED_SIZE_ENTRY_MINIMUM: usize = 8;
 const FFS_LARGE_FILE_ATTRIBUTE: u8 = 0x01;
+const FFS_FILE_TYPE_FREEFORM: u8 = 0x02;
 const FFS_FILE_TYPE_DXE_CORE: u8 = 0x05;
 const FFS_FILE_TYPE_FIRMWARE_VOLUME_IMAGE: u8 = 0x0b;
 const FFS_FILE_TYPE_PAD: u8 = 0xf0;
@@ -83,6 +85,16 @@ const APTIO_SIGNED_CAPSULE_GUID_BYTES: [u8; 16] = [
 const APTIO_UNSIGNED_CAPSULE_GUID_BYTES: [u8; 16] = [
     0x90, 0xbb, 0xee, 0x14, 0x0a, 0x89, 0xdb, 0x43, 0xae, 0xd1, 0x5d, 0x3c, 0x45, 0x88, 0xa4, 0x18,
 ];
+const APTIO_CAPSULE_FFS_GUID_BYTES: [u8; 16] = [
+    0xad, 0x94, 0x4d, 0x41, 0x8d, 0x99, 0xd2, 0x47, 0xbf, 0xcd, 0x4e, 0x88, 0x22, 0x41, 0xde, 0x32,
+];
+const APTIO_CAPSULE_SECTION_GUID_BYTES: [u8; 16] = [
+    0x1b, 0x64, 0x88, 0x5a, 0xb9, 0xbb, 0xa6, 0x4a, 0x80, 0xf7, 0x49, 0x8a, 0xe4, 0x07, 0xc3, 0x1f,
+];
+const SECTION_TYPE_FREEFORM_SUBTYPE_GUID: u8 = 0x18;
+const APTIO_ROM_LAYOUT_ENTRY_SIZE: usize = 24;
+const APTIO_ROM_LAYOUT_MAX_ENTRIES: usize = 256;
+const APTIO_ROM_AREA_SIGNED: u32 = 0x200;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum FirmwareEnvelope {
@@ -703,6 +715,178 @@ fn require_decode_depth(guided_depth: usize) -> Result<(), InjectionError> {
         ));
     }
     Ok(())
+}
+
+/// Absolute byte ranges of `firmware` that an AMI Aptio signed-update layout marks as signed,
+/// sorted by start; empty when the image carries no such layout or the layout does not
+/// reconcile with the image.
+pub fn aptio_signed_ranges(firmware: &[u8]) -> Vec<Range<usize>> {
+    detect_aptio_signed_ranges(firmware).unwrap_or_default()
+}
+
+/// Whether any signed range overlaps a byte range the injection plan would rewrite.
+pub fn signed_update_covers_injection(firmware: &[u8], plan: &FirmwareInjectionPlan) -> bool {
+    let signed_ranges = aptio_signed_ranges(firmware);
+    if signed_ranges.is_empty() {
+        return false;
+    }
+    let Some(rewrite_extents) = injection_rewrite_extents(firmware, plan) else {
+        return false;
+    };
+    signed_ranges.iter().any(|signed| {
+        rewrite_extents
+            .iter()
+            .any(|rewritten| ranges_overlap(signed, rewritten))
+    })
+}
+
+fn detect_aptio_signed_ranges(firmware: &[u8]) -> Result<Vec<Range<usize>>, ()> {
+    let volumes = top_level_firmware_volumes(firmware).map_err(|_| ())?;
+    let mut signed_ranges = Vec::new();
+    for volume in volumes {
+        let records = firmware_files(firmware, volume).map_err(|_| ())?;
+        for record in records {
+            let file_guid = firmware
+                .get(record.offset..record.offset.checked_add(16).ok_or(())?)
+                .ok_or(())?;
+            if !record.is_live || file_guid != APTIO_CAPSULE_FFS_GUID_BYTES {
+                continue;
+            }
+            let mut file = firmware
+                .get(record.offset..record.offset.checked_add(record.size).ok_or(())?)
+                .ok_or(())?
+                .to_vec();
+            if record.file_type != FFS_FILE_TYPE_FREEFORM || record.header_size != FFS_HEADER_SIZE {
+                return Err(());
+            }
+            if volume.erase_polarity {
+                *file.get_mut(23).ok_or(())? = !file[23];
+            }
+            verify_generic_file(&file).map_err(|_| ())?;
+            let body = file.get(FFS_HEADER_SIZE..).ok_or(())?;
+            let sections = parse_section_stream(body).map_err(|_| ())?;
+            let section = sections.first().ok_or(())?;
+            if section.section_type != SECTION_TYPE_FREEFORM_SUBTYPE_GUID {
+                return Err(());
+            }
+            let content = body.get(section.content_start..section.end).ok_or(())?;
+            if content.get(..16) != Some(APTIO_CAPSULE_SECTION_GUID_BYTES.as_slice()) {
+                return Err(());
+            }
+            let capsule = content.get(16..).ok_or(())?;
+            signed_ranges.extend(parse_aptio_rom_layout(firmware, capsule)?);
+        }
+    }
+    signed_ranges.sort_unstable_by_key(|range| range.start);
+    Ok(signed_ranges)
+}
+
+fn parse_aptio_rom_layout(firmware: &[u8], capsule: &[u8]) -> Result<Vec<Range<usize>>, ()> {
+    if capsule.get(..16) != Some(APTIO_SIGNED_CAPSULE_GUID_BYTES.as_slice()) {
+        return Err(());
+    }
+    let header_size = usize::try_from(read_u32(capsule, 16).map_err(|_| ())?).map_err(|_| ())?;
+    let capsule_image_size =
+        usize::try_from(read_u32(capsule, 24).map_err(|_| ())?).map_err(|_| ())?;
+    let rom_image_offset = usize::from(read_u16(capsule, 28).map_err(|_| ())?);
+    let layout_offset = usize::from(read_u16(capsule, 30).map_err(|_| ())?);
+    if header_size < APTIO_CAPSULE_HEADER_SIZE
+        || header_size > capsule.len()
+        || capsule_image_size <= header_size
+        || rom_image_offset != header_size
+        || layout_offset < APTIO_CAPSULE_HEADER_SIZE
+        || layout_offset >= header_size
+    {
+        return Err(());
+    }
+    let bios_size = capsule_image_size.checked_sub(header_size).ok_or(())?;
+    if bios_size == 0 || bios_size > firmware.len() || bios_size > u32::MAX as usize {
+        return Err(());
+    }
+    let image_base = firmware.len().checked_sub(bios_size).ok_or(())?;
+    let physical_base = (1_u64 << 32)
+        .checked_sub(u64::try_from(bios_size).map_err(|_| ())?)
+        .ok_or(())?;
+    let mut signed_ranges = Vec::new();
+    for index in 0..APTIO_ROM_LAYOUT_MAX_ENTRIES {
+        let entry_offset = index
+            .checked_mul(APTIO_ROM_LAYOUT_ENTRY_SIZE)
+            .and_then(|offset| layout_offset.checked_add(offset))
+            .ok_or(())?;
+        let entry_end = entry_offset
+            .checked_add(APTIO_ROM_LAYOUT_ENTRY_SIZE)
+            .ok_or(())?;
+        if entry_end > header_size {
+            return Err(());
+        }
+        let entry = capsule.get(entry_offset..entry_end).ok_or(())?;
+        let size = usize::try_from(read_u32(entry, 12).map_err(|_| ())?).map_err(|_| ())?;
+        if size == 0 {
+            return Ok(signed_ranges);
+        }
+        let address = read_u64(entry, 0).map_err(|_| ())?;
+        let offset = usize::try_from(read_u32(entry, 8).map_err(|_| ())?).map_err(|_| ())?;
+        let attributes = read_u32(entry, 20).map_err(|_| ())?;
+        let relative_end = offset.checked_add(size).ok_or(())?;
+        if relative_end > bios_size
+            || address
+                != physical_base
+                    .checked_add(u64::try_from(offset).map_err(|_| ())?)
+                    .ok_or(())?
+        {
+            return Err(());
+        }
+        let start = image_base.checked_add(offset).ok_or(())?;
+        let end = image_base.checked_add(relative_end).ok_or(())?;
+        if end > firmware.len() {
+            return Err(());
+        }
+        if attributes & APTIO_ROM_AREA_SIGNED != 0 {
+            signed_ranges.push(start..end);
+        }
+    }
+    Err(())
+}
+
+fn injection_rewrite_extents(
+    firmware: &[u8],
+    plan: &FirmwareInjectionPlan,
+) -> Option<Vec<Range<usize>>> {
+    let volumes = top_level_firmware_volumes(firmware).ok()?;
+    let mut extents = Vec::with_capacity(plan.targets.len());
+    for target in &plan.targets {
+        let extent = if let Some(outer_file_offset) = target.container_file_offsets.first() {
+            let mut matching_record = None;
+            for volume in volumes.iter().copied() {
+                if *outer_file_offset < volume.files_start || *outer_file_offset >= volume.end {
+                    continue;
+                }
+                matching_record = firmware_files(firmware, volume)
+                    .ok()?
+                    .into_iter()
+                    .find(|record| record.offset == *outer_file_offset);
+                if matching_record.is_some() {
+                    break;
+                }
+            }
+            let record = matching_record?;
+            if !record.is_live || record.file_type != FFS_FILE_TYPE_FIRMWARE_VOLUME_IMAGE {
+                return None;
+            }
+            record.offset..record.offset.checked_add(record.size)?
+        } else {
+            let volume = volumes
+                .iter()
+                .find(|volume| volume.start == target.firmware_volume_offset)?;
+            volume.start..volume.end
+        };
+        extents.push(extent);
+    }
+    Some(extents)
+}
+
+fn ranges_overlap(left: &Range<usize>, right: &Range<usize>) -> bool {
+    left.start < right.end && right.start < left.end
 }
 
 pub fn inject_ffs(
@@ -3266,6 +3450,98 @@ mod tests {
     }
 
     #[test]
+    fn finds_only_signed_ranges_in_an_aptio_rom_layout() {
+        let (firmware, _) = synthetic_aptio_layout_volume(
+            &[(0x1000, 0x200, APTIO_ROM_AREA_SIGNED), (0x2000, 0x100, 0)],
+            0x100,
+            true,
+            0x2_0000,
+        );
+
+        let ranges = aptio_signed_ranges(&firmware);
+        assert_eq!(ranges.len(), 1);
+        assert_eq!(ranges[0], 0x1000..0x1200);
+    }
+
+    #[test]
+    fn rejects_missing_or_mismatched_aptio_layout_markers() {
+        assert!(aptio_signed_ranges(&synthetic_firmware(false, false)).is_empty());
+
+        let (mut wrong_subtype, capsule_start) = synthetic_aptio_layout_volume(
+            &[(0x1000, 0x200, APTIO_ROM_AREA_SIGNED)],
+            0x100,
+            true,
+            0x2_0000,
+        );
+        wrong_subtype[capsule_start - 16] ^= 0xff;
+        assert!(aptio_signed_ranges(&wrong_subtype).is_empty());
+
+        let (mut wrong_capsule, capsule_start) = synthetic_aptio_layout_volume(
+            &[(0x1000, 0x200, APTIO_ROM_AREA_SIGNED)],
+            0x100,
+            true,
+            0x2_0000,
+        );
+        wrong_capsule[capsule_start] ^= 0xff;
+        assert!(aptio_signed_ranges(&wrong_capsule).is_empty());
+    }
+
+    #[test]
+    fn rejects_aptio_layouts_that_do_not_reconcile_with_the_image() {
+        let (mut wrong_address, capsule_start) = synthetic_aptio_layout_volume(
+            &[(0x1000, 0x200, APTIO_ROM_AREA_SIGNED)],
+            0x100,
+            true,
+            0x2_0000,
+        );
+        wrong_address[capsule_start + 0x40] ^= 1;
+        assert!(aptio_signed_ranges(&wrong_address).is_empty());
+
+        let (mut layout_past_section, capsule_start) = synthetic_aptio_layout_volume(
+            &[(0x1000, 0x200, APTIO_ROM_AREA_SIGNED)],
+            0x100,
+            true,
+            0x2_0000,
+        );
+        layout_past_section[capsule_start + 30..capsule_start + 32]
+            .copy_from_slice(&0x100_u16.to_le_bytes());
+        assert!(aptio_signed_ranges(&layout_past_section).is_empty());
+
+        let (truncated, _) = synthetic_aptio_layout_volume(
+            &[(0x1000, 0x18, APTIO_ROM_AREA_SIGNED)],
+            0x58,
+            false,
+            0x2_0000,
+        );
+        assert!(aptio_signed_ranges(&truncated).is_empty());
+    }
+
+    #[test]
+    fn reports_when_a_signed_range_covers_an_injection_target() {
+        let driver = build_ffs(&synthetic_driver_image()).unwrap();
+        let target_volume = synthetic_firmware(true, false);
+        let (covered_layout, _) = synthetic_aptio_layout_volume(
+            &[(0x1000, 0x100, APTIO_ROM_AREA_SIGNED)],
+            0x100,
+            true,
+            0x4_0000,
+        );
+        let covered = [target_volume.clone(), covered_layout].concat();
+        let covered_plan = plan_ffs_injection(&covered, &driver).unwrap();
+        assert!(signed_update_covers_injection(&covered, &covered_plan));
+
+        let (uncovered_layout, _) = synthetic_aptio_layout_volume(
+            &[(0x3_0000, 0x100, APTIO_ROM_AREA_SIGNED)],
+            0x100,
+            true,
+            0x4_0000,
+        );
+        let uncovered = [target_volume, uncovered_layout].concat();
+        let uncovered_plan = plan_ffs_injection(&uncovered, &driver).unwrap();
+        assert!(!signed_update_covers_injection(&uncovered, &uncovered_plan));
+    }
+
+    #[test]
     fn injects_into_erased_space_after_a_dxe_core() {
         let firmware = synthetic_firmware(true, false);
         let ffs = build_ffs(&synthetic_driver_image()).unwrap();
@@ -4284,6 +4560,54 @@ mod tests {
                 .count(),
             2
         );
+    }
+
+    fn synthetic_aptio_layout_volume(
+        entries: &[(u32, u32, u32)],
+        header_size: usize,
+        terminated: bool,
+        bios_size: usize,
+    ) -> (Vec<u8>, usize) {
+        let layout_offset = 0x40_usize;
+        let required_entries = entries.len() + usize::from(terminated);
+        assert!(layout_offset + required_entries * APTIO_ROM_LAYOUT_ENTRY_SIZE <= header_size);
+        let mut capsule = vec![0_u8; header_size];
+        capsule[..16].copy_from_slice(&APTIO_SIGNED_CAPSULE_GUID_BYTES);
+        capsule[16..20].copy_from_slice(&(header_size as u32).to_le_bytes());
+        capsule[20..24].copy_from_slice(&0x0001_0000_u32.to_le_bytes());
+        capsule[24..28].copy_from_slice(
+            &u32::try_from(header_size + bios_size)
+                .unwrap()
+                .to_le_bytes(),
+        );
+        capsule[28..30].copy_from_slice(&(header_size as u16).to_le_bytes());
+        capsule[30..32].copy_from_slice(&(layout_offset as u16).to_le_bytes());
+        let physical_base = (1_u64 << 32) - bios_size as u64;
+        for (index, (offset, size, attributes)) in entries.iter().copied().enumerate() {
+            let entry = layout_offset + index * APTIO_ROM_LAYOUT_ENTRY_SIZE;
+            capsule[entry..entry + 8]
+                .copy_from_slice(&(physical_base + u64::from(offset)).to_le_bytes());
+            capsule[entry + 8..entry + 12].copy_from_slice(&offset.to_le_bytes());
+            capsule[entry + 12..entry + 16].copy_from_slice(&size.to_le_bytes());
+            capsule[entry + 20..entry + 24].copy_from_slice(&attributes.to_le_bytes());
+        }
+
+        let mut content = Vec::with_capacity(16 + capsule.len());
+        content.extend_from_slice(&APTIO_CAPSULE_SECTION_GUID_BYTES);
+        content.extend_from_slice(&capsule);
+        let section = synthetic_section(SECTION_TYPE_FREEFORM_SUBTYPE_GUID, &content);
+        let mut header = vec![0_u8; FFS_HEADER_SIZE];
+        header[..16].copy_from_slice(&APTIO_CAPSULE_FFS_GUID_BYTES);
+        header[18] = FFS_FILE_TYPE_FREEFORM;
+        let mut file = build_generic_file(&header, &section).unwrap();
+        file[23] = !FFS_FILE_STATE_VALID;
+
+        let mut firmware = synthetic_firmware(false, false);
+        let file_offset = 72;
+        firmware[file_offset..].fill(0xff);
+        firmware[file_offset..file_offset + file.len()].copy_from_slice(&file);
+        let capsule_start = file_offset + FFS_HEADER_SIZE + 4 + 16;
+        (firmware, capsule_start)
     }
 
     fn synthetic_firmware(with_dxe_core: bool, with_pad: bool) -> Vec<u8> {

@@ -652,6 +652,7 @@ export const previewDeploymentAdapter: DeploymentAdapter = {
         selectFirmwareImage: async () => "C:\\Firmware\\E7D25IMS.1N0",
         selectDestinationDirectory: async () => "C:\\NVSTRAPS-USB",
         inspectFirmwareImage: async (path) => clone(firmwareFor(path)),
+        inspectSignedFirmwareUpdate: async () => ({ coversDriver: false }),
         analyzeLegacyFirmware: async () => {
                 await wait(100);
                 return clone(legacyAnalysis);

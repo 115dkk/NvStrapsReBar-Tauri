@@ -17,6 +17,7 @@ import type {
         ManualDeploymentStepPreview,
         NvidiaSmiEvidence,
         RecoveryMethod,
+        SignedFirmwareUpdate,
         StepId,
 } from "./contract";
 
@@ -43,6 +44,8 @@ export interface DeploymentWorkspaceView {
         boardPath: BoardPath;
         firmwarePath: string;
         firmware: FirmwareFingerprint | null;
+        signedFirmwareUpdate: SignedFirmwareUpdate | null;
+        signedUpdateCoversDriver: boolean;
         recoveryMethod: RecoveryMethod;
         firmwareTargetPolicy: FirmwareTargetPolicy;
         installMethod: FirmwareInstallMethod;
@@ -179,6 +182,7 @@ export interface DeploymentWorkspaceSession {
 
 export type DeploymentWorkspaceState = Omit<
         DeploymentWorkspaceView,
+        | "signedUpdateCoversDriver"
         | "selectedProfile"
         | "activeStep"
         | "nextStep"

@@ -6,6 +6,7 @@ const deploymentSeam = [
         "selectFirmwareImage",
         "selectDestinationDirectory",
         "inspectFirmwareImage",
+        "inspectSignedFirmwareUpdate",
         "analyzeLegacyFirmware",
         "createMachineProfile",
         "listMachineProfiles",

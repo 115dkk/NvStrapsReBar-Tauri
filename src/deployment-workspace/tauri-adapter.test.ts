@@ -9,6 +9,7 @@ describe("Tauri deployment adapter", () => {
                         vi.fn(async () => null),
                 );
                 await adapter.inspectFirmwareImage("C:\\firmware.bin");
+                await adapter.inspectSignedFirmwareUpdate("C:\\firmware.bin");
                 await adapter.compareMachineProfile("profile-1");
                 await adapter.exportDeploymentPackage(
                         "profile-1",
@@ -30,6 +31,10 @@ describe("Tauri deployment adapter", () => {
                 expect(invoke.mock.calls).toEqual([
                         [
                                 "inspect_firmware_image",
+                                { path: "C:\\firmware.bin" },
+                        ],
+                        [
+                                "inspect_signed_firmware_update",
                                 { path: "C:\\firmware.bin" },
                         ],
                         [

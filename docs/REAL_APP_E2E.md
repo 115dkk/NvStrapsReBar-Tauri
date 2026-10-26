@@ -132,14 +132,16 @@ screenshots and the application's logs only.
 
 | Image | Board | Expected outcome |
 |---|---|---|
-| `E7D91IMS.HJ0` | MSI MAG Z790 TOMAHAWK WIFI (issue #54) | prepared, one DXE target |
+| `E7D91IMS.HJ0` | MSI MAG Z790 TOMAHAWK WIFI (issue #54) | signed-firmware warning, then prepared, one DXE target |
 | `E7D41IMS.AO0` | MSI MAG B660 TOMAHAWK WIFI (issue #39, flashed on hardware) | prepared, one DXE target |
-| `Z490AORUSELITE.F22` | GIGABYTE Z490 AORUS ELITE | prepared, one DXE target |
+| `Z490AORUSELITE.F22` | GIGABYTE Z490 AORUS ELITE | signed-firmware warning, then prepared, one DXE target |
 | `E7C02AMS.HD0` | MSI B450 TOMAHAWK | refused as ambiguous, then prepared with every DXE domain and USB Flashback recovery |
 | `TUF-B450M-PRO-GAMING-ASUS-4401.CAP` | ASUS TUF B450M-PRO GAMING | refused: signed Aptio capsule |
 | `PRIME-Z490-A-ASUS-2701.CAP` | ASUS PRIME Z490-A | refused: signed Aptio capsule |
 | `TUF-GAMING-X570-PLUS-ASUS-4408.CAP` | ASUS TUF GAMING X570-PLUS | refused: signed Aptio capsule |
 
+The signed-firmware warning is the caution the recovery question shows when the image's AMI
+signed-update layout signs the area the driver is added to; the other images must not show it.
 The first five come from the injection corpus in
 [FIRMWARE_INJECTION_FEASIBILITY.md](FIRMWARE_INJECTION_FEASIBILITY.md); the two MSI 600/700-series
 images are the boards of issues #39 and #54.
