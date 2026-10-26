@@ -1,0 +1,36 @@
+[package]
+name = "nvstraps-external-efi"
+version = "1.0.6"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+qemu-model = []
+
+[[bin]]
+name = "NvStrapsDiagnostic"
+path = "src/diagnostic.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "NvStrapsLoader"
+path = "src/loader.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "NvStrapsHandoffProbe"
+path = "src/handoff_probe.rs"
+test = false
+bench = false
+required-features = ["qemu-model"]
+
+[dependencies]
+nvstraps-external = { path = "../nvstraps-external" }
+nvstraps-core = { path = "../nvstraps-core", default-features = false }
+serde_json = { version = "1", default-features = false, features = ["alloc"] }
+
+[target.'cfg(target_os = "uefi")'.dependencies]
+uefi = { version = "0.39.0", features = ["alloc", "global_allocator"] }

@@ -1837,6 +1837,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "nvstraps-external"
+version = "1.0.6"
+dependencies = [
+ "nvstraps-core",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "nvstraps-external-efi"
+version = "1.0.6"
+dependencies = [
+ "nvstraps-core",
+ "nvstraps-external",
+ "serde_json",
+ "uefi",
+]
+
+[[package]]
+name = "nvstraps-external-tool"
+version = "1.0.6"
+dependencies = [
+ "nvstraps-external",
+ "nvstraps-ffs",
+ "serde_json",
+]
+
+[[package]]
 name = "nvstraps-ffs"
 version = "1.0.6"
 dependencies = [

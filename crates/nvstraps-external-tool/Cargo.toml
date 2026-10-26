@@ -1,0 +1,12 @@
+[package]
+name = "nvstraps-external-tool"
+version = "1.0.6"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+nvstraps-external = { path = "../nvstraps-external" }
+nvstraps-ffs = { path = "../nvstraps-ffs" }
+serde_json = "1"
+
