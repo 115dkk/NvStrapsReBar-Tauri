@@ -28,7 +28,7 @@ impl Model {
                 s3_save_state: false,
                 roots: vec![Root {
                     segment: 0,
-                    first_bus: 0,
+                    first_bus: 1,
                     last_bus: 255,
                     memory: vec![Span {
                         start: 0x100000000,

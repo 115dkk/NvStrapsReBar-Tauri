@@ -126,6 +126,18 @@ fn active_console_incomplete_and_unknown_reports_never_authorize_writes() {
         assert!(make_plan(&s, slot(1, 0), 8 << 30, handoff()).is_err());
     }
 }
+
+#[test]
+fn missing_bridge_in_the_path_is_not_treated_as_an_unrestricted_root_window() {
+    let mut s = snapshot();
+    s.devices.pop();
+    assert_eq!(
+        make_plan(&s, slot(1, 0), 8 << 30, handoff()),
+        Err(PlanError::AmbiguousTopology)
+    );
+    s.roots[0].first_bus = 1;
+    assert!(make_plan(&s, slot(1, 0), 8 << 30, handoff()).is_ok());
+}
 #[test]
 fn stale_identity_and_forged_destination_are_rejected() {
     let s = snapshot();

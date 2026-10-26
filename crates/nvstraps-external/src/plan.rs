@@ -89,15 +89,30 @@ pub fn make_plan(
         .filter_map(|d| {
             d.bridge
                 .as_ref()
-                .filter(|b| b.secondary <= target.bus && target.bus <= b.subordinate)
+                .filter(|b| {
+                    b.secondary > d.slot.bus
+                        && b.secondary <= target.bus
+                        && target.bus <= b.subordinate
+                })
                 .map(|b| (d, b))
         })
         .collect();
     parents.sort_by_key(|(_, b)| b.secondary);
+    if parents
+        .first()
+        .map_or(target.bus != roots[0].first_bus, |(d, _)| {
+            d.slot.bus != roots[0].first_bus
+        })
+        || parents
+            .last()
+            .is_some_and(|(_, b)| b.secondary != target.bus)
+    {
+        return Err(PlanError::AmbiguousTopology);
+    }
     for pair in parents.windows(2) {
         let (a, b) = (pair[0], pair[1]);
         if a.0.slot == b.0.slot
-            || a.1.secondary > b.0.slot.bus
+            || a.1.secondary != b.0.slot.bus
             || b.0.slot.bus > a.1.subordinate
             || a.1.secondary == b.1.secondary
         {
