@@ -63,6 +63,7 @@ pub fn run() {
             external_boot::write_external_loader,
             external_boot::make_external_boot_permanent,
             external_boot::remove_external_boot,
+            external_boot::save_external_certificate,
             external_boot::restart_for_external_boot,
             deployment::inspect_firmware_image,
             deployment::inspect_signed_firmware_update,

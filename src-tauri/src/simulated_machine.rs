@@ -107,6 +107,10 @@ struct NvidiaSmi {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ExternalBoot {
     secure_boot: bool,
+    #[serde(default)]
+    db: Option<String>,
+    #[serde(default)]
+    images_signed: bool,
     bit_locker: BitLocker,
     bit_locker_suspensions: u64,
     esp: Option<ExternalEsp>,
@@ -385,6 +389,12 @@ pub(crate) fn external_platform() -> BackendResult<SimulatedExternalPlatform> {
     Ok(SimulatedExternalPlatform { path })
 }
 
+impl SimulatedExternalPlatform {
+    pub(crate) fn images_signed(&self) -> BackendResult<bool> {
+        Ok(require_external_boot(&load_from(&self.path)?)?.images_signed)
+    }
+}
+
 impl ExternalPlatform for SimulatedExternalPlatform {
     fn uefi(&self) -> bool {
         load_from(&self.path)
@@ -413,6 +423,15 @@ impl ExternalPlatform for SimulatedExternalPlatform {
             .variables
             .get(name)
             .map(|value| decode_variable(value))
+            .transpose()
+    }
+
+    fn read_db(&self) -> BackendResult<Option<Vec<u8>>> {
+        let state = load_from(&self.path)?;
+        require_external_boot(&state)?
+            .db
+            .as_deref()
+            .map(decode_variable)
             .transpose()
     }
 
@@ -499,6 +518,10 @@ impl ExternalPlatform for SimulatedExternalPlatform {
 
     fn reboot(&self) -> BackendResult<()> {
         append_reboot_request_at(&self.path, RebootKind::ExternalBoot)
+    }
+
+    fn reboot_to_firmware_setup(&self) -> BackendResult<()> {
+        append_reboot_request_at(&self.path, RebootKind::FirmwareSetup)
     }
 }
 
@@ -634,6 +657,11 @@ fn validate(state: &MachineFile) -> BackendResult<()> {
                     "externalBoot.usbDrives[{index}].directory must be absolute"
                 )));
             }
+        }
+        if let Some(encoded) = &external.db {
+            decode_variable(encoded).map_err(|error| {
+                simulated_error(format!("externalBoot.db is not standard base64: {error}"))
+            })?;
         }
         for (name, encoded) in &external.variables {
             decode_variable(encoded).map_err(|error| {
@@ -801,6 +829,26 @@ mod tests {
     }
 
     #[test]
+    fn missing_external_signing_fields_use_safe_defaults() {
+        let directory = TestDirectory::new();
+        let mut value = serde_json::to_value(state()).unwrap();
+        value["externalBoot"] = serde_json::json!({
+            "secureBoot": true,
+            "bitLocker": "off",
+            "bitLockerSuspensions": 0,
+            "esp": null,
+            "usbDrives": [],
+            "variables": {}
+        });
+        let path = directory.machine_file();
+        fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+        let loaded = load_from(&path).unwrap();
+        let external = loaded.external_boot.unwrap();
+        assert_eq!(external.db, None);
+        assert!(!external.images_signed);
+    }
+
+    #[test]
     fn schema_and_unknown_fields_are_rejected() {
         let directory = TestDirectory::new();
         let path = directory.machine_file();
@@ -876,6 +924,8 @@ mod tests {
         let mut machine = state();
         machine.external_boot = Some(ExternalBoot {
             secure_boot: false,
+            db: Some(STANDARD.encode(b"simulated db")),
+            images_signed: true,
             bit_locker: BitLocker::On,
             bit_locker_suspensions: 0,
             esp: Some(ExternalEsp {
@@ -895,6 +945,8 @@ mod tests {
         let platform = SimulatedExternalPlatform { path: path.clone() };
 
         assert_eq!(platform.read_global("SecureBoot").unwrap(), Some(vec![0]));
+        assert_eq!(platform.read_db().unwrap(), Some(b"simulated db".to_vec()));
+        assert!(platform.images_signed().unwrap());
         platform.write_global("BootOrder", &[4, 0]).unwrap();
         assert_eq!(platform.read_global("BootOrder").unwrap(), Some(vec![4, 0]));
         platform.write_global("BootOrder", &[]).unwrap();
@@ -902,6 +954,7 @@ mod tests {
         assert_eq!(platform.bitlocker(), BitLocker::On);
         platform.suspend_bitlocker_once().unwrap();
         platform.reboot().unwrap();
+        platform.reboot_to_firmware_setup().unwrap();
         assert_eq!(
             platform.esp_volumes().unwrap()[0].partition_guid,
             "02d5d49a-d31c-11eb-9de1-d850e6dcccd2"
@@ -912,8 +965,9 @@ mod tests {
         let external = stored.external_boot.unwrap();
         assert_eq!(external.bit_locker_suspensions, 1);
         assert!(external.variables.is_empty());
-        assert_eq!(stored.reboot_requests.len(), 1);
+        assert_eq!(stored.reboot_requests.len(), 2);
         assert_eq!(stored.reboot_requests[0].kind, RebootKind::ExternalBoot);
+        assert_eq!(stored.reboot_requests[1].kind, RebootKind::FirmwareSetup);
     }
 
     #[test]
@@ -937,6 +991,8 @@ mod tests {
         let mut machine = state();
         machine.external_boot = Some(ExternalBoot {
             secure_boot: false,
+            db: None,
+            images_signed: false,
             bit_locker: BitLocker::Off,
             bit_locker_suspensions: 0,
             esp: Some(ExternalEsp {

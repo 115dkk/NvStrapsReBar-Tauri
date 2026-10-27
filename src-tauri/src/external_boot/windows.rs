@@ -47,6 +47,7 @@ use super::core::{
 };
 
 const EFI_GLOBAL_VARIABLE_GUID: &str = "{8BE4DF61-93CA-11D2-AA0D-00E098032B8C}";
+const EFI_IMAGE_SECURITY_DATABASE_GUID: &str = "{D719B2CB-3D3A-4596-A3BC-DAD00E67656F}";
 const EFI_VARIABLE_ATTRIBUTES: u32 = 0x7;
 const MAX_FIRMWARE_VARIABLE_BYTES: usize = 1024 * 1024;
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
@@ -80,6 +81,10 @@ impl ExternalPlatform for WindowsExternalPlatform {
 
     fn read_global(&self, name: &str) -> BackendResult<Option<Vec<u8>>> {
         read_global(name)
+    }
+
+    fn read_db(&self) -> BackendResult<Option<Vec<u8>>> {
+        read_db()
     }
 
     fn write_global(&self, name: &str, value: &[u8]) -> BackendResult<()> {
@@ -122,6 +127,10 @@ impl ExternalPlatform for WindowsExternalPlatform {
     fn reboot(&self) -> BackendResult<()> {
         reboot::execute_reboot(&["/r", "/t", "0"], "external boot")
     }
+
+    fn reboot_to_firmware_setup(&self) -> BackendResult<()> {
+        reboot::execute_reboot(&["/r", "/fw", "/t", "0"], "firmware setup")
+    }
 }
 
 fn read_global(name: &str) -> BackendResult<Option<Vec<u8>>> {
@@ -130,9 +139,17 @@ fn read_global(name: &str) -> BackendResult<Option<Vec<u8>>> {
             "firmware variable read is not allowed: {name}"
         )));
     }
+    read_firmware_variable(name, EFI_GLOBAL_VARIABLE_GUID)
+}
+
+fn read_db() -> BackendResult<Option<Vec<u8>>> {
+    read_firmware_variable("db", EFI_IMAGE_SECURITY_DATABASE_GUID)
+}
+
+fn read_firmware_variable(name: &str, guid: &str) -> BackendResult<Option<Vec<u8>>> {
     firmware::windows_impl::enable_system_environment_privilege()?;
     let name = wide(name);
-    let guid = wide(EFI_GLOBAL_VARIABLE_GUID);
+    let guid = wide(guid);
     let mut capacity = 1024_usize;
     loop {
         let mut attributes = 0_u32;
