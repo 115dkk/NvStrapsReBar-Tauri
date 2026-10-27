@@ -37,10 +37,12 @@ export type ExternalInstallState = ExternalMediumState & {
         /** Windows Boot Manager changed after the plan pinned it; the loader refuses it until the plan is written again. */
         successorChanged: boolean;
 };
+export type ExternalSigning = { imagesSigned: boolean; certificateEnrolled: boolean | null };
 export type ExternalBootStatus = {
         uefi: boolean;
         elevated: boolean;
         secureBoot: boolean | null;
+        signing: ExternalSigning;
         bitLocker: "off" | "on" | "unknown";
         esp: { found: true; successorSha256: string } | { found: false; reason: "noWindowsBootManager" | "volumeNotFound" | "unreadable" | "notElevated" };
         /** Null when nothing of ours is on the ESP. */
@@ -74,5 +76,6 @@ export interface ExternalBootBridge {
         writeLoader(medium: ExternalMedium, target: PciSlot, sizeBytes: number): Promise<ExternalBootStatus>;
         makePermanent(): Promise<ExternalBootStatus>;
         remove(medium: ExternalMedium): Promise<ExternalBootStatus>;
-        restart(suspendBitLocker: boolean): Promise<void>;
+        saveCertificate(root: string): Promise<ExternalBootStatus>;
+        restart(suspendBitLocker: boolean, firmwareSetup?: boolean): Promise<void>;
 }

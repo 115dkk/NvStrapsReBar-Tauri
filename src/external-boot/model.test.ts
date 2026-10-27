@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ExternalBootStatus, ExternalCandidate, ExternalInstallState, ExternalMediumState, ExternalReport, ExternalUsbDrive } from "./contract";
-import { activeRoute, blockReasons, bootMenuKey, defaultSize, externalError, externalScreen, formatSlot, usableCandidates } from "./model";
+import { activeRoute, blockReasons, bootMenuKey, defaultSize, externalError, externalScreen, formatSlot, secureBootReady, usableCandidates } from "./model";
 
 const state = (changes: Partial<ExternalMediumState> = {}): ExternalMediumState => ({
         stage: "diagnostic", stageWrittenUnixMs: 100, restartedSinceStage: false,
@@ -15,6 +15,7 @@ const usb = (root: string, mediumState: ExternalMediumState | null): ExternalUsb
 });
 const status = (changes: Partial<ExternalBootStatus> = {}): ExternalBootStatus => ({
         uefi: true, elevated: true, secureBoot: false, bitLocker: "off", esp: { found: true, successorSha256: "a1".repeat(32) },
+        signing: { imagesSigned: false, certificateEnrolled: null },
         install: null, usbDrives: [], bootTimeUnixMs: 50, ...changes,
 });
 const receipt = { target: "0000:01:00.0", sizeBytes: 8 * 1024 ** 3, bar1Base: "0x2000000000", measuredBytes: 8 * 1024 ** 3 };
@@ -55,8 +56,16 @@ describe("external screen", () => {
                 expect(externalScreen(status({ secureBoot: null }), false)).toBe("choose");
         });
 
-        it("keeps existing routes accessible when Secure Boot is on or the ESP is unavailable", () => {
-                expect(externalScreen(status({ secureBoot: true, esp: { found: false, reason: "unreadable" }, usbDrives: [usb("E:\\", state())] }), false)).toBe("diagnosticReady");
+        it.each([false, true])("keeps existing routes accessible when Secure Boot is on or the ESP is unavailable (signed: %s)", (imagesSigned) => {
+                expect(externalScreen(status({ secureBoot: true, signing: { imagesSigned, certificateEnrolled: false }, esp: { found: false, reason: "unreadable" }, usbDrives: [usb("E:\\", state())] }), false)).toBe("diagnosticReady");
+        });
+
+        it.each([false, null])("blocks signed new routes until certificate enrolment is confirmed: %s", (certificateEnrolled) => {
+                expect(externalScreen(status({ secureBoot: true, signing: { imagesSigned: true, certificateEnrolled } }), false)).toBe("blocked");
+        });
+
+        it("allows signed new routes with an enrolled certificate and Secure Boot on", () => {
+                expect(externalScreen(status({ secureBoot: true, signing: { imagesSigned: true, certificateEnrolled: true } }), false)).toBe("choose");
         });
 
         it("shows installed before considering trial evidence", () => {
@@ -85,6 +94,29 @@ describe("external helpers", () => {
                 expect(blockReasons(status({ secureBoot: null }))).toEqual([]);
                 expect(blockReasons(status({ uefi: false, elevated: false, secureBoot: true, esp: { found: false, reason: "notElevated" } })))
                         .toEqual(["uefi", "admin", "secureBoot", "noEsp"]);
+        });
+
+        it.each([false, null])("asks to enrol signed images when certificate enrolment is %s", (certificateEnrolled) => {
+                expect(blockReasons(status({ secureBoot: true, signing: { imagesSigned: true, certificateEnrolled } }))).toEqual(["enrollCertificate"]);
+                expect(blockReasons(status({ uefi: false, elevated: false, secureBoot: true, signing: { imagesSigned: true, certificateEnrolled }, esp: { found: false, reason: "notElevated" } })))
+                        .toEqual(["uefi", "admin", "enrollCertificate", "noEsp"]);
+        });
+
+        it("requires signed images even when the certificate is enrolled", () => {
+                expect(blockReasons(status({ secureBoot: true, signing: { imagesSigned: false, certificateEnrolled: true } }))).toEqual(["secureBoot"]);
+        });
+
+        it("has no Secure Boot blocker once the signed images are trusted", () => {
+                expect(blockReasons(status({ secureBoot: true, signing: { imagesSigned: true, certificateEnrolled: true } }))).toEqual([]);
+        });
+
+        it.each([true, false, null])("is Secure Boot ready only with signed images and a confirmed certificate (Secure Boot: %s)", (secureBoot) => {
+                for (const imagesSigned of [false, true]) {
+                        for (const certificateEnrolled of [false, true, null]) {
+                                expect(secureBootReady(status({ secureBoot, signing: { imagesSigned, certificateEnrolled } })))
+                                        .toBe(secureBoot === true && imagesSigned && certificateEnrolled === true);
+                        }
+                }
         });
 
         it.each([

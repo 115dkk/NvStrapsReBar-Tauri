@@ -1,15 +1,15 @@
 import { PREVIEW_REBAR_STATE_KEY } from "../bridge";
 import type { ExternalBootBridge, ExternalBootStatus, ExternalMedium, ExternalMediumState, ExternalReport, ExternalStage } from "./contract";
-import { activeRoute, formatSlot } from "./model";
+import { activeRoute, formatSlot, secureBootReady } from "./model";
 
 /** Select a machine before loading the browser preview. */
 export const PREVIEW_EXTERNAL_STATE_KEY = "nvstraps-preview-external-state";
-export type PreviewExternalState = "ready" | "secureBoot" | "bitLocker" | "consoleGpu" | "noUsb" | "loaderFails";
+export type PreviewExternalState = "ready" | "secureBoot" | "enrollCertificate" | "bitLocker" | "consoleGpu" | "noUsb" | "loaderFails";
 
 const previewState = (): PreviewExternalState => {
         try {
                 const value = localStorage.getItem(PREVIEW_EXTERNAL_STATE_KEY);
-                if (value === "secureBoot" || value === "bitLocker" || value === "consoleGpu" || value === "noUsb" || value === "loaderFails") return value;
+                if (value === "secureBoot" || value === "enrollCertificate" || value === "bitLocker" || value === "consoleGpu" || value === "noUsb" || value === "loaderFails") return value;
         } catch {
                 // Storage can be unavailable; the fixture stays ready.
         }
@@ -23,7 +23,8 @@ let clock = Date.now();
 const machine: ExternalBootStatus = {
         uefi: true,
         elevated: true,
-        secureBoot: scenario === "secureBoot",
+        secureBoot: scenario === "secureBoot" || scenario === "enrollCertificate",
+        signing: { imagesSigned: scenario === "enrollCertificate", certificateEnrolled: scenario === "enrollCertificate" ? false : null },
         bitLocker: scenario === "bitLocker" ? "on" : "off",
         esp: { found: true, successorSha256 },
         install: null,
@@ -52,7 +53,7 @@ const mediumState = (medium: ExternalMedium): ExternalMediumState | null => {
 };
 
 const writable = (medium: ExternalMedium) => {
-        if (machine.secureBoot) throw failure("externalSecureBootOn", "Secure Boot is on");
+        if (machine.secureBoot === true && !secureBootReady(machine)) throw failure("externalSecureBootOn", "Secure Boot is on");
         mediumState(medium);
         if (medium.kind === "usb") {
                 const drive = usbDrive(medium.root);
@@ -150,7 +151,12 @@ export const previewExternalBootBridge: ExternalBootBridge = {
                 else machine.install = null;
                 return inspect();
         },
-        restart: async (suspendBitLocker) => {
+        saveCertificate: async (root) => {
+                const drive = usbDrive(root);
+                if (drive.fileSystem !== "FAT32" && drive.fileSystem !== "FAT") throw failure("externalNotFat", "The USB drive is not FAT32 or FAT");
+                return inspect();
+        },
+        restart: async (suspendBitLocker, firmwareSetup = false) => {
                 if (machine.bitLocker === "on" && !suspendBitLocker) {
                         throw failure("externalBitLockerSuspensionRequired", "BitLocker must be suspended for this restart");
                 }
@@ -159,6 +165,11 @@ export const previewExternalBootBridge: ExternalBootBridge = {
                 // All media observe a Windows restart; only the active route is booted.
                 for (const state of [machine.install, ...machine.usbDrives.map((drive) => drive.state)]) {
                         if (state?.stageWrittenUnixMs != null) state.restartedSinceStage = machine.bootTimeUnixMs > state.stageWrittenUnixMs;
+                }
+                if (firmwareSetup) {
+                        // The preview user appends the certificate in BIOS setup instead of running a stage.
+                        machine.signing.certificateEnrolled = true;
+                        return;
                 }
                 if (machine.install) machine.install.nextScheduled = null;
                 if (!active) return;

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode, type Ref, type RefObject }
 import { useConfigurationWorkspaceController } from "../configuration-workspace/context";
 import { formatBytes } from "../configuration-workspace/model";
 import type { ExternalBootStatus, ExternalCandidate, ExternalMedium, ExternalUsbDrive, PciSlot, PlanErrorCode } from "../external-boot/contract";
-import { blockReasons, bootMenuKey, defaultSize, formatSlot, usableCandidates, type ExternalActive, type ExternalError, type ExternalMode } from "../external-boot/model";
+import { blockReasons, bootMenuKey, defaultSize, formatSlot, secureBootReady, usableCandidates, type ExternalActive, type ExternalError, type ExternalMode } from "../external-boot/model";
 import { rememberExternalScreen } from "../external-boot/resume";
 import { useExternalBoot, type ExternalBootController } from "../external-boot/use-external-boot";
 import { useI18n } from "../i18n";
@@ -49,6 +49,7 @@ const errorIds: Record<string, StaticMessageId> = {
         externalBitLockerSuspensionRequired: "ui.externalErrorBitLocker",
         externalNoReceipt: "ui.externalErrorNoReceipt",
         externalMediumUnavailable: "ui.externalErrorMediumGone",
+        externalCertificateExists: "ui.externalErrorCertificateExists",
 };
 
 /** Reasons the EFI programs write to last-error.txt, in the words of the EFI source. */
@@ -155,7 +156,11 @@ const Prerequisites = ({ status }: { status: ExternalBootStatus }) => {
                 <section className="nv-group" aria-labelledby="external-checked">
                         <h2 className="nv-label" id="external-checked">{t("ui.externalCheckedTitle")}</h2>
                         <ul className="nv-checklist">
-                                <Check state={status.secureBoot === false ? "done" : "waiting"} label={t("ui.externalCheckSecureBoot")} word={t(status.secureBoot === false ? "ui.externalWordOff" : "ui.externalWordUnknown")} />
+                                <Check
+                                        state={status.secureBoot === false || secureBootReady(status) ? "done" : "waiting"}
+                                        label={t("ui.externalCheckSecureBoot")}
+                                        word={t(status.secureBoot === false ? "ui.externalWordOff" : secureBootReady(status) ? "ui.externalWordOnEnrolled" : "ui.externalWordUnknown")}
+                                />
                                 <Check state={status.esp.found ? "done" : "alert"} label={t("ui.externalCheckWindowsBoot")} word={t(status.esp.found ? "ui.externalWordFound" : "ui.checkWordNotFound")} />
                                 <Check
                                         state={status.bitLocker === "on" ? "alert" : status.bitLocker === "off" ? "done" : "waiting"}
@@ -223,12 +228,95 @@ const blockedIds = {
         noEsp: { title: "ui.externalBlockedEspTitle", lead: "ui.externalBlockedEspLead" },
 } as const;
 
-const Blocked = ({ ext, titleRef }: { ext: ExternalBootController; titleRef: Ref<HTMLHeadingElement> }) => {
+type FirmwareVendor = "msi" | "asus" | "gigabyte" | "other";
+
+const firmwareVendor = (manufacturer: string | null): FirmwareVendor => {
+        const name = manufacturer?.toLowerCase() ?? "";
+        if (/\bmsi\b|micro[ -]?star/.test(name)) return "msi";
+        if (/\basus/.test(name)) return "asus";
+        if (/gigabyte/.test(name)) return "gigabyte";
+        return "other";
+};
+
+const enrollPathIds: Record<FirmwareVendor, StaticMessageId> = {
+        msi: "ui.externalEnrollPathMsi",
+        asus: "ui.externalEnrollPathAsus",
+        gigabyte: "ui.externalEnrollPathGigabyte",
+        other: "ui.externalEnrollPathOther",
+};
+
+/**
+ * Secure Boot is on and the bundled programs carry the project signature, but db does not hold the
+ * certificate yet: the user saves it to a USB drive and appends it in BIOS setup once.
+ */
+const EnrollCertificate = ({ ext, titleRef, onRestart }: { ext: ExternalBootController; titleRef: Ref<HTMLHeadingElement>; onRestart: () => void }) => {
+        const { t } = useI18n();
+        const { snap } = useConfigurationWorkspaceController();
+        const status = ext.status!;
+        const usable = status.usbDrives.filter((drive) => drive.usable || drive.problem === "foreignBootFile");
+        const [root, setRoot] = useState<string | null>(usable[0]?.root ?? null);
+        const [saved, setSaved] = useState<string | null>(null);
+        useEffect(() => {
+                if (!usable.some((drive) => drive.root === root)) setRoot(usable[0]?.root ?? null);
+        }, [usable, root]);
+        const busy = Boolean(ext.busy);
+        const save = async () => {
+                if (!root) return;
+                if (await ext.saveCertificate(root)) setSaved(root);
+        };
+        const vendor = firmwareVendor(snap?.machineIdentity?.boardManufacturer ?? null);
+        return (
+                <Frame
+                        label={t("ui.externalExperimental")}
+                        title={t("ui.externalEnrollTitle")}
+                        lead={t("ui.externalEnrollLead")}
+                        titleRef={titleRef}
+                        bar={
+                                <ActionBar
+                                        hint={t("ui.externalEnrollHint")}
+                                        secondary={[{ label: t("ui.retryStatusCheck"), onClick: () => void ext.reload(), disabled: busy }]}
+                                        primary={{ label: t("ui.externalEnrollRestart"), icon: "restart", busy: ext.busy === "restart", disabled: busy, onClick: onRestart }}
+                                />
+                        }
+                >
+                        <ActionError error={ext.error} />
+                        <Steps>
+                                <Step title={t("ui.externalEnrollSaveStep")} detail={t("ui.externalEnrollSaveStepDetail")}>
+                                        {usable.length === 0
+                                                ? <span className="nv-supporting"><br />{t("ui.externalNoUsbDetail")}</span>
+                                                : (
+                                                        <span className="nv-group" style={{ paddingTop: 8 }}>
+                                                                <Choices
+                                                                        name="external-certificate-usb"
+                                                                        legend={t("ui.externalUsbTitle")}
+                                                                        value={root}
+                                                                        onChange={setRoot}
+                                                                        choices={usable.map((drive) => ({ value: drive.root, title: driveTitle(t, drive), detail: `${drive.fileSystem} · ${bytes(drive.totalBytes)}` }))}
+                                                                />
+                                                                <span>
+                                                                        <button type="button" className="nv-btn nv-btn-quiet" disabled={busy || !root} aria-busy={ext.busy === "certificate" || undefined} onClick={() => void save()}>
+                                                                                <Icon name="save" />{t("ui.externalEnrollSave")}
+                                                                        </button>
+                                                                </span>
+                                                                {saved && <span className="nv-supporting" role="status">{t("ui.externalEnrollSaved", { file: `${saved.replace(/\\$/, "")}\\NvStrapsReBar-db.cer` })}</span>}
+                                                        </span>
+                                                )}
+                                </Step>
+                                <Step title={t("ui.externalEnrollBiosStep")} detail={t(enrollPathIds[vendor])} />
+                                <Step title={t("ui.externalEnrollReturnStep")} detail={t("ui.externalEnrollReturnStepDetail")} />
+                        </Steps>
+                        <Caution title={t("ui.externalEnrollCautionTitle")}>{t("ui.externalEnrollCautionDetail")}</Caution>
+                </Frame>
+        );
+};
+
+const Blocked = ({ ext, titleRef, onFirmwareRestart }: { ext: ExternalBootController; titleRef: Ref<HTMLHeadingElement>; onFirmwareRestart: () => void }) => {
         const { t } = useI18n();
         const { elevate, busy } = useConfigurationWorkspaceController();
         const status = ext.status!;
         const reasons = blockReasons(status);
         const first = reasons[0] ?? "noEsp";
+        if (first === "enrollCertificate") return <EnrollCertificate ext={ext} titleRef={titleRef} onRestart={onFirmwareRestart} />;
         return (
                 <Frame
                         label={t("ui.externalExperimental")}
@@ -492,7 +580,7 @@ const Result = ({ ext, active, titleRef, onRemove }: ScreenProps) => {
         const primary = !widened
                 ? { label: t("ui.externalDiagnoseAgain"), icon: "restart" as const, busy: ext.busy === "prepare", disabled: busy, onClick: () => void ext.prepareDiagnostic(active.medium) }
                 : usb
-                        ? { label: t("ui.externalInstallOnPc"), icon: "arrow" as const, busy: ext.busy === "prepare", disabled: busy || ext.status?.secureBoot === true || !ext.status?.esp.found, onClick: () => void ext.prepareDiagnostic({ kind: "esp" }) }
+                        ? { label: t("ui.externalInstallOnPc"), icon: "arrow" as const, busy: ext.busy === "prepare", disabled: busy || (ext.status?.secureBoot === true && !secureBootReady(ext.status)) || !ext.status?.esp.found, onClick: () => void ext.prepareDiagnostic({ kind: "esp" }) }
                         : { label: t("ui.externalMakePermanent"), icon: "check" as const, busy: ext.busy === "permanent", disabled: busy, onClick: () => void ext.makePermanent() };
         return (
                 <Frame
@@ -543,23 +631,24 @@ const Installed = ({ ext, active, titleRef, onRemove }: ScreenProps) => {
 };
 
 /** One confirmation per restart: save work, and BitLocker pauses for that restart only. */
-const RestartDialog = ({ ext, usb, onClose }: { ext: ExternalBootController; usb: boolean; onClose: () => void }) => {
+const RestartDialog = ({ ext, usb, firmwareSetup, onClose }: { ext: ExternalBootController; usb: boolean; firmwareSetup: boolean; onClose: () => void }) => {
         const { t } = useI18n();
         const key = useBootKey();
         const bitLocker = ext.status?.bitLocker === "on";
         return (
                 <ConfirmDialog
-                        title={t("ui.restartDialogTitle")}
+                        title={t(firmwareSetup ? "ui.restartDialogBiosTitle" : "ui.restartDialogTitle")}
                         confirmLabel={t("ui.restart")}
                         onClose={onClose}
                         onConfirm={() => {
                                 onClose();
-                                void ext.restart(bitLocker);
+                                void ext.restart(bitLocker, firmwareSetup);
                         }}
                 >
                         {t("ui.restartDialogSaveWork")}
+                        {firmwareSetup && <><br />{t("ui.externalEnrollRestartDetail")}</>}
                         {bitLocker && <><br />{t("ui.externalRestartBitLocker")}</>}
-                        {usb && key && <><br />{t("ui.externalRestartBootKey", { key })}</>}
+                        {usb && !firmwareSetup && key && <><br />{t("ui.externalRestartBootKey", { key })}</>}
                 </ConfirmDialog>
         );
 };
@@ -585,7 +674,7 @@ export const ExternalBootPage = ({ titleRef }: { titleRef: Ref<HTMLHeadingElemen
         const { t } = useI18n();
         const ext = useExternalBoot();
         const { load } = useConfigurationWorkspaceController();
-        const [dialog, setDialog] = useState<"restart" | "remove" | null>(null);
+        const [dialog, setDialog] = useState<"restart" | "firmware" | "remove" | null>(null);
         // A restart that returns to a mounted page (the browser preview) reads the GPUs again, as
         // the app does when Windows starts it after a real restart.
         const bootTime = ext.status?.bootTimeUnixMs;
@@ -616,7 +705,13 @@ export const ExternalBootPage = ({ titleRef }: { titleRef: Ref<HTMLHeadingElemen
                                 <ActionError error={ext.loadFailed} />
                         </Frame>
                 );
-        if (ext.screen === "blocked") return <Blocked ext={ext} titleRef={titleRef} />;
+        if (ext.screen === "blocked")
+                return (
+                        <>
+                                <Blocked ext={ext} titleRef={titleRef} onFirmwareRestart={() => setDialog("firmware")} />
+                                {dialog === "firmware" && <RestartDialog ext={ext} usb={false} firmwareSetup onClose={() => setDialog(null)} />}
+                        </>
+                );
         if (ext.screen === "choose" || !ext.active) return <Choose ext={ext} titleRef={titleRef} />;
 
         const usb = ext.active.medium.kind === "usb";
@@ -635,7 +730,7 @@ export const ExternalBootPage = ({ titleRef }: { titleRef: Ref<HTMLHeadingElemen
         return (
                 <>
                         {body}
-                        {dialog === "restart" && <RestartDialog ext={ext} usb={usb} onClose={() => setDialog(null)} />}
+                        {dialog === "restart" && <RestartDialog ext={ext} usb={usb} firmwareSetup={false} onClose={() => setDialog(null)} />}
                         {dialog === "remove" && <RemoveDialog ext={ext} usb={usb} onClose={() => setDialog(null)} />}
                 </>
         );

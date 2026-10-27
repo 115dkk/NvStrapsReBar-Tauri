@@ -6,7 +6,10 @@ export type ExternalScreen =
         | "diagnosticReady" | "diagnosticMissing" | "pickGpu"
         | "loaderReady" | "loaderMissing" | "result" | "installed";
 export type ExternalActive = { mode: ExternalMode; medium: ExternalMedium; state: ExternalMediumState } | null;
-export type BlockReason = "uefi" | "admin" | "secureBoot" | "noEsp";
+export type BlockReason = "uefi" | "admin" | "secureBoot" | "enrollCertificate" | "noEsp";
+
+export const secureBootReady = (status: ExternalBootStatus): boolean =>
+        status.secureBoot === true && status.signing.imagesSigned && status.signing.certificateEnrolled === true;
 
 export const activeRoute = (status: ExternalBootStatus): ExternalActive => {
         if (status.install?.stage) return { mode: "install", medium: { kind: "esp" }, state: status.install };
@@ -18,7 +21,7 @@ export const externalScreen = (status: ExternalBootStatus | null, loadFailed: bo
         if (!status) return loadFailed ? "failed" : "loading";
         if (!status.uefi || !status.elevated) return "blocked";
         const active = activeRoute(status);
-        if (!active) return status.secureBoot === true || !status.esp.found ? "blocked" : "choose";
+        if (!active) return blockReasons(status).length ? "blocked" : "choose";
         if (active.mode === "install" && status.install?.loaderFirst) return "installed";
         if (active.state.stage === "diagnostic") {
                 if (active.state.report) return "pickGpu";
@@ -32,7 +35,7 @@ export const blockReasons = (status: ExternalBootStatus): BlockReason[] => {
         const reasons: BlockReason[] = [];
         if (!status.uefi) reasons.push("uefi");
         if (!status.elevated) reasons.push("admin");
-        if (status.secureBoot === true) reasons.push("secureBoot");
+        if (status.secureBoot === true && !secureBootReady(status)) reasons.push(status.signing.imagesSigned ? "enrollCertificate" : "secureBoot");
         if (!status.esp.found) reasons.push("noEsp");
         return reasons;
 };
