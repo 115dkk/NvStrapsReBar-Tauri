@@ -1824,11 +1824,11 @@ dependencies = [
 
 [[package]]
 name = "nvstraps-core"
-version = "1.0.6"
+version = "1.1.0"
 
 [[package]]
 name = "nvstraps-deploy"
-version = "1.0.6"
+version = "1.1.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1838,7 +1838,7 @@ dependencies = [
 
 [[package]]
 name = "nvstraps-external"
-version = "1.0.6"
+version = "1.1.0"
 dependencies = [
  "nvstraps-core",
  "serde",
@@ -1848,7 +1848,7 @@ dependencies = [
 
 [[package]]
 name = "nvstraps-external-efi"
-version = "1.0.6"
+version = "1.1.0"
 dependencies = [
  "nvstraps-core",
  "nvstraps-external",
@@ -1858,7 +1858,7 @@ dependencies = [
 
 [[package]]
 name = "nvstraps-external-tool"
-version = "1.0.6"
+version = "1.1.0"
 dependencies = [
  "nvstraps-external",
  "nvstraps-ffs",
@@ -1867,7 +1867,7 @@ dependencies = [
 
 [[package]]
 name = "nvstraps-ffs"
-version = "1.0.6"
+version = "1.1.0"
 dependencies = [
  "flate2",
  "lzma-sdk-rs",
@@ -1877,7 +1877,7 @@ dependencies = [
 
 [[package]]
 name = "nvstraps-legacy"
-version = "1.0.6"
+version = "1.1.0"
 dependencies = [
  "nvstraps-deploy",
  "nvstraps-ffs",
@@ -1887,7 +1887,7 @@ dependencies = [
 
 [[package]]
 name = "nvstraps-rebar"
-version = "1.0.6"
+version = "1.1.0"
 dependencies = [
  "base64 0.22.1",
  "nvstraps-core",
@@ -1908,14 +1908,14 @@ dependencies = [
 
 [[package]]
 name = "nvstraps-s3-probe"
-version = "1.0.6"
+version = "1.1.0"
 dependencies = [
  "uefi",
 ]
 
 [[package]]
 name = "nvstraps-uefi"
-version = "1.0.6"
+version = "1.1.0"
 dependencies = [
  "nvstraps-core",
  "uefi",
