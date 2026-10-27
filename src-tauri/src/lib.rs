@@ -11,6 +11,7 @@ mod deployment;
 mod deployment_workflow;
 mod devices;
 mod error;
+mod external_boot;
 mod firmware;
 mod hardware_support;
 mod machine;
@@ -56,6 +57,13 @@ pub fn run() {
             settings_snapshot::export_bar_settings_snapshot,
             settings_snapshot::inspect_bar_settings_snapshot,
             app::request_elevation,
+            external_boot::inspect_external_boot,
+            external_boot::prepare_external_diagnostic,
+            external_boot::read_external_report,
+            external_boot::write_external_loader,
+            external_boot::make_external_boot_permanent,
+            external_boot::remove_external_boot,
+            external_boot::restart_for_external_boot,
             deployment::inspect_firmware_image,
             deployment::inspect_signed_firmware_update,
             deployment::analyze_legacy_firmware,

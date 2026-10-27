@@ -25,6 +25,8 @@ tauri-build = { version = "2", features = [] }
 base64 = { version = "0.22.1", optional = true }
 nvstraps-core = { path = "../crates/nvstraps-core" }
 nvstraps-deploy = { path = "../crates/nvstraps-deploy" }
+nvstraps-external = { path = "../crates/nvstraps-external" }
+nvstraps-external-tool = { path = "../crates/nvstraps-external-tool" }
 nvstraps-ffs = { path = "../crates/nvstraps-ffs" }
 nvstraps-legacy = { path = "../crates/nvstraps-legacy" }
 quick-xml = { version = "0.41.0", features = ["serialize"] }
@@ -45,6 +47,9 @@ windows-sys = { version = "0.61.2", features = [
   "Win32_Devices_Properties",
   "Win32_Foundation",
   "Win32_Security",
+  "Win32_Storage_FileSystem",
+  "Win32_System_IO",
+  "Win32_System_Ioctl",
   "Win32_System_LibraryLoader",
   "Win32_System_SystemInformation",
   "Win32_System_Threading",
