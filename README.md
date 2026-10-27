@@ -72,7 +72,8 @@ Some boards refuse a changed BIOS file because the maker's signature covers the 
 goes into ([issue #54](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/54)); the app warns
 before it makes such a file. For those boards it also has an experimental route that leaves the BIOS
 alone: a small EFI program runs before Windows from a USB drive, or from the EFI system partition
-with its own boot entry, and moves the GPU's BAR1. It needs Secure Boot off, cannot move a GPU that
+with its own boot entry, and moves the GPU's BAR1. Release builds are signed, so Secure Boot can stay
+on once you add the project's certificate in BIOS setup (the app shows how). It cannot move a GPU that
 shows the boot picture, and has only run on QEMU so far ([details](docs/EXTERNAL_EFI.md)).
 
 The app runs on Windows x64 only. The NVIDIA driver's per-game settings exist only in the Windows

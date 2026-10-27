@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { button, missingMessages, noHorizontalOverflow, open } from "./support";
 
-type ExternalState = "ready" | "secureBoot" | "bitLocker" | "consoleGpu" | "noUsb" | "loaderFails";
+type ExternalState = "ready" | "secureBoot" | "enrollCertificate" | "bitLocker" | "consoleGpu" | "noUsb" | "loaderFails";
 
 /** Opens the "Without changing the BIOS" page on a preview machine from the home start screen. */
 async function openExternal(page: Page, external: ExternalState = "ready", locale: "en" | "ko" = "en") {
@@ -84,4 +84,18 @@ test("a loader that stops shows its reason after the restart", async ({ page }) 
         await restart(page);
         await expect(heading(page, "The trial did not run")).toBeVisible();
         await expect(page.getByText("pinned successor missing or changed", { exact: true })).toBeVisible();
+});
+
+test("Secure Boot on asks for the certificate once and then lets the route start", async ({ page }) => {
+        await openExternal(page, "enrollCertificate");
+        await expect(heading(page, "Add the certificate to BIOS once")).toBeVisible();
+        await button(page, "Save to USB").click();
+        await expect(page.getByText("Saved as E:\\NvStrapsReBar-db.cer.", { exact: true })).toBeVisible();
+        await button(page, "Restart into BIOS setup").click();
+        await expect(page.getByRole("dialog")).toContainText("When BIOS setup opens");
+        await page.getByRole("dialog").getByRole("button", { name: "Restart", exact: true }).click();
+        await expect(heading(page, "Turn on Resizable BAR without changing the BIOS")).toBeVisible();
+        await expect(page.locator(".nv-check").filter({ hasText: "Secure Boot" })).toContainText("On · certificate added");
+        expect(await noHorizontalOverflow(page)).toBe(true);
+        expect(await missingMessages(page)).toEqual([]);
 });

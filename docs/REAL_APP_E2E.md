@@ -112,7 +112,9 @@ in the same folder.
   ```
 
   `variables` holds EFI global variables in base64; a missing name is an unset variable. Each
-  BitLocker pause the app requests adds one to `bitLockerSuspensions`.
+  BitLocker pause the app requests adds one to `bitLockerSuspensions`. `db` (base64 or null) is the
+  `db` variable in the image-security namespace, and `imagesSigned` stands in for the signature check
+  of the bundled EFI programs, because a simulated build never holds release-signed ones.
 
 ## The physical world in the harness
 
@@ -153,6 +155,7 @@ writing its receipt and setting `bar1Bytes` to the planned size.
 |---|---|
 | Try from a USB drive | the check and then the loader become the drive's `BOOTX64.EFI`, byte-identical to the built images; the plan pins the ESP's `bootmgfw.efi`; Windows sees 8 GiB; removal leaves the unrelated file; no firmware variable changes and no BitLocker pause |
 | Install on this PC, BitLocker on | `Boot0001` "NvStrapsReBar diagnostic" is appended and scheduled in `BootNext`; every restart pauses BitLocker once; the loader entry is scheduled for the try and then put first, ahead of `Boot0000`; removal restores the variables exactly and leaves `bootmgfw.efi` |
+| Secure Boot on, certificate missing | the page asks for the certificate, saves `NvStrapsReBar-db.cer` (byte-identical to `secure-boot/`) to the USB drive, restarts into BIOS setup with one BitLocker pause; the harness appends the certificate to `db` as the user would; the route then starts with Secure Boot on |
 
 ## Vendor images
 

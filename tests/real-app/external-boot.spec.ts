@@ -1,7 +1,8 @@
 import { expect, type Page } from "@playwright/test";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { addExternalBoot, bootOrder, bootThroughRoute, decodeBootOrder, describe, efiRelease, readExternal, sha256 } from "./external";
+import { addExternalBoot, bootOrder, bootThroughRoute, decodeBootOrder, describe, efiRelease, projectCertificate, readExternal, sha256, x509SignatureList } from "./external";
+import { readMachine, writeMachine } from "./machine";
 import { button, heading, test, type RealApp } from "./harness";
 
 // Issue #54's board: its BIOS refuses a changed file, which is what this route is for.
@@ -18,10 +19,10 @@ const gib8 = 8 * 1024 ** 3;
 
 const exists = (path: string) => stat(path).then(() => true, () => false);
 
-async function openPage(app: RealApp) {
+async function openPage(app: RealApp, title = pageTitle) {
   await expect(heading(app.page, "You can turn on Resizable BAR")).toBeVisible();
   await button(app.page, "Without changing the BIOS").click();
-  await expect(heading(app.page, pageTitle)).toBeVisible();
+  await expect(heading(app.page, title)).toBeVisible();
 }
 
 async function confirmRestart(page: Page, text: string) {
@@ -165,5 +166,47 @@ test("external route installed on this PC with BitLocker on", async ({ app }) =>
     expect((await readExternal(app.machineFile)).externalBoot.variables).toEqual(variables);
     expect(await exists(join(esp, "EFI/NvStraps"))).toBe(false);
     expect(await exists(join(esp, "EFI/Microsoft/Boot/bootmgfw.efi"))).toBe(true);
+  });
+});
+
+test("external route with Secure Boot on after the certificate is enrolled", async ({ app }) => {
+  let usb = "";
+  await app.step("Start with Secure Boot on, signed programs and no project certificate in db", async () => {
+    await app.initialize(identity);
+    ({ usb } = await addExternalBoot(app.machineFile, app.temporaryDirectory, { bitLocker: "on", secureBoot: true, imagesSigned: true }));
+    await app.launch();
+    await openPage(app, "Add the certificate to BIOS once");
+    await expect(button(app.page, "Prepare the check")).toHaveCount(0);
+  });
+
+  await app.step("Save the certificate to the USB drive", async () => {
+    const page = app.page;
+    await expect(page.getByRole("radio", { name: /^U: NVSTRAPS/ })).toBeChecked();
+    await button(page, "Save to USB").click();
+    await expect(page.getByText("Saved as U:\\NvStrapsReBar-db.cer.", { exact: true })).toBeVisible();
+    expect((await readFile(join(usb, "NvStrapsReBar-db.cer"))).equals(await readFile(projectCertificate))).toBe(true);
+  });
+
+  await app.step("Restart into BIOS setup with BitLocker paused once, where the user appends the certificate", async () => {
+    await button(app.page, "Restart into BIOS setup").click();
+    await expect(app.page.getByRole("dialog")).toContainText("When BIOS setup opens");
+    await expect(app.page.getByRole("dialog")).toContainText("BitLocker protection pauses for this restart only");
+    await app.page.getByRole("dialog").getByRole("button", { name: "Restart", exact: true }).click();
+    await app.restartThrough(1, async () => {
+      const machine = await readExternal(app.machineFile);
+      machine.boot.bootTimeUnixMs = machine.rebootRequests.at(-1)!.requestedAtUnixMs + 1;
+      machine.externalBoot.db = x509SignatureList(await readFile(projectCertificate)).toString("base64");
+      await writeMachine(app.machineFile, machine);
+    }, "firmwareSetup");
+    expect((await readExternal(app.machineFile)).externalBoot.bitLockerSuspensions).toBe(1);
+  });
+
+  await app.step("The route starts with Secure Boot on", async () => {
+    const page = app.page;
+    await openPage(app);
+    await expect(page.locator(".nv-check").filter({ hasText: "Secure Boot" })).toContainText("On · certificate added");
+    await button(page, "Prepare the check").click();
+    await expect(heading(page, "Start once from the USB drive")).toBeVisible();
+    expect((await readMachine(app.machineFile)).rebootRequests.map(request => request.kind)).toEqual(["firmwareSetup"]);
   });
 });
