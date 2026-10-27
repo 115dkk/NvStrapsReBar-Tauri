@@ -3,6 +3,7 @@ import { previewMode } from "../bridge";
 import { useConfigurationWorkspaceController } from "../configuration-workspace/context";
 import { DeploymentWorkspaceProvider } from "../deployment-workspace/context";
 import { useDeploymentWorkspace } from "../deployment-workspace/use-deployment-workspace";
+import { shouldResumeExternal } from "../external-boot/resume";
 import { useI18n } from "../i18n";
 import type { SystemSnapshot } from "../types";
 import { AppBar } from "./app-bar";
@@ -11,6 +12,7 @@ import { LicensesDialog } from "./licenses-dialog";
 import { Home } from "./home";
 import { InstallPage } from "./install";
 import { GuidedNavigationProvider, initialInstallUi, type GuidedNavigation, type InstallUi } from "./navigation";
+import { ExternalBootPage } from "./external-boot";
 import { GamesPage } from "./games";
 import { BarPage, ChangesPage, ProfilesPage, RecordPage } from "./pages";
 import { installInProgress, type GuidedPage, type InstallScreen } from "./routing";
@@ -26,7 +28,8 @@ export const GuidedApp = ({ snapshot }: { snapshot: SystemSnapshot }) => {
         // The session survives page changes; a new system snapshot still replaces it.
         const deployment = useDeploymentWorkspace(snapshot);
         const { view, commands } = deployment;
-        const [chosenPage, setChosenPage] = useState<GuidedPage | null>(null);
+        // A restart in the middle of the external route opens that page again.
+        const [chosenPage, setChosenPage] = useState<GuidedPage | null>(() => (shouldResumeExternal() ? "external" : null));
         const [settingsFileOpen, setSettingsFileOpen] = useState(false);
         const [installUi, setInstallUiState] = useState<InstallUi>(initialInstallUi);
         const [screen, setScreen] = useState<InstallScreen | null>(null);
@@ -76,6 +79,7 @@ export const GuidedApp = ({ snapshot }: { snapshot: SystemSnapshot }) => {
                                         <AppBar />
                                         {loading ? <div className="nv-loading" role="status"><span className="nv-spinner" aria-hidden="true" /><span className="nv-visually-hidden">{t("ui.chipChecking")}</span></div>
                                                 : page === "install" ? <InstallPage titleRef={titleRef} onScreen={onScreen} />
+                                                : page === "external" ? <ExternalBootPage titleRef={titleRef} />
                                                 : page === "bar" ? <BarPage titleRef={titleRef} />
                                                         : page === "games" ? <GamesPage titleRef={titleRef} />
                                                                 : page === "changes" ? <ChangesPage titleRef={titleRef} />

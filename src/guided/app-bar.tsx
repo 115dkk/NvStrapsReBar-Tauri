@@ -107,6 +107,7 @@ export const AppBar = () => {
                                         <button type="button" role="menuitem" disabled={!hasRecord} onClick={() => choose(() => navigation.go("record"))}><Icon name="clock" />{t("ui.menuInstallRecord")}</button>
                                         <button type="button" role="menuitem" onClick={() => choose(navigation.startNewPreparation)}><Icon name="file" />{t("ui.menuNewPreparation")}</button>
                                         <button type="button" role="menuitem" disabled={view.profiles.length < 2} onClick={() => choose(() => navigation.go("profiles"))}><Icon name="folder" />{t("ui.menuOpenPreparation")}</button>
+                                        <button type="button" role="menuitem" onClick={() => choose(() => navigation.go("external"))}><Icon name="usb" />{t("ui.externalCrumb")}</button>
                                         <hr />
                                         <div role="group" aria-label={t("ui.language")}>
                                                 <div className="nv-menu-label" aria-hidden="true">{t("ui.language")}</div>

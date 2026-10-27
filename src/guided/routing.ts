@@ -10,7 +10,7 @@ import type { SystemSnapshot } from "../types";
  * the Rust backend.
  */
 
-export type GuidedPage = "home" | "install" | "bar" | "games" | "changes" | "record" | "profiles";
+export type GuidedPage = "home" | "install" | "bar" | "games" | "changes" | "record" | "profiles" | "external";
 
 /** The NVIDIA per-application step is offered after the install, not required by it. */
 export const OPTIONAL_FINAL_STEP: StepId = "configureNvidiaApplications";

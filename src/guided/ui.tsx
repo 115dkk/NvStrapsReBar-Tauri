@@ -1,4 +1,4 @@
-import { useId, type ReactNode, type Ref } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode, type Ref } from "react";
 import { useI18n } from "../i18n";
 import { Icon, type IconName } from "./icons";
 
@@ -185,6 +185,68 @@ export const RouteCard = ({ icon, label, title, detail }: { icon: IconName; labe
                 </div>
         </div>
 );
+
+export type Choice<T extends string> = { value: T; title: string; detail: string; disabled?: boolean };
+
+export const Choices = <T extends string>({ name, legend, value, choices, onChange }: { name: string; legend: string; value: T | null; choices: Choice<T>[]; onChange: (value: T) => void }) => (
+        <fieldset className="nv-choices" style={{ border: 0, padding: 0, margin: 0 }}>
+                <legend className="nv-sr">{legend}</legend>
+                {choices.map((choice) => (
+                        <label key={choice.value} className={`nv-choice compact${choice.disabled ? " disabled" : ""}`}>
+                                <input type="radio" name={name} value={choice.value} checked={value === choice.value} disabled={choice.disabled} onChange={() => onChange(choice.value)} />
+                                <span className="nv-choice-text"><span className="nv-strong">{choice.title}</span><span className="nv-supporting">{choice.detail}</span></span>
+                        </label>
+                ))}
+        </fieldset>
+);
+
+/** One confirmation: Close on the left with focus, Escape closes, Tab stays inside, focus returns to the opener. */
+export const ConfirmDialog = ({ title, children, confirmLabel, onClose, onConfirm }: { title: ReactNode; children: ReactNode; confirmLabel: ReactNode; onClose: () => void; onConfirm: () => void }) => {
+        const { t } = useI18n();
+        const id = useId();
+        const dialog = useRef<HTMLDivElement>(null);
+        const close = useRef(onClose);
+        close.current = onClose;
+        // Read during the first render, before autoFocus moves focus into the dialog.
+        const [opener] = useState(() => (document.activeElement instanceof HTMLElement ? document.activeElement : null));
+        useEffect(() => {
+                const onKey = (event: KeyboardEvent) => {
+                        if (event.key === "Escape") {
+                                event.preventDefault();
+                                close.current();
+                                return;
+                        }
+                        if (event.key !== "Tab" || !dialog.current) return;
+                        const controls = [...dialog.current.querySelectorAll<HTMLElement>("button:not([disabled])")];
+                        const first = controls[0], last = controls.at(-1);
+                        if (!first || !last) return;
+                        if (event.shiftKey && document.activeElement === first) {
+                                event.preventDefault();
+                                last.focus();
+                        } else if (!event.shiftKey && document.activeElement === last) {
+                                event.preventDefault();
+                                first.focus();
+                        }
+                };
+                addEventListener("keydown", onKey);
+                return () => {
+                        removeEventListener("keydown", onKey);
+                        requestAnimationFrame(() => opener?.focus({ preventScroll: true }));
+                };
+        }, [opener]);
+        return (
+                <div className="nv-scrim" role="presentation">
+                        <div ref={dialog} className="nv-dialog" role="dialog" aria-modal="true" aria-labelledby={`${id}-title`} aria-describedby={`${id}-detail`}>
+                                <h2 id={`${id}-title`}>{title}</h2>
+                                <p className="nv-body" id={`${id}-detail`}>{children}</p>
+                                <div className="nv-dialog-actions">
+                                        <button type="button" className="nv-btn nv-btn-quiet" autoFocus onClick={onClose}>{t("ui.close")}</button>
+                                        <button type="button" className="nv-btn nv-btn-primary" onClick={onConfirm}>{confirmLabel}</button>
+                                </div>
+                        </div>
+                </div>
+        );
+};
 
 export const FileCard = ({ icon = "file", name, meta, mono = true, action }: {
         icon?: IconName;

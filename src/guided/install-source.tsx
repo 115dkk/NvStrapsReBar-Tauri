@@ -8,7 +8,7 @@ import { messages, type StaticMessageId } from "../i18n-catalog";
 import { translateMessage } from "../i18n";
 import { Icon } from "./icons";
 import type { InstallContext } from "./install-context";
-import { ActionBar, Caution, FileCard, Notice, RouteCard, Step, Steps, TaskPanel } from "./ui";
+import { ActionBar, Caution, Choices, FileCard, Notice, RouteCard, Step, Steps, TaskPanel } from "./ui";
 
 export const installMethodIds: Record<FirmwareInstallMethod, { title: StaticMessageId; detail: StaticMessageId }> = {
         firmwareSetupUtility: { title: "ui.methodSetupUtility", detail: "ui.methodSetupUtilityDetail" },
@@ -52,11 +52,20 @@ const SourceFailure = ({ ctx }: { ctx: InstallContext }) => {
         return <Notice title={t("ui.taskDidNotFinish")}>{translateMessage(locale, view.activity.message)}</Notice>;
 };
 
-/** The screens that make the file say so first when the maker's signature covers what the driver changes. */
+/**
+ * The screens that make the file say so first when the maker's signature covers what the driver changes,
+ * and point to the route that leaves the BIOS file alone.
+ */
 const SignedFirmwareWarning = ({ ctx }: { ctx: InstallContext }) => {
-        const { t, view } = ctx;
+        const { t, view, navigation, busy } = ctx;
         if (!view.signedUpdateCoversDriver) return null;
-        return <Caution title={t("ui.signedFirmwareWarningTitle")}>{t("ui.signedFirmwareWarningDetail")}</Caution>;
+        return (
+                <Caution title={t("ui.signedFirmwareWarningTitle")}>
+                        {t("ui.signedFirmwareWarningDetail")}
+                        <br />
+                        <button type="button" className="nv-btn nv-btn-text" disabled={busy} onClick={() => navigation.go("external")}>{t("ui.externalOpenFromWarning")}</button>
+                </Caution>
+        );
 };
 
 export const PickFirmware = ({ ctx }: { ctx: InstallContext }) => {
@@ -98,20 +107,6 @@ export const PickFirmware = ({ ctx }: { ctx: InstallContext }) => {
                 </TaskPanel>
         );
 };
-
-type Choice<T extends string> = { value: T; title: string; detail: string; disabled?: boolean };
-
-const Choices = <T extends string>({ name, legend, value, choices, onChange }: { name: string; legend: string; value: T | null; choices: Choice<T>[]; onChange: (value: T) => void }) => (
-        <fieldset className="nv-choices" style={{ border: 0, padding: 0, margin: 0 }}>
-                <legend className="nv-sr">{legend}</legend>
-                {choices.map((choice) => (
-                        <label key={choice.value} className={`nv-choice compact${choice.disabled ? " disabled" : ""}`}>
-                                <input type="radio" name={name} value={choice.value} checked={value === choice.value} disabled={choice.disabled} onChange={() => onChange(choice.value)} />
-                                <span className="nv-choice-text"><span className="nv-strong">{choice.title}</span><span className="nv-supporting">{choice.detail}</span></span>
-                        </label>
-                ))}
-        </fieldset>
-);
 
 export const BoardQuestion = ({ ctx }: { ctx: InstallContext }) => {
         const { t, view, commands, navigation, busy } = ctx;
