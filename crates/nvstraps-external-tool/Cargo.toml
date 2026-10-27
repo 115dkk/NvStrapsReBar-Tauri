@@ -8,5 +8,9 @@ license.workspace = true
 [dependencies]
 nvstraps-external = { path = "../nvstraps-external" }
 nvstraps-ffs = { path = "../nvstraps-ffs" }
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_System_Console"] }
 

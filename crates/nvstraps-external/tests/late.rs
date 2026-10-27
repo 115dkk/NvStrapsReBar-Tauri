@@ -86,6 +86,14 @@ fn handoff() -> Handoff {
         sha256: [1; 32],
     }
 }
+
+#[test]
+fn plan_errors_serialize_as_frontend_codes() {
+    assert_eq!(
+        serde_json::to_string(&PlanError::ConsoleInUse).unwrap(),
+        "\"consoleInUse\""
+    );
+}
 fn plan(s: &Snapshot) -> Plan {
     make_plan(s, slot(1, 0), 8 << 30, handoff()).unwrap()
 }

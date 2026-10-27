@@ -4,9 +4,11 @@
 extern crate alloc;
 
 pub mod execute;
+pub mod layout;
 pub mod model;
 pub mod plan;
 
+pub use layout::*;
 pub use model::*;
 pub use plan::{PlanError, make_plan, validate_plan};
 

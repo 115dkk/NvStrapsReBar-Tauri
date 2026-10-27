@@ -34,7 +34,7 @@ run_vm() {
     2>&1 | tee "${RUN}/logs/${label}.log" || result=$?
   if [[ "${result}" != 0 ]]; then return "${result}"; fi
   if [[ "${label}" == *-diagnostic ]]; then
-    mcopy -i "${disk}" ::/NvStrapsDiagnostic.json "${folder}/NvStrapsDiagnostic.json"
+    mcopy -i "${disk}" ::/EFI/NvStraps/diagnostic.json "${folder}/NvStrapsDiagnostic.json"
   fi
 }
 
