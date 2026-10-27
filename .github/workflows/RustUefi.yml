@@ -72,13 +72,25 @@ jobs:
         run: cargo clippy -p nvstraps-uefi -p nvstraps-s3-probe -p nvstraps-external-efi --release --target x86_64-unknown-uefi -- -D warnings
 
       - name: Install OVMF and QEMU
-        run: sudo apt-get update && sudo apt-get install --yes ovmf qemu-system-x86 dosfstools mtools
+        run: sudo apt-get update && sudo apt-get install --yes ovmf qemu-system-x86 dosfstools mtools python3-virt-firmware osslsigncode
 
       - name: Prove dispatch, the host-bridge hook, S3 protocol access and an S3 suspend/resume cycle
         run: npm run test:qemu
 
       - name: Prove disk-loaded diagnostic, external plan, modeled GPU transaction and real EFI handoff
         run: npm run test:qemu:external
+
+      - name: Prove Secure Boot runs the signed diagnostic and refuses unsigned or changed ones
+        run: npm run test:qemu:secure-boot
+
+      - name: Upload Secure Boot evidence (logs and reports only)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: secure-boot-qemu-evidence
+          path: target/qemu-secure-boot/**/logs/*
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Upload external EFI evidence (logs and reports only)
         if: always()
