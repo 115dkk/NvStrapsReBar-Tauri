@@ -137,12 +137,8 @@ jobs:
             & $env:NVSTRAPS_OPENSSL x509 -in "$work/ci.pem" -outform DER -out "$work/ci.cer"
             & target/release/external/nvstraps-external-tool.exe sign target/external-efi/NvStrapsLoader.efi "$work/ci.cer" "$work/ci.key" "$work/signed.efi"
             if ($LASTEXITCODE -ne 0) { throw 'signing failed' }
-            $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new("$work/ci.cer")
-            $signature = Get-AuthenticodeSignature -FilePath "$work/signed.efi"
-            if ($signature.Status -notin 'Valid', 'UnknownError', 'NotTrusted' -or $signature.SignerCertificate.Thumbprint -ne $certificate.Thumbprint) {
-              throw "Windows reports $($signature.Status) ($($signature.StatusMessage)) signed by $($signature.SignerCertificate.Thumbprint)"
-            }
-            "Windows reads the signature: $($signature.Status), $($signature.SignerCertificate.Subject)"
+            # The same check the Release workflow runs on the project key.
+            ./scripts/check-efi-signatures.ps1 -Certificate "$work/ci.cer" -Images "$work/signed.efi"
           } finally {
             Remove-Item -Recurse -Force -LiteralPath $work
           }

@@ -102,19 +102,7 @@ jobs:
         run: npm run build:external
       - name: Check the shipped EFI programs carry the project signature
         shell: pwsh
-        run: |
-          $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new((Resolve-Path secure-boot/NvStrapsReBar-db.cer))
-          foreach ($name in 'NvStrapsDiagnostic.efi', 'NvStrapsLoader.efi') {
-            $image = "target/release/external/$name"
-            & target/release/external/nvstraps-external-tool.exe check-signed $image secure-boot/NvStrapsReBar-db.cer
-            if ($LASTEXITCODE -ne 0) { throw "$name is not signed with the project certificate" }
-            # Windows checks the RSA signature independently; the self-signed root is not trusted here.
-            $signature = Get-AuthenticodeSignature -FilePath $image
-            if ($signature.Status -notin 'Valid', 'UnknownError', 'NotTrusted' -or $signature.SignerCertificate.Thumbprint -ne $certificate.Thumbprint) {
-              throw "$name: Windows reports $($signature.Status) ($($signature.StatusMessage)) signed by $($signature.SignerCertificate.Thumbprint)"
-            }
-            "$name signed by $($certificate.Subject): $($signature.Status)"
-          }
+        run: ./scripts/check-efi-signatures.ps1 -Certificate secure-boot/NvStrapsReBar-db.cer -Images target/release/external/NvStrapsDiagnostic.efi, target/release/external/NvStrapsLoader.efi
       - name: Build the installer
         shell: pwsh
         run: ./scripts/build-installer.ps1
