@@ -2,6 +2,9 @@
 members = [
     "crates/nvstraps-core",
     "crates/nvstraps-deploy",
+    "crates/nvstraps-external",
+    "crates/nvstraps-external-efi",
+    "crates/nvstraps-external-tool",
     "crates/nvstraps-ffs",
     "crates/nvstraps-legacy",
     "crates/nvstraps-s3-probe",

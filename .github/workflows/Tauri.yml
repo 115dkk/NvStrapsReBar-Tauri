@@ -117,6 +117,8 @@ jobs:
       - name: Build native application
         run: npm run tauri:ci
       - name: Build the installer
+        run: npm run build:external
+      - name: Package the Windows installer
         shell: pwsh
         run: ./scripts/build-installer.ps1
 

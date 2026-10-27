@@ -78,6 +78,8 @@ jobs:
         run: npm run build:firmware
       - name: Build native application
         run: npm run tauri:ci
+      - name: Build external EFI applications and packaging tool
+        run: npm run build:external
       - name: Build the installer
         shell: pwsh
         run: ./scripts/build-installer.ps1
@@ -88,7 +90,7 @@ jobs:
           foreach ($file in 'NvStrapsReBar.exe', 'NvStrapsReBar.ffs', 'NvStrapsReBar-windows-x64-setup.exe') {
             if ((Get-Item "target/release/$file").Length -eq 0) { throw "$file is empty" }
           }
-          Compress-Archive -Path target/release/NvStrapsReBar.exe, target/release/NvStrapsReBar.ffs -DestinationPath release-files/NvStrapsReBar-windows-x64.zip -Force
+          Compress-Archive -Path target/release/NvStrapsReBar.exe, target/release/NvStrapsReBar.ffs, target/release/external -DestinationPath release-files/NvStrapsReBar-windows-x64.zip -Force
           Copy-Item target/release/NvStrapsReBar-windows-x64-setup.exe release-files/
           $sums = foreach ($file in 'NvStrapsReBar-windows-x64.zip', 'NvStrapsReBar-windows-x64-setup.exe') {
             "$((Get-FileHash "release-files/$file" -Algorithm SHA256).Hash.ToLower())  $file"

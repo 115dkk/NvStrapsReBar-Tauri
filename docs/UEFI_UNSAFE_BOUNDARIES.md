@@ -1,5 +1,11 @@
 # UEFI unsafe review map
 
+The external EFI adapter additionally budgets `nvstraps-external-efi/src/native.rs`:
+typed PCI_IO/DXE ABI calls, bounded firmware descriptors and SMBIOS3 tables, GET_PROTOCOL
+lifetimes, and pool ownership. Native writes are admitted only by the portable exact-plan
+executor. `crt.rs` supplies the UEFI target's missing 16-bit `wcslen` compiler intrinsic;
+its caller must provide a terminated readable string. See [external EFI evidence](EXTERNAL_EFI.md).
+
 The DXE crate denies `unsafe_code` by default. Seven reviewed files receive a
 local exception, and `npm run check:unsafe` rejects unsafe syntax in any other
 DXE source or growth beyond the per-file budget.
