@@ -13,6 +13,7 @@ use crate::error::{ApiError, BackendError, BackendResult, CommandResult};
 use core::{ExternalBootStatus, ExternalMedium, ExternalReport};
 
 const MAX_IMAGE_BYTES: u64 = 32 * 1024 * 1024;
+const MAX_CERTIFICATE_BYTES: u64 = 64 * 1024;
 
 #[cfg(feature = "simulated-machine")]
 type Platform = crate::simulated_machine::SimulatedExternalPlatform;
@@ -35,6 +36,10 @@ impl core::ExternalPlatform for UnsupportedExternalPlatform {
     }
 
     fn read_global(&self, _name: &str) -> BackendResult<Option<Vec<u8>>> {
+        Err(BackendError::UnsupportedPlatform)
+    }
+
+    fn read_db(&self) -> BackendResult<Option<Vec<u8>>> {
         Err(BackendError::UnsupportedPlatform)
     }
 
@@ -73,6 +78,10 @@ impl core::ExternalPlatform for UnsupportedExternalPlatform {
     fn reboot(&self) -> BackendResult<()> {
         Err(BackendError::UnsupportedPlatform)
     }
+
+    fn reboot_to_firmware_setup(&self) -> BackendResult<()> {
+        Err(BackendError::UnsupportedPlatform)
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -91,15 +100,24 @@ pub struct WriteExternalLoaderRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SaveExternalCertificateRequest {
+    root: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RestartExternalBootRequest {
     suspend_bit_locker: bool,
+    #[serde(default)]
+    firmware_setup: bool,
 }
 
 #[tauri::command]
-pub async fn inspect_external_boot() -> CommandResult<ExternalBootStatus> {
+pub async fn inspect_external_boot(app: AppHandle) -> CommandResult<ExternalBootStatus> {
     run_blocking("external boot inspection", move || {
         let platform = platform()?;
-        core::inspect(&platform)
+        let bundled = read_bundled_resources(&app, &platform)?;
+        core::inspect(&platform, &bundled.borrowed())
     })
     .await
 }
@@ -111,12 +129,8 @@ pub async fn prepare_external_diagnostic(
 ) -> CommandResult<ExternalBootStatus> {
     run_blocking("external diagnostic preparation", move || {
         let platform = platform()?;
-        let (diagnostic, loader) = read_bundled_images(&app)?;
-        let images = Images {
-            diagnostic: &diagnostic,
-            loader: &loader,
-        };
-        core::prepare_diagnostic(&platform, &request.medium, &images)
+        let bundled = read_bundled_resources(&app, &platform)?;
+        core::prepare_diagnostic(&platform, &request.medium, &bundled.borrowed())
     })
     .await
 }
@@ -137,38 +151,50 @@ pub async fn write_external_loader(
 ) -> CommandResult<ExternalBootStatus> {
     run_blocking("external loader write", move || {
         let platform = platform()?;
-        let (diagnostic, loader) = read_bundled_images(&app)?;
-        let images = Images {
-            diagnostic: &diagnostic,
-            loader: &loader,
-        };
+        let bundled = read_bundled_resources(&app, &platform)?;
         core::write_loader(
             &platform,
             &request.medium,
             request.target,
             request.size_bytes,
-            &images,
+            &bundled.borrowed(),
         )
     })
     .await
 }
 
 #[tauri::command]
-pub async fn make_external_boot_permanent() -> CommandResult<ExternalBootStatus> {
+pub async fn make_external_boot_permanent(app: AppHandle) -> CommandResult<ExternalBootStatus> {
     run_blocking("permanent external boot configuration", move || {
         let platform = platform()?;
-        core::make_permanent(&platform)
+        let bundled = read_bundled_resources(&app, &platform)?;
+        core::make_permanent(&platform, &bundled.borrowed())
     })
     .await
 }
 
 #[tauri::command]
 pub async fn remove_external_boot(
+    app: AppHandle,
     request: ExternalMediumRequest,
 ) -> CommandResult<ExternalBootStatus> {
     run_blocking("external boot removal", move || {
         let platform = platform()?;
-        core::remove(&platform, &request.medium)
+        let bundled = read_bundled_resources(&app, &platform)?;
+        core::remove(&platform, &request.medium, &bundled.borrowed())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn save_external_certificate(
+    app: AppHandle,
+    request: SaveExternalCertificateRequest,
+) -> CommandResult<ExternalBootStatus> {
+    run_blocking("external Secure Boot certificate save", move || {
+        let platform = platform()?;
+        let bundled = read_bundled_resources(&app, &platform)?;
+        core::save_certificate(&platform, &request.root, &bundled.borrowed())
     })
     .await
 }
@@ -177,7 +203,11 @@ pub async fn remove_external_boot(
 pub async fn restart_for_external_boot(request: RestartExternalBootRequest) -> CommandResult<()> {
     run_blocking("external boot restart", move || {
         let platform = platform()?;
-        core::restart(&platform, request.suspend_bit_locker)
+        core::restart(
+            &platform,
+            request.suspend_bit_locker,
+            request.firmware_setup,
+        )
     })
     .await
 }
@@ -197,10 +227,36 @@ async fn run_blocking<T: Send + 'static>(
         .map_err(ApiError::from)
 }
 
-fn read_bundled_images(app: &AppHandle) -> BackendResult<(Vec<u8>, Vec<u8>)> {
+struct BundledResources {
+    diagnostic: Vec<u8>,
+    loader: Vec<u8>,
+    certificate: Vec<u8>,
+    images_signed_override: Option<bool>,
+}
+
+impl BundledResources {
+    fn borrowed(&self) -> core::ExternalResources<'_> {
+        core::ExternalResources {
+            images: Images {
+                diagnostic: &self.diagnostic,
+                loader: &self.loader,
+            },
+            certificate: &self.certificate,
+            images_signed_override: self.images_signed_override,
+        }
+    }
+}
+
+fn read_bundled_resources(app: &AppHandle, platform: &Platform) -> BackendResult<BundledResources> {
     let diagnostic = read_bundled_image(app, "external/NvStrapsDiagnostic.efi")?;
     let loader = read_bundled_image(app, "external/NvStrapsLoader.efi")?;
-    Ok((diagnostic, loader))
+    let certificate = read_bundled_certificate(app)?;
+    Ok(BundledResources {
+        diagnostic,
+        loader,
+        certificate,
+        images_signed_override: images_signed_override(platform)?,
+    })
 }
 
 fn read_bundled_image(app: &AppHandle, resource: &str) -> BackendResult<Vec<u8>> {
@@ -212,6 +268,37 @@ fn read_bundled_image(app: &AppHandle, resource: &str) -> BackendResult<Vec<u8>>
         .map_err(|error| image_error(resource, Some(&path), error))?;
     validate_application(&bytes).map_err(|error| image_error(resource, Some(&path), error))?;
     Ok(bytes)
+}
+
+fn read_bundled_certificate(app: &AppHandle) -> BackendResult<Vec<u8>> {
+    const RESOURCE: &str = "external/NvStrapsReBar-db.cer";
+    let path = app
+        .path()
+        .resolve(RESOURCE, BaseDirectory::Resource)
+        .map_err(|error| certificate_error(None, error.to_string()))?;
+    read_bounded(&path, MAX_CERTIFICATE_BYTES)
+        .map_err(|error| certificate_error(Some(&path), error))
+}
+
+fn certificate_error(path: Option<&PathBuf>, detail: String) -> BackendError {
+    let location = path.map_or_else(
+        || "external/NvStrapsReBar-db.cer".to_owned(),
+        |path| path.to_string_lossy().into_owned(),
+    );
+    BackendError::External {
+        code: "externalWrite",
+        message: format!("bundled Secure Boot certificate is unavailable at {location}: {detail}"),
+    }
+}
+
+#[cfg(feature = "simulated-machine")]
+fn images_signed_override(platform: &Platform) -> BackendResult<Option<bool>> {
+    platform.images_signed().map(Some)
+}
+
+#[cfg(not(feature = "simulated-machine"))]
+fn images_signed_override(_platform: &Platform) -> BackendResult<Option<bool>> {
+    Ok(None)
 }
 
 fn image_error(resource: &str, path: Option<&PathBuf>, detail: String) -> BackendError {

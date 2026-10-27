@@ -7,7 +7,7 @@ import { previewExternalBootBridge } from "./preview-bridge";
 
 export const externalBootBridge: ExternalBootBridge = previewMode ? previewExternalBootBridge : nativeExternalBootBridge;
 
-type Busy = null | "inspect" | "prepare" | "report" | "loader" | "permanent" | "remove" | "restart";
+type Busy = null | "inspect" | "prepare" | "report" | "loader" | "permanent" | "remove" | "certificate" | "restart";
 
 export const useExternalBoot = (bridge: ExternalBootBridge = externalBootBridge) => {
         const [status, setStatus] = useState<ExternalBootStatus | null>(null);
@@ -90,23 +90,26 @@ export const useExternalBoot = (bridge: ExternalBootBridge = externalBootBridge)
                 })();
         }, [active, bridge, busy, reportKey]);
 
-        const run = useCallback(async (kind: "prepare" | "loader" | "permanent" | "remove" | "restart", work: () => Promise<ExternalBootStatus>) => {
-                if (!mounted.current || running.current) return;
+        /** Resolves true when the action finished and its status was applied. */
+        const run = useCallback(async (kind: "prepare" | "loader" | "permanent" | "remove" | "certificate" | "restart", work: () => Promise<ExternalBootStatus>): Promise<boolean> => {
+                if (!mounted.current || running.current) return false;
                 running.current = kind;
                 setBusy(kind);
                 setError(null);
                 const current = generation.current;
                 try {
                         const next = await work();
-                        if (current !== generation.current) return;
+                        if (current !== generation.current) return false;
                         if (kind === "prepare" || kind === "loader" || kind === "remove") {
                                 attemptedReport.current = null;
                                 setLoadedReport(null);
                         }
                         apply(next);
+                        return true;
                 } catch (cause) {
                         console.error(`[external-boot] ${kind} failed`, cause);
                         if (current === generation.current) setError(externalError(cause));
+                        return false;
                 } finally {
                         if (current === generation.current) {
                                 running.current = null;
@@ -123,16 +126,17 @@ export const useExternalBoot = (bridge: ExternalBootBridge = externalBootBridge)
         const remove = useCallback(async () => {
                 if (active) await run("remove", () => bridge.remove(active.medium));
         }, [active, bridge, run]);
-        const restart = useCallback((suspendBitLocker: boolean) => run("restart", async () => {
-                await bridge.restart(suspendBitLocker);
+        const saveCertificate = useCallback((root: string) => run("certificate", () => bridge.saveCertificate(root)), [bridge, run]);
+        const restart = useCallback((suspendBitLocker: boolean, firmwareSetup = false) => run("restart", async () => {
+                await bridge.restart(suspendBitLocker, firmwareSetup);
                 // The browser preview stays mounted across its simulated restart.
                 return bridge.inspect();
         }), [bridge, run]);
 
         return useMemo(() => ({
                 status, loadFailed, screen, active, report, busy, error,
-                reload, prepareDiagnostic, writeLoader, makePermanent, remove, restart,
-        }), [status, loadFailed, screen, active, report, busy, error, reload, prepareDiagnostic, writeLoader, makePermanent, remove, restart]);
+                reload, prepareDiagnostic, writeLoader, makePermanent, remove, saveCertificate, restart,
+        }), [status, loadFailed, screen, active, report, busy, error, reload, prepareDiagnostic, writeLoader, makePermanent, remove, saveCertificate, restart]);
 };
 
 export type ExternalBootController = ReturnType<typeof useExternalBoot>;

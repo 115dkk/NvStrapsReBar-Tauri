@@ -69,8 +69,9 @@ M-FLASH 설치와 Flash BIOS Button 복구 방법을 앱이 미리 채워 주고
 ([이슈 #54](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/54)). 앱은 그런 파일을 만들기 전에
 알려 줍니다. 이런 보드를 위해 BIOS를 건드리지 않는 실험용 방법도 있습니다. USB나, 별도 부팅 항목을
 만든 EFI 시스템 파티션에서 작은 EFI 프로그램을 Windows보다 먼저 실행해 GPU의 BAR1을 옮깁니다.
-Secure Boot를 꺼야 하고, 부팅 화면을 출력하는 GPU는 옮기지 못하며, 아직 QEMU에서만 돌려
-봤습니다([자세히](docs/EXTERNAL_EFI.md)).
+릴리스 빌드는 서명되어 있어, BIOS 설정에서 프로젝트 인증서를 한 번 등록하면 Secure Boot를 켠 채
+쓸 수 있습니다(방법은 앱이 안내합니다). 부팅 화면을 출력하는 GPU는 옮기지 못하며, 아직 QEMU에서만
+돌려 봤습니다([자세히](docs/EXTERNAL_EFI.md)).
 
 앱은 Windows x64에서만 돕니다. NVIDIA 드라이버의 게임별 설정은 Windows 드라이버에만 있고, macOS에는
 Turing GPU용 NVIDIA 드라이버 자체가 없습니다. UEFI 드라이버는 그 뒤에 어떤 운영체제가 부팅되든

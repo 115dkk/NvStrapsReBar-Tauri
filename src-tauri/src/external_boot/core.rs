@@ -1,12 +1,17 @@
 use std::{
+    ffi::OsString,
     fmt::Write as _,
+    fs::{self, OpenOptions},
+    io::Write as _,
     path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
 };
 
 use nvstraps_external::{
     Environment, Handoff, PlanError, Slot, WINDOWS_BOOT_MANAGER, digest, make_plan,
 };
 use nvstraps_external_tool::{
+    authenticode,
     boot_entries::{
         self, BootChange, BootEntry, BootState, EntryKind, loader_first, owned_entry, scheduled,
         windows_boot_manager,
@@ -17,7 +22,7 @@ use nvstraps_external_tool::{
         parse_boot_order,
     },
     media::{self, Images, Medium, MediumState, Stage},
-    read_bounded, validate_application,
+    read_bounded, signature_list, validate_application,
 };
 use serde::{Deserialize, Serialize};
 
@@ -27,6 +32,7 @@ use crate::{
 };
 
 const MAX_SUCCESSOR_BYTES: u64 = 32 * 1024 * 1024;
+const CERTIFICATE_FILE_NAME: &str = "NvStrapsReBar-db.cer";
 const EXTERNAL_SECURE_BOOT_ON: &str = "externalSecureBootOn";
 const EXTERNAL_NO_ESP: &str = "externalNoEsp";
 const EXTERNAL_FOREIGN_BOOT_FILE: &str = "externalForeignBootFile";
@@ -37,7 +43,15 @@ const EXTERNAL_NOT_PHYSICAL: &str = "externalNotPhysical";
 const EXTERNAL_BITLOCKER_SUSPENSION_REQUIRED: &str = "externalBitLockerSuspensionRequired";
 const EXTERNAL_NO_RECEIPT: &str = "externalNoReceipt";
 const EXTERNAL_MEDIUM_UNAVAILABLE: &str = "externalMediumUnavailable";
+const EXTERNAL_CERTIFICATE_EXISTS: &str = "externalCertificateExists";
 const EXTERNAL_WRITE: &str = "externalWrite";
+static CERTIFICATE_TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+pub(crate) struct ExternalResources<'a> {
+    pub images: Images<'a>,
+    pub certificate: &'a [u8],
+    pub images_signed_override: Option<bool>,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct EspVolume {
@@ -66,6 +80,7 @@ pub(crate) trait ExternalPlatform {
     fn uefi(&self) -> bool;
     fn elevated(&self) -> bool;
     fn read_global(&self, name: &str) -> BackendResult<Option<Vec<u8>>>;
+    fn read_db(&self) -> BackendResult<Option<Vec<u8>>>;
     fn write_global(&self, name: &str, value: &[u8]) -> BackendResult<()>;
     fn esp_volumes(&self) -> BackendResult<Vec<EspVolume>>;
     fn usb_volumes(&self) -> BackendResult<Vec<UsbVolume>>;
@@ -75,6 +90,7 @@ pub(crate) trait ExternalPlatform {
     fn boot_time_unix_ms(&self) -> BackendResult<u64>;
     fn gpus(&self) -> Vec<GpuDevice>;
     fn reboot(&self) -> BackendResult<()>;
+    fn reboot_to_firmware_setup(&self) -> BackendResult<()>;
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
@@ -166,10 +182,18 @@ pub(crate) struct ExternalEspState {
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct ExternalSigning {
+    pub images_signed: bool,
+    pub certificate_enrolled: Option<bool>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct ExternalBootStatus {
     pub uefi: bool,
     pub elevated: bool,
     pub secure_boot: Option<bool>,
+    pub signing: ExternalSigning,
     pub bit_locker: BitLocker,
     pub esp: ExternalEspState,
     pub install: Option<ExternalInstallState>,
@@ -207,7 +231,10 @@ pub(crate) struct ExternalReport {
     pub candidates: Vec<ExternalCandidate>,
 }
 
-pub(crate) fn inspect(platform: &impl ExternalPlatform) -> BackendResult<ExternalBootStatus> {
+pub(crate) fn inspect(
+    platform: &impl ExternalPlatform,
+    resources: &ExternalResources<'_>,
+) -> BackendResult<ExternalBootStatus> {
     let uefi = platform.uefi();
     let elevated = platform.elevated();
     let boot_time_unix_ms = platform.boot_time_unix_ms()?;
@@ -216,6 +243,7 @@ pub(crate) fn inspect(platform: &impl ExternalPlatform) -> BackendResult<Externa
     } else {
         None
     };
+    let signing = signing_status(platform, resources, uefi, elevated);
 
     let boot = if uefi && elevated {
         read_boot_state(platform).ok()
@@ -229,6 +257,7 @@ pub(crate) fn inspect(platform: &impl ExternalPlatform) -> BackendResult<Externa
         uefi,
         elevated,
         secure_boot,
+        signing,
         bit_locker: platform.bitlocker(),
         esp,
         install,
@@ -240,15 +269,15 @@ pub(crate) fn inspect(platform: &impl ExternalPlatform) -> BackendResult<Externa
 pub(crate) fn prepare_diagnostic(
     platform: &impl ExternalPlatform,
     medium: &ExternalMedium,
-    images: &Images<'_>,
+    resources: &ExternalResources<'_>,
 ) -> BackendResult<ExternalBootStatus> {
     require_ready(platform, "prepare external boot media")?;
-    refuse_secure_boot(platform)?;
+    refuse_secure_boot(platform, resources)?;
     let resolved = resolve_medium(platform, medium)?;
     media::write_diagnostic_stage(
         &resolved.path,
         resolved.kind,
-        images,
+        &resources.images,
         platform.now_unix_ms(),
     )
     .map_err(media_error)?;
@@ -258,7 +287,7 @@ pub(crate) fn prepare_diagnostic(
             .map_err(|error| external_error(EXTERNAL_WRITE, error))?;
         apply_boot_change(platform, &change)?;
     }
-    inspect(platform)
+    inspect(platform, resources)
 }
 
 pub(crate) fn read_report(
@@ -326,10 +355,10 @@ pub(crate) fn write_loader(
     medium: &ExternalMedium,
     target: Slot,
     size_bytes: u64,
-    images: &Images<'_>,
+    resources: &ExternalResources<'_>,
 ) -> BackendResult<ExternalBootStatus> {
     require_ready(platform, "write the external loader")?;
-    refuse_secure_boot(platform)?;
+    refuse_secure_boot(platform, resources)?;
     let resolved = resolve_medium(platform, medium)?;
     let state = media::inspect(&resolved.path, resolved.kind).map_err(media_error)?;
     if state.report.is_none() {
@@ -359,7 +388,7 @@ pub(crate) fn write_loader(
     media::write_loader_stage(
         &resolved.path,
         resolved.kind,
-        images,
+        &resources.images,
         &plan,
         platform.now_unix_ms(),
     )
@@ -370,11 +399,12 @@ pub(crate) fn write_loader(
             .map_err(|error| external_error(EXTERNAL_WRITE, error))?;
         apply_boot_change(platform, &change)?;
     }
-    inspect(platform)
+    inspect(platform, resources)
 }
 
 pub(crate) fn make_permanent(
     platform: &impl ExternalPlatform,
+    resources: &ExternalResources<'_>,
 ) -> BackendResult<ExternalBootStatus> {
     require_ready(platform, "make external boot permanent")?;
     let boot = read_boot_state(platform)?;
@@ -408,12 +438,13 @@ pub(crate) fn make_permanent(
         }
     }
     apply_boot_change(platform, &change)?;
-    inspect(platform)
+    inspect(platform, resources)
 }
 
 pub(crate) fn remove(
     platform: &impl ExternalPlatform,
     medium: &ExternalMedium,
+    resources: &ExternalResources<'_>,
 ) -> BackendResult<ExternalBootStatus> {
     require_ready(platform, "remove external boot files")?;
     match medium {
@@ -429,12 +460,24 @@ pub(crate) fn remove(
             media::remove(&resolved.path, Medium::Usb).map_err(media_error)?;
         }
     }
-    inspect(platform)
+    inspect(platform, resources)
+}
+
+pub(crate) fn save_certificate(
+    platform: &impl ExternalPlatform,
+    root: &str,
+    resources: &ExternalResources<'_>,
+) -> BackendResult<ExternalBootStatus> {
+    require_ready(platform, "save the Secure Boot certificate")?;
+    let volume = resolve_usb_volume(platform, root)?;
+    write_certificate(&volume.path, resources.certificate)?;
+    inspect(platform, resources)
 }
 
 pub(crate) fn restart(
     platform: &impl ExternalPlatform,
     suspend_bit_locker: bool,
+    firmware_setup: bool,
 ) -> BackendResult<()> {
     require_ready(platform, "restart for external boot")?;
     if platform.bitlocker() == BitLocker::On {
@@ -446,7 +489,11 @@ pub(crate) fn restart(
         }
         platform.suspend_bitlocker_once()?;
     }
-    platform.reboot()
+    if firmware_setup {
+        platform.reboot_to_firmware_setup()
+    } else {
+        platform.reboot()
+    }
 }
 
 struct ResolvedMedium {
@@ -466,32 +513,37 @@ fn resolve_medium(
                 kind: Medium::Esp,
             })
         }
-        ExternalMedium::Usb { root } => {
-            let volume = platform
-                .usb_volumes()?
-                .into_iter()
-                .find(|volume| volume.root.eq_ignore_ascii_case(root))
-                .ok_or_else(|| {
-                    external_error(
-                        EXTERNAL_MEDIUM_UNAVAILABLE,
-                        format!("USB drive {root} is unavailable"),
-                    )
-                })?;
-            if !fat_file_system(&volume.file_system) {
-                return Err(external_error(
-                    EXTERNAL_NOT_FAT,
-                    format!(
-                        "USB drive {} uses {}; FAT or FAT32 is required",
-                        volume.root, volume.file_system
-                    ),
-                ));
-            }
-            Ok(ResolvedMedium {
-                path: volume.path,
-                kind: Medium::Usb,
-            })
-        }
+        ExternalMedium::Usb { root } => Ok(ResolvedMedium {
+            path: resolve_usb_volume(platform, root)?.path,
+            kind: Medium::Usb,
+        }),
     }
+}
+
+fn resolve_usb_volume(
+    platform: &impl ExternalPlatform,
+    requested_root: &str,
+) -> BackendResult<UsbVolume> {
+    let volume = platform
+        .usb_volumes()?
+        .into_iter()
+        .find(|volume| volume.root.eq_ignore_ascii_case(requested_root))
+        .ok_or_else(|| {
+            external_error(
+                EXTERNAL_MEDIUM_UNAVAILABLE,
+                format!("USB drive {requested_root} is unavailable"),
+            )
+        })?;
+    if !fat_file_system(&volume.file_system) {
+        return Err(external_error(
+            EXTERNAL_NOT_FAT,
+            format!(
+                "USB drive {} uses {}; FAT or FAT32 is required",
+                volume.root, volume.file_system
+            ),
+        ));
+    }
+    Ok(volume)
 }
 
 fn resolve_esp_root(platform: &impl ExternalPlatform, boot: &BootState) -> BackendResult<PathBuf> {
@@ -761,15 +813,47 @@ fn read_secure_boot(platform: &impl ExternalPlatform) -> BackendResult<Option<bo
         .transpose()
 }
 
-fn refuse_secure_boot(platform: &impl ExternalPlatform) -> BackendResult<()> {
-    if read_secure_boot(platform)? == Some(true) {
-        Err(external_error(
-            EXTERNAL_SECURE_BOOT_ON,
-            "Secure Boot is on; the external EFI applications are unsigned",
-        ))
+fn signing_status(
+    platform: &impl ExternalPlatform,
+    resources: &ExternalResources<'_>,
+    uefi: bool,
+    elevated: bool,
+) -> ExternalSigning {
+    let images_signed = resources.images_signed_override.unwrap_or_else(|| {
+        authenticode::check_signed(resources.images.diagnostic, resources.certificate).is_ok()
+            && authenticode::check_signed(resources.images.loader, resources.certificate).is_ok()
+    });
+    let certificate_enrolled = if uefi && elevated {
+        platform.read_db().ok().flatten().and_then(|db| {
+            let digests = [
+                authenticode::pe_digest(resources.images.diagnostic).ok()?,
+                authenticode::pe_digest(resources.images.loader).ok()?,
+            ];
+            Some(signature_list::trusts(&db, resources.certificate, &digests))
+        })
     } else {
-        Ok(())
+        None
+    };
+    ExternalSigning {
+        images_signed,
+        certificate_enrolled,
     }
+}
+
+fn refuse_secure_boot(
+    platform: &impl ExternalPlatform,
+    resources: &ExternalResources<'_>,
+) -> BackendResult<()> {
+    if read_secure_boot(platform)? == Some(true) {
+        let signing = signing_status(platform, resources, true, true);
+        if !signing.images_signed || signing.certificate_enrolled != Some(true) {
+            return Err(external_error(
+                EXTERNAL_SECURE_BOOT_ON,
+                "Secure Boot is on; the external EFI applications are not trusted by firmware",
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn read_global(platform: &impl ExternalPlatform, name: &str) -> BackendResult<Option<Vec<u8>>> {
@@ -809,6 +893,180 @@ fn boot_entry_name(name: &str) -> bool {
         && name[4..]
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'A'..=b'F').contains(&byte))
+}
+
+fn write_certificate(root: &Path, certificate: &[u8]) -> BackendResult<()> {
+    let root_metadata = fs::symlink_metadata(root).map_err(|error| {
+        external_error(
+            EXTERNAL_WRITE,
+            format!("USB root {} is unavailable: {error}", root.display()),
+        )
+    })?;
+    if link_or_reparse(&root_metadata) || !root_metadata.is_dir() {
+        return Err(external_error(
+            EXTERNAL_WRITE,
+            format!(
+                "USB root {} must be a directory, not a symlink or reparse point",
+                root.display()
+            ),
+        ));
+    }
+
+    let target = root.join(CERTIFICATE_FILE_NAME);
+    match fs::symlink_metadata(&target) {
+        Ok(metadata) => {
+            if link_or_reparse(&metadata) || !metadata.is_file() {
+                return Err(certificate_exists(&target));
+            }
+            if metadata.len() != certificate.len() as u64 {
+                return Err(certificate_exists(&target));
+            }
+            let existing = fs::read(&target).map_err(|error| {
+                external_error(
+                    EXTERNAL_WRITE,
+                    format!(
+                        "existing Secure Boot certificate could not be read at {}: {error}",
+                        target.display()
+                    ),
+                )
+            })?;
+            if existing == certificate {
+                return Ok(());
+            }
+            return Err(certificate_exists(&target));
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(external_error(
+                EXTERNAL_WRITE,
+                format!(
+                    "Secure Boot certificate path could not be inspected at {}: {error}",
+                    target.display()
+                ),
+            ));
+        }
+    }
+
+    let mut temporary_name = OsString::from(".");
+    temporary_name.push(CERTIFICATE_FILE_NAME);
+    temporary_name.push(format!(
+        ".nvstraps-{}-{}.tmp",
+        std::process::id(),
+        CERTIFICATE_TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+    ));
+    let temporary = root.join(temporary_name);
+    if fs::symlink_metadata(&temporary).is_ok() {
+        return Err(external_error(
+            EXTERNAL_WRITE,
+            format!(
+                "temporary Secure Boot certificate path already exists at {}",
+                temporary.display()
+            ),
+        ));
+    }
+
+    let result = (|| {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)
+            .map_err(|error| {
+                external_error(
+                    EXTERNAL_WRITE,
+                    format!(
+                        "temporary Secure Boot certificate could not be created at {}: {error}",
+                        temporary.display()
+                    ),
+                )
+            })?;
+        file.write_all(certificate)
+            .and_then(|()| file.sync_all())
+            .map_err(|error| {
+                external_error(
+                    EXTERNAL_WRITE,
+                    format!(
+                        "temporary Secure Boot certificate could not be written at {}: {error}",
+                        temporary.display()
+                    ),
+                )
+            })?;
+        drop(file);
+        fs::rename(&temporary, &target).map_err(|error| {
+            external_error(
+                EXTERNAL_WRITE,
+                format!(
+                    "Secure Boot certificate could not be moved into place at {}: {error}",
+                    target.display()
+                ),
+            )
+        })?;
+        let metadata = fs::symlink_metadata(&target).map_err(|error| {
+            external_error(
+                EXTERNAL_WRITE,
+                format!(
+                    "Secure Boot certificate readback failed at {}: {error}",
+                    target.display()
+                ),
+            )
+        })?;
+        if link_or_reparse(&metadata) || !metadata.is_file() {
+            return Err(external_error(
+                EXTERNAL_WRITE,
+                format!(
+                    "Secure Boot certificate readback is not a regular file at {}",
+                    target.display()
+                ),
+            ));
+        }
+        let readback = fs::read(&target).map_err(|error| {
+            external_error(
+                EXTERNAL_WRITE,
+                format!(
+                    "Secure Boot certificate readback failed at {}: {error}",
+                    target.display()
+                ),
+            )
+        })?;
+        if readback != certificate {
+            return Err(external_error(
+                EXTERNAL_WRITE,
+                format!(
+                    "Secure Boot certificate readback mismatch at {}",
+                    target.display()
+                ),
+            ));
+        }
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result
+}
+
+fn certificate_exists(path: &Path) -> BackendError {
+    external_error(
+        EXTERNAL_CERTIFICATE_EXISTS,
+        format!(
+            "a different file already exists at {}; it was not replaced",
+            path.display()
+        ),
+    )
+}
+
+fn link_or_reparse(metadata: &fs::Metadata) -> bool {
+    if metadata.file_type().is_symlink() {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        metadata.file_attributes() & 0x400 != 0
+    }
+    #[cfg(not(windows))]
+    {
+        false
+    }
 }
 
 fn read_successor(root: &Path) -> BackendResult<Vec<u8>> {
@@ -945,6 +1203,7 @@ mod tests {
     const PARTITION_GUID: &str = "02d5d49a-d31c-11eb-9de1-d850e6dcccd2";
     const USB_ROOT: &str = "U:\\";
     const NOW: u64 = 1_793_000_000_000;
+    const PROJECT_CERTIFICATE: &[u8] = include_bytes!("../../../secure-boot/NvStrapsReBar-db.cer");
 
     struct TestDirectory(PathBuf);
 
@@ -970,6 +1229,7 @@ mod tests {
         uefi: Cell<bool>,
         elevated: Cell<bool>,
         variables: RefCell<BTreeMap<String, Vec<u8>>>,
+        db: RefCell<Option<Vec<u8>>>,
         variable_writes: RefCell<Vec<(String, Vec<u8>)>>,
         esp_volumes: RefCell<Vec<EspVolume>>,
         usb_volumes: RefCell<Vec<UsbVolume>>,
@@ -979,6 +1239,7 @@ mod tests {
         boot_time: Cell<u64>,
         gpus: Vec<GpuDevice>,
         reboots: Cell<u64>,
+        firmware_setup_reboots: Cell<u64>,
     }
 
     impl ExternalPlatform for FakePlatform {
@@ -992,6 +1253,10 @@ mod tests {
 
         fn read_global(&self, name: &str) -> BackendResult<Option<Vec<u8>>> {
             Ok(self.variables.borrow().get(name).cloned())
+        }
+
+        fn read_db(&self) -> BackendResult<Option<Vec<u8>>> {
+            Ok(self.db.borrow().clone())
         }
 
         fn write_global(&self, name: &str, value: &[u8]) -> BackendResult<()> {
@@ -1042,6 +1307,12 @@ mod tests {
             self.reboots.set(self.reboots.get() + 1);
             Ok(())
         }
+
+        fn reboot_to_firmware_setup(&self) -> BackendResult<()> {
+            self.firmware_setup_reboots
+                .set(self.firmware_setup_reboots.get() + 1);
+            Ok(())
+        }
     }
 
     struct Fixture {
@@ -1049,6 +1320,8 @@ mod tests {
         platform: FakePlatform,
         esp: PathBuf,
         usb: PathBuf,
+        diagnostic: Vec<u8>,
+        loader: Vec<u8>,
         foreign_boot: Vec<u8>,
     }
 
@@ -1088,6 +1361,7 @@ mod tests {
                 uefi: Cell::new(true),
                 elevated: Cell::new(true),
                 variables: RefCell::new(variables),
+                db: RefCell::new(None),
                 variable_writes: RefCell::new(Vec::new()),
                 esp_volumes: RefCell::new(vec![EspVolume {
                     partition_guid: PARTITION_GUID.into(),
@@ -1106,20 +1380,29 @@ mod tests {
                 boot_time: Cell::new(NOW - 10_000),
                 gpus: vec![windows_gpu()],
                 reboots: Cell::new(0),
+                firmware_setup_reboots: Cell::new(0),
             };
+            let diagnostic = signed_test_image(0x31);
+            let loader = signed_test_image(0x52);
             Self {
                 _directory: directory,
                 platform,
                 esp,
                 usb,
+                diagnostic,
+                loader,
                 foreign_boot: foreign_option,
             }
         }
 
-        fn images(&self) -> Images<'static> {
-            Images {
-                diagnostic: b"diagnostic-image",
-                loader: b"loader-image",
+        fn resources(&self) -> ExternalResources<'_> {
+            ExternalResources {
+                images: Images {
+                    diagnostic: &self.diagnostic,
+                    loader: &self.loader,
+                },
+                certificate: PROJECT_CERTIFICATE,
+                images_signed_override: None,
             }
         }
 
@@ -1208,6 +1491,78 @@ mod tests {
             .join("../tests/real-app/fixtures/external-diagnostic.json")
     }
 
+    fn signable_application_image(marker: u8) -> Vec<u8> {
+        let mut image = vec![0_u8; 0x300];
+        image[..2].copy_from_slice(b"MZ");
+        image[0x3c..0x40].copy_from_slice(&0x80_u32.to_le_bytes());
+        image[0x80..0x84].copy_from_slice(b"PE\0\0");
+        image[0x84..0x86].copy_from_slice(&0x8664_u16.to_le_bytes());
+        image[0x86..0x88].copy_from_slice(&1_u16.to_le_bytes());
+        image[0x94..0x96].copy_from_slice(&0xf0_u16.to_le_bytes());
+        image[0x98..0x9a].copy_from_slice(&0x20b_u16.to_le_bytes());
+        image[0xd4..0xd8].copy_from_slice(&0x200_u32.to_le_bytes());
+        image[0xdc..0xde].copy_from_slice(&10_u16.to_le_bytes());
+        image[0x104..0x108].copy_from_slice(&16_u32.to_le_bytes());
+        image[0x188..0x18d].copy_from_slice(b".text");
+        image[0x198..0x19c].copy_from_slice(&0x100_u32.to_le_bytes());
+        image[0x19c..0x1a0].copy_from_slice(&0x200_u32.to_le_bytes());
+        for (index, byte) in image[0x200..].iter_mut().enumerate() {
+            *byte = (index as u8).wrapping_mul(17).wrapping_add(marker);
+        }
+        image
+    }
+
+    fn signed_test_image(marker: u8) -> Vec<u8> {
+        authenticode::sign_with(
+            &signable_application_image(marker),
+            PROJECT_CERTIFICATE,
+            |_| Ok(vec![marker; 256]),
+        )
+        .unwrap()
+    }
+
+    fn efi_signature_list(signature_type: [u8; 16], entries: &[Vec<u8>]) -> Vec<u8> {
+        const LIST_HEADER_BYTES: usize = 28;
+        const OWNER_BYTES: usize = 16;
+        let entry_bytes = entries.first().map_or(0, Vec::len);
+        assert!(entries.iter().all(|entry| entry.len() == entry_bytes));
+        let signature_size = OWNER_BYTES + entry_bytes;
+        let list_size = LIST_HEADER_BYTES + entries.len() * signature_size;
+        let mut db = Vec::with_capacity(list_size);
+        db.extend_from_slice(&signature_type);
+        db.extend_from_slice(&u32::try_from(list_size).unwrap().to_le_bytes());
+        db.extend_from_slice(&0_u32.to_le_bytes());
+        db.extend_from_slice(&u32::try_from(signature_size).unwrap().to_le_bytes());
+        for entry in entries {
+            db.extend_from_slice(&[0x44; OWNER_BYTES]);
+            db.extend_from_slice(entry);
+        }
+        db
+    }
+
+    fn certificate_db() -> Vec<u8> {
+        efi_signature_list(
+            [
+                0xa1, 0x59, 0xc0, 0xa5, 0xe4, 0x94, 0xa7, 0x4a, 0x87, 0xb5, 0xab, 0x15, 0x5c, 0x2b,
+                0xf0, 0x72,
+            ],
+            &[PROJECT_CERTIFICATE.to_vec()],
+        )
+    }
+
+    fn digest_db(digests: &[[u8; 32]]) -> Vec<u8> {
+        efi_signature_list(
+            [
+                0x26, 0x16, 0xc4, 0xc1, 0x4c, 0x50, 0x92, 0x40, 0xac, 0xa9, 0x41, 0xf9, 0x36, 0x93,
+                0x43, 0x28,
+            ],
+            &digests
+                .iter()
+                .map(|digest| digest.to_vec())
+                .collect::<Vec<_>>(),
+        )
+    }
+
     fn application_image(marker: u8) -> Vec<u8> {
         let mut bytes = vec![0; 256];
         bytes[..2].copy_from_slice(b"MZ");
@@ -1284,7 +1639,7 @@ mod tests {
     fn inspect_reports_no_esp_secure_boot_and_missing_elevation_without_writing() {
         let fixture = Fixture::new("inspect-conditions");
         fixture.platform.esp_volumes.borrow_mut().clear();
-        let status = inspect(&fixture.platform).unwrap();
+        let status = inspect(&fixture.platform, &fixture.resources()).unwrap();
         assert_eq!(status.esp.reason, Some(ExternalEspReason::VolumeNotFound));
         assert!(!status.esp.found);
 
@@ -1293,7 +1648,7 @@ mod tests {
             .variables
             .borrow_mut()
             .insert("SecureBoot".into(), vec![1]);
-        let status = inspect(&fixture.platform).unwrap();
+        let status = inspect(&fixture.platform, &fixture.resources()).unwrap();
         assert_eq!(status.secure_boot, Some(true));
         assert_eq!(
             error_code(
@@ -1302,7 +1657,7 @@ mod tests {
                     &ExternalMedium::Usb {
                         root: USB_ROOT.into(),
                     },
-                    &fixture.images(),
+                    &fixture.resources(),
                 )
                 .unwrap_err()
             ),
@@ -1310,13 +1665,164 @@ mod tests {
         );
 
         fixture.platform.elevated.set(false);
-        let status = inspect(&fixture.platform).unwrap();
+        let status = inspect(&fixture.platform, &fixture.resources()).unwrap();
         assert_eq!(status.esp.reason, Some(ExternalEspReason::NotElevated));
         assert!(matches!(
-            prepare_diagnostic(&fixture.platform, &ExternalMedium::Esp, &fixture.images()),
+            prepare_diagnostic(
+                &fixture.platform,
+                &ExternalMedium::Esp,
+                &fixture.resources()
+            ),
             Err(BackendError::AdministratorRequired(_))
         ));
         assert!(fixture.platform.variable_writes.borrow().is_empty());
+    }
+
+    #[test]
+    fn secure_boot_gate_requires_signed_images_and_complete_enrollment() {
+        let unsigned = Fixture::new("secure-boot-unsigned");
+        unsigned
+            .platform
+            .variables
+            .borrow_mut()
+            .insert("SecureBoot".into(), vec![1]);
+        *unsigned.platform.db.borrow_mut() = Some(certificate_db());
+        let unsigned_diagnostic = signable_application_image(0x71);
+        let unsigned_loader = signable_application_image(0x72);
+        let unsigned_resources = ExternalResources {
+            images: Images {
+                diagnostic: &unsigned_diagnostic,
+                loader: &unsigned_loader,
+            },
+            certificate: PROJECT_CERTIFICATE,
+            images_signed_override: None,
+        };
+        let unsigned_status = inspect(&unsigned.platform, &unsigned_resources).unwrap();
+        assert!(!unsigned_status.signing.images_signed);
+        assert_eq!(unsigned_status.signing.certificate_enrolled, Some(true));
+        assert_eq!(
+            error_code(
+                prepare_diagnostic(
+                    &unsigned.platform,
+                    &ExternalMedium::Usb {
+                        root: USB_ROOT.into(),
+                    },
+                    &unsigned_resources,
+                )
+                .unwrap_err()
+            ),
+            EXTERNAL_SECURE_BOOT_ON
+        );
+
+        let not_enrolled = Fixture::new("secure-boot-not-enrolled");
+        not_enrolled
+            .platform
+            .variables
+            .borrow_mut()
+            .insert("SecureBoot".into(), vec![1]);
+        *not_enrolled.platform.db.borrow_mut() = Some(Vec::new());
+        let status = inspect(&not_enrolled.platform, &not_enrolled.resources()).unwrap();
+        assert!(status.signing.images_signed);
+        assert_eq!(status.signing.certificate_enrolled, Some(false));
+        assert_eq!(
+            error_code(
+                prepare_diagnostic(
+                    &not_enrolled.platform,
+                    &ExternalMedium::Usb {
+                        root: USB_ROOT.into(),
+                    },
+                    &not_enrolled.resources(),
+                )
+                .unwrap_err()
+            ),
+            EXTERNAL_SECURE_BOOT_ON
+        );
+
+        let by_certificate = Fixture::new("secure-boot-certificate");
+        by_certificate
+            .platform
+            .variables
+            .borrow_mut()
+            .insert("SecureBoot".into(), vec![1]);
+        *by_certificate.platform.db.borrow_mut() = Some(certificate_db());
+        prepare_diagnostic(
+            &by_certificate.platform,
+            &ExternalMedium::Usb {
+                root: USB_ROOT.into(),
+            },
+            &by_certificate.resources(),
+        )
+        .unwrap();
+
+        let by_digests = Fixture::new("secure-boot-digests");
+        by_digests
+            .platform
+            .variables
+            .borrow_mut()
+            .insert("SecureBoot".into(), vec![1]);
+        let digests = [
+            authenticode::pe_digest(&by_digests.diagnostic).unwrap(),
+            authenticode::pe_digest(&by_digests.loader).unwrap(),
+        ];
+        *by_digests.platform.db.borrow_mut() = Some(digest_db(&digests));
+        prepare_diagnostic(
+            &by_digests.platform,
+            &ExternalMedium::Usb {
+                root: USB_ROOT.into(),
+            },
+            &by_digests.resources(),
+        )
+        .unwrap();
+
+        let one_digest = Fixture::new("secure-boot-one-digest");
+        one_digest
+            .platform
+            .variables
+            .borrow_mut()
+            .insert("SecureBoot".into(), vec![1]);
+        let diagnostic_digest = authenticode::pe_digest(&one_digest.diagnostic).unwrap();
+        *one_digest.platform.db.borrow_mut() = Some(digest_db(&[diagnostic_digest]));
+        assert_eq!(
+            error_code(
+                prepare_diagnostic(
+                    &one_digest.platform,
+                    &ExternalMedium::Usb {
+                        root: USB_ROOT.into(),
+                    },
+                    &one_digest.resources(),
+                )
+                .unwrap_err()
+            ),
+            EXTERNAL_SECURE_BOOT_ON
+        );
+    }
+
+    #[test]
+    fn certificate_save_is_idempotent_and_refuses_conflicts_and_ntfs() {
+        let fixture = Fixture::new("save-certificate");
+        let target = fixture.usb.join(CERTIFICATE_FILE_NAME);
+
+        let direct_path = fixture.usb.to_string_lossy();
+        let error =
+            save_certificate(&fixture.platform, &direct_path, &fixture.resources()).unwrap_err();
+        assert_eq!(error_code(error), EXTERNAL_MEDIUM_UNAVAILABLE);
+        assert!(!target.exists());
+
+        save_certificate(&fixture.platform, USB_ROOT, &fixture.resources()).unwrap();
+        assert_eq!(fs::read(&target).unwrap(), PROJECT_CERTIFICATE);
+        save_certificate(&fixture.platform, USB_ROOT, &fixture.resources()).unwrap();
+        assert_eq!(fs::read(&target).unwrap(), PROJECT_CERTIFICATE);
+
+        fs::write(&target, b"different certificate").unwrap();
+        let error =
+            save_certificate(&fixture.platform, USB_ROOT, &fixture.resources()).unwrap_err();
+        assert_eq!(error_code(error), EXTERNAL_CERTIFICATE_EXISTS);
+        assert_eq!(fs::read(&target).unwrap(), b"different certificate");
+
+        fixture.platform.usb_volumes.borrow_mut()[0].file_system = "NTFS".into();
+        let error =
+            save_certificate(&fixture.platform, USB_ROOT, &fixture.resources()).unwrap_err();
+        assert_eq!(error_code(error), EXTERNAL_NOT_FAT);
     }
 
     #[test]
@@ -1324,13 +1830,14 @@ mod tests {
         let fixture = Fixture::new("install-sequence");
         let medium = ExternalMedium::Esp;
 
-        let prepared = prepare_diagnostic(&fixture.platform, &medium, &fixture.images()).unwrap();
+        let prepared =
+            prepare_diagnostic(&fixture.platform, &medium, &fixture.resources()).unwrap();
         assert_eq!(boot_order(&fixture.platform), [0, 4, 1]);
         assert_eq!(variable_u16(&fixture.platform, "BootNext"), Some(1));
         assert!(fixture.platform.variables.borrow().contains_key("Boot0001"));
         assert_eq!(
             fs::read(uefi_file_for_test(&fixture.esp, ESP_DIAGNOSTIC)).unwrap(),
-            b"diagnostic-image"
+            fixture.diagnostic.as_slice()
         );
         assert_eq!(
             prepared.install.as_ref().unwrap().state.stage,
@@ -1362,7 +1869,7 @@ mod tests {
                 function: 0,
             },
             8 << 30,
-            &fixture.images(),
+            &fixture.resources(),
         )
         .unwrap();
         assert_eq!(boot_order(&fixture.platform), [0, 4, 1, 2]);
@@ -1371,7 +1878,7 @@ mod tests {
         assert!(fixture.platform.variables.borrow().contains_key("Boot0002"));
         assert_eq!(
             fs::read(uefi_file_for_test(&fixture.esp, ESP_LOADER)).unwrap(),
-            b"loader-image"
+            fixture.loader.as_slice()
         );
         assert_eq!(
             loader.install.as_ref().unwrap().state.stage,
@@ -1382,7 +1889,7 @@ mod tests {
         fixture.consume_boot_next();
         fixture.write_receipt(&fixture.esp);
         fixture.platform.boot_time.set(NOW + 3);
-        let permanent = make_permanent(&fixture.platform).unwrap();
+        let permanent = make_permanent(&fixture.platform, &fixture.resources()).unwrap();
         assert_eq!(boot_order(&fixture.platform), [2, 0, 4]);
         assert_eq!(variable_u16(&fixture.platform, "BootNext"), None);
         assert!(!fixture.platform.variables.borrow().contains_key("Boot0001"));
@@ -1392,7 +1899,7 @@ mod tests {
         assert!(install.state.receipt.is_some());
         fixture.assert_foreign_untouched();
 
-        let removed = remove(&fixture.platform, &medium).unwrap();
+        let removed = remove(&fixture.platform, &medium, &fixture.resources()).unwrap();
         assert_eq!(boot_order(&fixture.platform), [0, 4]);
         assert_eq!(variable_u16(&fixture.platform, "BootNext"), None);
         assert!(!fixture.platform.variables.borrow().contains_key("Boot0001"));
@@ -1410,10 +1917,10 @@ mod tests {
         let medium = ExternalMedium::Usb {
             root: USB_ROOT.into(),
         };
-        prepare_diagnostic(&fixture.platform, &medium, &fixture.images()).unwrap();
+        prepare_diagnostic(&fixture.platform, &medium, &fixture.resources()).unwrap();
         assert_eq!(
             fs::read(uefi_file_for_test(&fixture.usb, REMOVABLE_BOOT)).unwrap(),
-            b"diagnostic-image"
+            fixture.diagnostic.as_slice()
         );
         fixture.write_report(&fixture.usb);
         read_report(&fixture.platform, &medium).unwrap();
@@ -1427,15 +1934,15 @@ mod tests {
                 function: 0,
             },
             8 << 30,
-            &fixture.images(),
+            &fixture.resources(),
         )
         .unwrap();
         assert_eq!(
             fs::read(uefi_file_for_test(&fixture.usb, REMOVABLE_BOOT)).unwrap(),
-            b"loader-image"
+            fixture.loader.as_slice()
         );
         fixture.write_receipt(&fixture.usb);
-        remove(&fixture.platform, &medium).unwrap();
+        remove(&fixture.platform, &medium, &fixture.resources()).unwrap();
         assert!(!uefi_file_for_test(&fixture.usb, REMOVABLE_BOOT).exists());
         assert!(fixture.platform.variable_writes.borrow().is_empty());
     }
@@ -1451,7 +1958,7 @@ mod tests {
             &ExternalMedium::Usb {
                 root: USB_ROOT.into(),
             },
-            &fixture.images(),
+            &fixture.resources(),
         )
         .unwrap_err();
         assert_eq!(error_code(error), EXTERNAL_FOREIGN_BOOT_FILE);
@@ -1464,21 +1971,38 @@ mod tests {
         let fixture = Fixture::new("bitlocker");
         fixture.platform.bit_locker.set(BitLocker::On);
 
-        let error = restart(&fixture.platform, false).unwrap_err();
+        let error = restart(&fixture.platform, false, false).unwrap_err();
         assert_eq!(error_code(error), EXTERNAL_BITLOCKER_SUSPENSION_REQUIRED);
         assert_eq!(fixture.platform.bit_locker_suspensions.get(), 0);
         assert_eq!(fixture.platform.reboots.get(), 0);
 
-        restart(&fixture.platform, true).unwrap();
+        restart(&fixture.platform, true, false).unwrap();
         assert_eq!(fixture.platform.bit_locker_suspensions.get(), 1);
         assert_eq!(fixture.platform.reboots.get(), 1);
+    }
+
+    #[test]
+    fn firmware_setup_restart_uses_the_same_bitlocker_consent_rule() {
+        let fixture = Fixture::new("firmware-setup-bitlocker");
+        fixture.platform.bit_locker.set(BitLocker::On);
+
+        let error = restart(&fixture.platform, false, true).unwrap_err();
+        assert_eq!(error_code(error), EXTERNAL_BITLOCKER_SUSPENSION_REQUIRED);
+        assert_eq!(fixture.platform.bit_locker_suspensions.get(), 0);
+        assert_eq!(fixture.platform.firmware_setup_reboots.get(), 0);
+        assert_eq!(fixture.platform.reboots.get(), 0);
+
+        restart(&fixture.platform, true, true).unwrap();
+        assert_eq!(fixture.platform.bit_locker_suspensions.get(), 1);
+        assert_eq!(fixture.platform.firmware_setup_reboots.get(), 1);
+        assert_eq!(fixture.platform.reboots.get(), 0);
     }
 
     #[test]
     fn successor_change_is_reported_after_the_plan_is_written() {
         let fixture = Fixture::new("successor-change");
         let medium = ExternalMedium::Esp;
-        prepare_diagnostic(&fixture.platform, &medium, &fixture.images()).unwrap();
+        prepare_diagnostic(&fixture.platform, &medium, &fixture.resources()).unwrap();
         fixture.write_report(&fixture.esp);
         let status = write_loader(
             &fixture.platform,
@@ -1490,7 +2014,7 @@ mod tests {
                 function: 0,
             },
             8 << 30,
-            &fixture.images(),
+            &fixture.resources(),
         )
         .unwrap();
         assert!(!status.install.unwrap().successor_changed);
@@ -1501,7 +2025,7 @@ mod tests {
         )
         .unwrap();
         assert!(
-            inspect(&fixture.platform)
+            inspect(&fixture.platform, &fixture.resources())
                 .unwrap()
                 .install
                 .unwrap()
@@ -1512,14 +2036,24 @@ mod tests {
     #[test]
     fn status_json_matches_the_frontend_contract_shape() {
         let fixture = Fixture::new("status-json");
-        prepare_diagnostic(&fixture.platform, &ExternalMedium::Esp, &fixture.images()).unwrap();
-        let value = serde_json::to_value(inspect(&fixture.platform).unwrap()).unwrap();
+        prepare_diagnostic(
+            &fixture.platform,
+            &ExternalMedium::Esp,
+            &fixture.resources(),
+        )
+        .unwrap();
+        let value = serde_json::to_value(inspect(&fixture.platform, &fixture.resources()).unwrap())
+            .unwrap();
         assert_eq!(
             value,
             serde_json::json!({
                 "uefi": true,
                 "elevated": true,
                 "secureBoot": false,
+                "signing": {
+                    "imagesSigned": true,
+                    "certificateEnrolled": null
+                },
                 "bitLocker": "off",
                 "esp": {
                     "found": true,

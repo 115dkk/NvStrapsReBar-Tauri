@@ -8,5 +8,6 @@ export const nativeExternalBootBridge: ExternalBootBridge = {
         writeLoader: (medium, target, sizeBytes) => invoke("write_external_loader", { request: { medium, target, sizeBytes } }),
         makePermanent: () => invoke("make_external_boot_permanent"),
         remove: (medium) => invoke("remove_external_boot", { request: { medium } }),
-        restart: (suspendBitLocker) => invoke("restart_for_external_boot", { request: { suspendBitLocker } }),
+        saveCertificate: (root) => invoke("save_external_certificate", { request: { root } }),
+        restart: (suspendBitLocker, firmwareSetup) => invoke("restart_for_external_boot", { request: { suspendBitLocker, firmwareSetup: Boolean(firmwareSetup) } }),
 };

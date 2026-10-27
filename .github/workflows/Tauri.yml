@@ -104,6 +104,15 @@ jobs:
         run: npm ci
       - name: Enforce the Rust-only source boundary
         run: npm run check:riir
+      - name: Locate OpenSSL for the EFI signer
+        shell: pwsh
+        run: |
+          # The signer builds Authenticode itself and asks OpenSSL only for the RSA signature.
+          $openssl = (Get-Command openssl -ErrorAction SilentlyContinue).Source
+          if (-not $openssl) { $openssl = 'C:\Program Files\Git\usr\bin\openssl.exe' }
+          & $openssl version
+          if ($LASTEXITCODE -ne 0) { throw "OpenSSL is unavailable at $openssl" }
+          "NVSTRAPS_OPENSSL=$openssl" >> $env:GITHUB_ENV
       - name: Build the UEFI resources required by the Tauri manifest
         run: npm run build:firmware
       - name: Check formatting
@@ -118,6 +127,25 @@ jobs:
         run: npm run tauri:ci
       - name: Build the external EFI tools
         run: npm run build:external
+      - name: Check Windows reads the signature the Release workflow makes
+        shell: pwsh
+        run: |
+          # Pull requests have no signing key; a throwaway key exercises the same signer and check.
+          $work = New-Item -ItemType Directory -Path (Join-Path $env:RUNNER_TEMP "nvstraps-signing-$([guid]::NewGuid())")
+          try {
+            & $env:NVSTRAPS_OPENSSL req -x509 -newkey rsa:2048 -sha256 -nodes -days 30 -subj '/CN=NvStrapsReBar CI' -keyout "$work/ci.key" -out "$work/ci.pem" 2>$null
+            & $env:NVSTRAPS_OPENSSL x509 -in "$work/ci.pem" -outform DER -out "$work/ci.cer"
+            & target/release/external/nvstraps-external-tool.exe sign target/external-efi/NvStrapsLoader.efi "$work/ci.cer" "$work/ci.key" "$work/signed.efi"
+            if ($LASTEXITCODE -ne 0) { throw 'signing failed' }
+            $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new("$work/ci.cer")
+            $signature = Get-AuthenticodeSignature -FilePath "$work/signed.efi"
+            if ($signature.Status -notin 'Valid', 'UnknownError', 'NotTrusted' -or $signature.SignerCertificate.Thumbprint -ne $certificate.Thumbprint) {
+              throw "Windows reports $($signature.Status) ($($signature.StatusMessage)) signed by $($signature.SignerCertificate.Thumbprint)"
+            }
+            "Windows reads the signature: $($signature.Status), $($signature.SignerCertificate.Subject)"
+          } finally {
+            Remove-Item -Recurse -Force -LiteralPath $work
+          }
       - name: Package the Windows installer
         shell: pwsh
         run: ./scripts/build-installer.ps1

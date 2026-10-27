@@ -13,12 +13,16 @@ import { readMachine, writeMachine, type Machine } from "./machine";
 
 export const ESP_PARTITION_GUID = "02d5d49a-d31c-11eb-9de1-d850e6dcccd2";
 export const USB_ROOT = "U:\\";
-export const efiRelease = join(repository, "target/x86_64-unknown-uefi/release");
+/** The EFI programs as the app bundles them (target/external-efi, signed only in the Release workflow). */
+export const efiRelease = join(repository, "target/external-efi");
+export const projectCertificate = join(repository, "secure-boot/NvStrapsReBar-db.cer");
 const fixture = join(repository, "tests/real-app/fixtures/external-diagnostic.json");
 
 type BitLocker = "off" | "on" | "unknown";
 export type ExternalBoot = {
   secureBoot: boolean;
+  imagesSigned?: boolean;
+  db?: string | null;
   bitLocker: BitLocker;
   bitLockerSuspensions: number;
   esp: { partitionGuid: string; directory: string } | null;
@@ -86,8 +90,19 @@ export function describe(value: string) {
   return bytes.subarray(6, end).toString("utf16le");
 }
 
+/** An EFI_SIGNATURE_LIST of one X.509 certificate, as db holds it. */
+export function x509SignatureList(certificate: Buffer) {
+  const owner = guidBytes("7d5c2a18-0f6c-4d0c-9a8e-3c1b5e2f4a61");
+  const header = Buffer.alloc(28);
+  guidBytes("a5c059a1-94e4-4aa7-87b5-ab155c2bf072").copy(header, 0);
+  header.writeUInt32LE(28 + 16 + certificate.length, 16);
+  header.writeUInt32LE(0, 20);
+  header.writeUInt32LE(16 + certificate.length, 24);
+  return Buffer.concat([header, owner, certificate]);
+}
+
 /** Adds the external-route world to a freshly initialized machine file. */
-export async function addExternalBoot(machineFile: string, temporaryDirectory: string, options: { bitLocker: BitLocker }) {
+export async function addExternalBoot(machineFile: string, temporaryDirectory: string, options: { bitLocker: BitLocker; secureBoot?: boolean; imagesSigned?: boolean; db?: Buffer }) {
   const esp = join(temporaryDirectory, "esp");
   const usb = join(temporaryDirectory, "usb-u");
   await mkdir(join(esp, "EFI/Microsoft/Boot"), { recursive: true });
@@ -97,7 +112,9 @@ export async function addExternalBoot(machineFile: string, temporaryDirectory: s
   await writeFile(join(usb, "README.txt"), "a file the app must leave alone\n");
   const machine = (await readMachine(machineFile)) as ExternalMachine;
   machine.externalBoot = {
-    secureBoot: false,
+    secureBoot: options.secureBoot ?? false,
+    imagesSigned: options.imagesSigned ?? false,
+    db: options.db ? options.db.toString("base64") : null,
     bitLocker: options.bitLocker,
     bitLockerSuspensions: 0,
     esp: { partitionGuid: ESP_PARTITION_GUID, directory: esp },

@@ -74,12 +74,47 @@ jobs:
         run: npm ci
       - name: Write the release version into every manifest
         run: node tools/apply-version.mjs ${{ needs.plan.outputs.release-version }}
-      - name: Build the Rust UEFI resource required by the Tauri manifest
+      - name: Locate OpenSSL for the EFI signer
+        shell: pwsh
+        run: |
+          # The signer builds Authenticode itself and asks OpenSSL only for the RSA signature.
+          $openssl = (Get-Command openssl -ErrorAction SilentlyContinue).Source
+          if (-not $openssl) { $openssl = 'C:\Program Files\Git\usr\bin\openssl.exe' }
+          & $openssl version
+          if ($LASTEXITCODE -ne 0) { throw "OpenSSL is unavailable at $openssl" }
+          "NVSTRAPS_OPENSSL=$openssl" >> $env:GITHUB_ENV
+      - name: Require the UEFI signing key
+        shell: pwsh
+        env:
+          NVSTRAPS_UEFI_SIGNING_KEY: ${{ secrets.NVSTRAPS_UEFI_SIGNING_KEY }}
+        run: |
+          # Users enrol secure-boot/NvStrapsReBar-db.cer in db; an unsigned release would not run for them.
+          if (-not $env:NVSTRAPS_UEFI_SIGNING_KEY) { throw 'The NVSTRAPS_UEFI_SIGNING_KEY secret is missing' }
+      - name: Build the UEFI resources required by the Tauri manifest, signing the external EFI programs
+        env:
+          NVSTRAPS_UEFI_SIGNING_KEY: ${{ secrets.NVSTRAPS_UEFI_SIGNING_KEY }}
         run: npm run build:firmware
       - name: Build native application
+        env:
+          NVSTRAPS_UEFI_SIGNING_KEY: ${{ secrets.NVSTRAPS_UEFI_SIGNING_KEY }}
         run: npm run tauri:ci
       - name: Build external EFI applications and packaging tool
         run: npm run build:external
+      - name: Check the shipped EFI programs carry the project signature
+        shell: pwsh
+        run: |
+          $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new((Resolve-Path secure-boot/NvStrapsReBar-db.cer))
+          foreach ($name in 'NvStrapsDiagnostic.efi', 'NvStrapsLoader.efi') {
+            $image = "target/release/external/$name"
+            & target/release/external/nvstraps-external-tool.exe check-signed $image secure-boot/NvStrapsReBar-db.cer
+            if ($LASTEXITCODE -ne 0) { throw "$name is not signed with the project certificate" }
+            # Windows checks the RSA signature independently; the self-signed root is not trusted here.
+            $signature = Get-AuthenticodeSignature -FilePath $image
+            if ($signature.Status -notin 'Valid', 'UnknownError', 'NotTrusted' -or $signature.SignerCertificate.Thumbprint -ne $certificate.Thumbprint) {
+              throw "$name: Windows reports $($signature.Status) ($($signature.StatusMessage)) signed by $($signature.SignerCertificate.Thumbprint)"
+            }
+            "$name signed by $($certificate.Subject): $($signature.Status)"
+          }
       - name: Build the installer
         shell: pwsh
         run: ./scripts/build-installer.ps1

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ExternalBootBridge, ExternalMedium } from "./contract";
-import { activeRoute, defaultSize, externalScreen, usableCandidates } from "./model";
+import { activeRoute, blockReasons, defaultSize, externalScreen, secureBootReady, usableCandidates } from "./model";
 import type { PreviewExternalState } from "./preview-bridge";
 
 const usb: ExternalMedium = { kind: "usb", root: "E:\\" };
@@ -29,6 +29,7 @@ describe("preview external boot", () => {
                 const bridge = await preview();
                 const initial = await bridge.inspect();
                 expect(externalScreen(initial, false)).toBe("choose");
+                expect(initial.signing).toEqual({ imagesSigned: false, certificateEnrolled: null });
                 expect(initial.usbDrives).toMatchObject([
                         { root: "E:\\", label: "NVSTRAPS", fileSystem: "FAT32", usable: true, state: null },
                         { root: "F:\\", fileSystem: "NTFS", usable: false, problem: "notFat", state: null },
@@ -135,6 +136,58 @@ describe("preview external boot", () => {
                         await expect(bridge.writeLoader(medium, { segment: 0, bus: 1, device: 0, function: 0 }, 8 * GiB)).rejects.toMatchObject({ code: "externalSecureBootOn" });
                 }
                 expect(await bridge.inspect()).toEqual(initial);
+        });
+
+        it.each([usb, esp])("enrols the certificate in BIOS setup, then allows signed diagnostics and a loader on %j", async (medium) => {
+                const bridge = await preview("enrollCertificate");
+                const initial = await bridge.inspect();
+                expect(initial).toMatchObject({ secureBoot: true, signing: { imagesSigned: true, certificateEnrolled: false } });
+                expect(externalScreen(initial, false)).toBe("blocked");
+                expect(blockReasons(initial)).toEqual(["enrollCertificate"]);
+                await expect(bridge.prepareDiagnostic(medium)).rejects.toMatchObject({ code: "externalSecureBootOn" });
+                await expect(bridge.writeLoader(medium, { segment: 0, bus: 1, device: 0, function: 0 }, 8 * GiB)).rejects.toMatchObject({ code: "externalSecureBootOn" });
+                await expect(bridge.saveCertificate("F:\\")).rejects.toMatchObject({ code: "externalNotFat" });
+                await expect(bridge.saveCertificate("Z:\\")).rejects.toMatchObject({ code: "externalMediumUnavailable" });
+                expect(await bridge.inspect()).toEqual(initial);
+
+                const saved = await bridge.saveCertificate("E:\\");
+                expect(saved).toEqual(initial);
+                expect(externalScreen(saved, false)).toBe("blocked");
+                await bridge.restart(false);
+                expect(blockReasons(await bridge.inspect())).toEqual(["enrollCertificate"]);
+                const beforeSetup = await bridge.inspect();
+                await bridge.restart(false, true);
+                const enrolled = await bridge.inspect();
+                expect(enrolled.bootTimeUnixMs).toBeGreaterThan(beforeSetup.bootTimeUnixMs);
+                expect(enrolled).toMatchObject({ secureBoot: true, signing: { imagesSigned: true, certificateEnrolled: true } });
+                expect(secureBootReady(enrolled)).toBe(true);
+                expect(blockReasons(enrolled)).toEqual([]);
+                expect(externalScreen(enrolled, false)).toBe("choose");
+                expect(externalScreen(await loader(bridge, medium), false)).toBe("loaderReady");
+                expect((await bridge.readReport(medium)).secureBoot).toBe(true);
+                await bridge.restart(false);
+                expect(externalScreen(await bridge.inspect(), false)).toBe("result");
+        });
+
+        it("preserves reports when saving a certificate", async () => {
+                const bridge = await preview();
+                const report = await diagnostic(bridge, usb);
+                const before = await bridge.inspect();
+                expect(await bridge.saveCertificate("E:\\")).toEqual(before);
+                expect(await bridge.readReport(usb)).toEqual(report);
+        });
+
+        it("requires BitLocker consent for BIOS setup and does not run the scheduled stage there", async () => {
+                const bridge = await preview("bitLocker");
+                const prepared = await bridge.prepareDiagnostic(esp);
+                await expect(bridge.restart(false, true)).rejects.toMatchObject({ code: "externalBitLockerSuspensionRequired" });
+                expect(await bridge.inspect()).toEqual(prepared);
+                await bridge.restart(true, true);
+                const booted = await bridge.inspect();
+                expect(booted.bootTimeUnixMs).toBeGreaterThan(prepared.bootTimeUnixMs);
+                expect(booted.bitLocker).toBe("on");
+                expect(booted.install).toMatchObject({ nextScheduled: "diagnostic", report: false, receipt: null, restartedSinceStage: true });
+                await expect(bridge.readReport(esp)).rejects.toMatchObject({ code: "externalNoReport" });
         });
 
         it("refuses the console GPU at every size", async () => {

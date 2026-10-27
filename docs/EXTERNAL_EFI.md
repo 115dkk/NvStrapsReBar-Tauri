@@ -60,8 +60,9 @@ them. No other `Boot####` variable is written or reordered.
 
 ### What the app refuses or asks first
 
-- **Secure Boot on.** The programs are not signed, so the firmware would refuse them; the page asks
-  to turn Secure Boot off first. See "Secure Boot" below.
+- **Secure Boot on without the project certificate in `db`.** Release builds sign both programs; the
+  page then walks the user through adding the certificate to BIOS once (see "Secure Boot" below).
+  A development build has unsigned programs, so the page asks to turn Secure Boot off instead.
 - **BitLocker on the system drive.** Every boot through an extra EFI program changes PCR 4, so a
   TPM-protected drive would ask for its recovery key. When protection is on, the restart dialog says
   so and the app pauses protection for that one restart (`Win32_EncryptableVolume.DisableKeyProtectors`,
@@ -79,7 +80,7 @@ them. No other `Boot####` variable is written or reordered.
   records why, and the firmware boots Windows normally without the larger BAR. The page shows
   "Windows Boot Manager was updated" and rewrites the plan with the new hash on request. With Secure
   Boot off, `LoadImage` does not check signatures, so the pin is the only check on what the loader
-  starts.
+  starts; with Secure Boot on, the firmware also checks Windows Boot Manager's own signature.
 - **Boot order.** Windows or a firmware update may move Windows Boot Manager back to the front of
   `BootOrder`; the loader then stops running until the app puts it first again.
 - **Cold boot only.** The loader installs no S3 resume script. Sleep (S3), hibernation and Fast
@@ -89,19 +90,42 @@ them. No other `Boot####` variable is written or reordered.
 
 ## Secure Boot
 
-Research of 2026-10-27; the sources are listed at the end.
+Release builds sign `NvStrapsDiagnostic.efi` and `NvStrapsLoader.efi` with the project certificate
+[`secure-boot/NvStrapsReBar-db.cer`](../secure-boot/NvStrapsReBar-db.cer) (RSA-2048, SHA-256, valid to
+2046-10-22, SHA-256 fingerprint `2dcb22b1…a401a744`). Its private key exists only in the GitHub Actions
+secret `NVSTRAPS_UEFI_SIGNING_KEY`; the Release workflow refuses to publish without it and checks both
+shipped programs with `nvstraps-external-tool check-signed` and with Windows' own Authenticode check.
+
+With Secure Boot on, the page reads `db` and, when the certificate is missing, shows how to add it
+once: save `NvStrapsReBar-db.cer` to a FAT32 USB drive from the page, restart into BIOS setup (BitLocker
+pauses for that restart only, because a `db` change alters PCR 7), and append it under Key Management →
+Authorized Signatures (db). The page lists the menu path for MSI, ASUS and GIGABYTE. Use **Append**
+only: "Set New" or clearing keys also removes Microsoft's keys. Restoring default keys and some BIOS
+updates remove the certificate again; the page then asks for it again. Adding both programs' image
+hashes with "Enroll Efi Image" also counts, but has to be redone with every release.
+
+How it is signed: `nvstraps-external-tool sign` builds the Authenticode structure itself (PE image
+digest, `SpcIndirectDataContent`, CMS `SignedData` without timestamps, so the output is deterministic)
+and asks `openssl` only for the RSA PKCS#1 v1.5 signature over the signed attributes, so no RSA code
+enters the Rust dependency tree. CI proves it on firmware: `npm run test:qemu:secure-boot` enrols
+throwaway PK/KEK/db keys in OVMF with Secure Boot on, boots the diagnostic signed with the db key (its
+report says `secureBoot: true`), and checks that the unsigned diagnostic and a signed one with one
+changed byte are refused; `osslsigncode` verifies the same signature independently. On Windows the
+Tauri workflow signs with a throwaway key and requires `Get-AuthenticodeSignature` to accept it.
+
+Research of 2026-10-27 on the other routes; the sources are listed at the end.
 
 | Route | For this project |
 |---|---|
 | Microsoft third-party UEFI CA signature (Hardware Dev Center) | Not possible for an individual. Since 2025-10-20 every non-shim submission needs an annual OCP S.A.F.E. audit (quoted at USD 80k–250k per component), a signed SPDX SBOM in a `.sbom` section whose vendor matches an EV certificate, and an organisation's Hardware Dev Center account. Since 2026-06-26 Microsoft returns only binaries signed with Microsoft UEFI CA 2023. |
 | An own shim through shim-review | Not possible for an individual: it needs a legal entity, the Hardware Dev Center EV certificate, HSM-held keys and about 2–3 months of review. |
 | A distribution's Microsoft-signed shim plus MokManager (as Ventoy does) | Possible with conditions: both images need a `.sbat` section (shim refuses images without one), each PC enrols the project's or its own certificate once in MokManager, and the project inherits every SBAT and dbx revocation of the borrowed shim (Ventoy broke this way in August 2024). |
-| The user appends a certificate to `db` in BIOS setup | Possible with conditions, and the most direct: MSI, ASUS and GIGABYTE offer Key Management → Authorized Signatures → Append (and "Enroll Efi Image"). The images would have to be Authenticode-signed with that certificate. "Set New" or clearing keys instead of Append can leave Windows unbootable or the GPU's GOP blocked, and restoring default keys or some BIOS updates remove the entry again. |
+| The user appends a certificate to `db` in BIOS setup | **Implemented** (above). MSI, ASUS and GIGABYTE offer Key Management → Authorized Signatures → Append (and "Enroll Efi Image"). "Set New" or clearing keys instead of Append can leave Windows unbootable or the GPU's GOP blocked, and restoring default keys or some BIOS updates remove the entry again. |
 
-Both built images already meet Microsoft's static PE rules: `NX_COMPAT` is set (DllCharacteristics
-`0x8160`), SectionAlignment is `0x1000`, and no section is both writable and executable. Neither has
-an Authenticode signature, `.sbat` or `.sbom`. Every route still changes PCR 4 when the loader runs,
-so BitLocker needs the same one-restart pause.
+Both built images meet Microsoft's static PE rules: `NX_COMPAT` is set (DllCharacteristics `0x8160`),
+SectionAlignment is `0x1000`, and no section is both writable and executable. They carry no `.sbat`
+or `.sbom` section, which only the shim and Microsoft routes would need. Every route still changes
+PCR 4 when the loader runs, so BitLocker needs the same one-restart pause.
 
 Sources: [Microsoft UEFI signing requirements v9.0](https://techcommunity.microsoft.com/blog/hardware-dev-center/updated-microsoft-uefi-signing-requirements/1062916),
 [signing with the 2023 certificates](https://techcommunity.microsoft.com/blog/hardware-dev-center/signing-with-the-new-2023-microsoft-uefi-certificates-what-submitters-need-to-kn/4455787),
