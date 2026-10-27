@@ -266,13 +266,14 @@ fn validate_configuration_confirmation(
 
 #[cfg(windows)]
 #[cfg_attr(feature = "simulated-machine", allow(unreachable_code))]
-fn execute_reboot(arguments: &[&str], description: &str) -> BackendResult<()> {
+pub(crate) fn execute_reboot(arguments: &[&str], description: &str) -> BackendResult<()> {
     #[cfg(feature = "simulated-machine")]
     {
         let _ = arguments;
         let kind = match description {
             "firmware setup" => crate::simulated_machine::RebootKind::FirmwareSetup,
             "configuration" => crate::simulated_machine::RebootKind::Configuration,
+            "external boot" => crate::simulated_machine::RebootKind::ExternalBoot,
             _ => {
                 return Err(BackendError::Deployment(format!(
                     "unknown simulated reboot kind: {description}"
@@ -374,7 +375,7 @@ fn shutdown_executable() -> BackendResult<std::path::PathBuf> {
 }
 
 #[cfg(not(windows))]
-fn execute_reboot(_arguments: &[&str], _description: &str) -> BackendResult<()> {
+pub(crate) fn execute_reboot(_arguments: &[&str], _description: &str) -> BackendResult<()> {
     Err(BackendError::UnsupportedPlatform)
 }
 

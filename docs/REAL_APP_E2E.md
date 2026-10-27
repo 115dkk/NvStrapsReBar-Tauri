@@ -28,6 +28,7 @@ The `simulated-machine` Cargo feature of `src-tauri` replaces these functions, a
 | `reboot::execute_reboot` | appends to `rebootRequests`; nothing shuts down |
 | `resizable_bar::nvidia_smi::capture` | `nvidia-smi -q -x` XML built from the file, parsed by the real parser |
 | `nvidia_profiles::with_driver` | an error; the games page is not part of these journeys |
+| the external route's platform (`external_boot`) | `externalBoot`: Secure Boot, BitLocker, the EFI system partition and USB drives as folders, the EFI global boot variables |
 
 Native file dialogs are the operating system's, so the harness answers `plugin:dialog|open` in the
 page instead of the user. Tauri defines `__TAURI_INTERNALS__.invoke` as read-only, so the answer is
@@ -94,8 +95,24 @@ in the same folder.
 - `bar1Bytes` is the BAR1 size Windows and `nvidia-smi` report for the current boot. The simulated
   device reports it as its `current_bar_size`, and as the CfgMgr memory resource the real code would
   read, so an expanded aperture is evidence exactly as on a real machine.
-- `rebootRequests` gains `{ "kind": "firmwareSetup" | "configuration", "requestedAtUnixMs": … }` for
-  each accepted reboot.
+- `rebootRequests` gains `{ "kind": "firmwareSetup" | "configuration" | "externalBoot", "requestedAtUnixMs": … }`
+  for each accepted reboot.
+- `externalBoot` is optional; without it the external route's commands fail in the simulated build
+  and everything else is unchanged:
+
+  ```json
+  "externalBoot": {
+    "secureBoot": false,
+    "bitLocker": "on",
+    "bitLockerSuspensions": 0,
+    "esp": { "partitionGuid": "02d5d49a-d31c-11eb-9de1-d850e6dcccd2", "directory": "C:\\…\\esp" },
+    "usbDrives": [{ "root": "U:\\", "directory": "C:\\…\\usb-u", "label": "NVSTRAPS", "fileSystem": "FAT32", "totalBytes": 8000000000 }],
+    "variables": { "BootOrder": "AAA=", "Boot0000": "…", "BootCurrent": "AAA=" }
+  }
+  ```
+
+  `variables` holds EFI global variables in base64; a missing name is an unset variable. Each
+  BitLocker pause the app requests adds one to `bitLockerSuspensions`.
 
 ## The physical world in the harness
 
@@ -119,6 +136,23 @@ The harness never flashes anything. What it checks about the install BIOS file i
 bytes the application saved: the exported image has the size of the source image, differs from it,
 and equals what `nvstraps-ffs inject` (or `inject-all`) produces from the same source and the same
 `NvStrapsReBar.ffs`.
+
+## The external route
+
+`tests/real-app/external-boot.spec.ts` drives the "Without changing the BIOS" page through both of
+its modes on issue #54's board. The harness gives the machine an EFI system partition folder whose
+`\EFI\Microsoft\Boot\bootmgfw.efi` is a built EFI application, a FAT32 USB drive folder `U:` holding
+one unrelated file, and a `Boot0000` Windows Boot Manager entry built byte for byte as Windows writes
+it. A restart is the harness closing the application and doing what the firmware and the EFI
+programs would do (`tests/real-app/external.ts`): starting `BootNext` or the first `BootOrder` entry,
+or the USB drive the boot menu chose; deleting `BootNext`; the diagnostic copying
+`tests/real-app/fixtures/external-diagnostic.json` to `\EFI\NvStraps\diagnostic.json`; the loader
+writing its receipt and setting `bar1Bytes` to the planned size.
+
+| Journey | Checks |
+|---|---|
+| Try from a USB drive | the check and then the loader become the drive's `BOOTX64.EFI`, byte-identical to the built images; the plan pins the ESP's `bootmgfw.efi`; Windows sees 8 GiB; removal leaves the unrelated file; no firmware variable changes and no BitLocker pause |
+| Install on this PC, BitLocker on | `Boot0001` "NvStrapsReBar diagnostic" is appended and scheduled in `BootNext`; every restart pauses BitLocker once; the loader entry is scheduled for the try and then put first, ahead of `Boot0000`; removal restores the variables exactly and leaves `bootmgfw.efi` |
 
 ## Vendor images
 

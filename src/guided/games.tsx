@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode, type Ref, type RefObject } from "react";
+import { useEffect, useMemo, useState, type ReactNode, type Ref, type RefObject } from "react";
 import { useConfigurationWorkspaceController } from "../configuration-workspace/context";
 import { useDeploymentWorkspaceController } from "../deployment-workspace/context";
 import type { GameProfile } from "../game-settings/contract";
@@ -9,7 +9,7 @@ import { Icon } from "./icons";
 import { useGuidedNavigation } from "./navigation";
 import { OPTIONAL_FINAL_STEP } from "./routing";
 import type { GameSettingsError } from "../game-settings/model";
-import { ActionBar, Caution, Crumb, FileCard, Notice, Result, SwitchRow, TaskHead } from "./ui";
+import { ActionBar, Caution, ConfirmDialog, Crumb, FileCard, Notice, Result, SwitchRow, TaskHead } from "./ui";
 
 type Translate = ReturnType<typeof useI18n>["t"];
 
@@ -49,54 +49,6 @@ const GameRow = ({ game, pending, disabled, onChange }: { game: GameProfile; pen
                                 onChange={(on) => onChange(game.name, on)}
                         />
                 </li>
-        );
-};
-
-/** One confirmation: Close on the left with focus, Escape closes, Tab stays inside, focus returns to the opener. */
-const ConfirmDialog = ({ title, children, confirmLabel, onClose, onConfirm }: { title: ReactNode; children: ReactNode; confirmLabel: ReactNode; onClose: () => void; onConfirm: () => void }) => {
-        const { t } = useI18n();
-        const id = useId();
-        const dialog = useRef<HTMLDivElement>(null);
-        const close = useRef(onClose);
-        close.current = onClose;
-        // Read during the first render, before autoFocus moves focus into the dialog.
-        const [opener] = useState(() => (document.activeElement instanceof HTMLElement ? document.activeElement : null));
-        useEffect(() => {
-                const onKey = (event: KeyboardEvent) => {
-                        if (event.key === "Escape") {
-                                event.preventDefault();
-                                close.current();
-                                return;
-                        }
-                        if (event.key !== "Tab" || !dialog.current) return;
-                        const controls = [...dialog.current.querySelectorAll<HTMLElement>("button:not([disabled])")];
-                        const first = controls[0], last = controls.at(-1);
-                        if (!first || !last) return;
-                        if (event.shiftKey && document.activeElement === first) {
-                                event.preventDefault();
-                                last.focus();
-                        } else if (!event.shiftKey && document.activeElement === last) {
-                                event.preventDefault();
-                                first.focus();
-                        }
-                };
-                addEventListener("keydown", onKey);
-                return () => {
-                        removeEventListener("keydown", onKey);
-                        requestAnimationFrame(() => opener?.focus({ preventScroll: true }));
-                };
-        }, [opener]);
-        return (
-                <div className="nv-scrim" role="presentation">
-                        <div ref={dialog} className="nv-dialog" role="dialog" aria-modal="true" aria-labelledby={`${id}-title`} aria-describedby={`${id}-detail`}>
-                                <h2 id={`${id}-title`}>{title}</h2>
-                                <p className="nv-body" id={`${id}-detail`}>{children}</p>
-                                <div className="nv-dialog-actions">
-                                        <button type="button" className="nv-btn nv-btn-quiet" autoFocus onClick={onClose}>{t("ui.close")}</button>
-                                        <button type="button" className="nv-btn nv-btn-primary" onClick={onConfirm}>{confirmLabel}</button>
-                                </div>
-                        </div>
-                </div>
         );
 };
 

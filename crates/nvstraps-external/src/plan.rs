@@ -1,7 +1,8 @@
 use crate::*;
 use alloc::vec::Vec;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub enum PlanError {
     InvalidReport,
     IncompleteReport,

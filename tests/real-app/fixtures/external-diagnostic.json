@@ -1,0 +1,97 @@
+{
+  "schema": 1,
+  "environment": "physical",
+  "machine": "fixture:external-diagnostic",
+  "firmware": "fixture-uefi-1.0",
+  "enumerationComplete": true,
+  "secureBoot": false,
+  "s3SaveState": false,
+  "roots": [
+    {
+      "segment": 0,
+      "firstBus": 0,
+      "lastBus": 255,
+      "memory": [
+        {
+          "start": 4294967296,
+          "end": 68719476736
+        }
+      ]
+    }
+  ],
+  "devices": [
+    {
+      "slot": {
+        "segment": 0,
+        "bus": 0,
+        "device": 1,
+        "function": 0
+      },
+      "vendor": 32902,
+      "product": 1,
+      "subsystem": 0,
+      "class": 394240,
+      "command": 6,
+      "bars": [],
+      "bridge": {
+        "secondary": 1,
+        "subordinate": 1,
+        "prefetch": {
+          "start": 4294967296,
+          "end": 68719476736
+        }
+      },
+      "driverCount": 1,
+      "console": false,
+      "straps": null
+    },
+    {
+      "slot": {
+        "segment": 0,
+        "bus": 1,
+        "device": 0,
+        "function": 0
+      },
+      "vendor": 4318,
+      "product": 7809,
+      "subsystem": 341981041,
+      "class": 196608,
+      "command": 6,
+      "bars": [
+        {
+          "index": 0,
+          "span": {
+            "start": 2147483648,
+            "end": 2164260864
+          },
+          "memory": true,
+          "prefetchable": false,
+          "width64": false,
+          "rawLow": 2147483648
+        },
+        {
+          "index": 1,
+          "span": {
+            "start": 4294967296,
+            "end": 4563402752
+          },
+          "memory": true,
+          "prefetchable": true,
+          "width64": true,
+          "rawLow": 12
+        }
+      ],
+      "bridge": null,
+      "driverCount": 0,
+      "console": false,
+      "straps": [2147516416, 2147483648]
+    }
+  ],
+  "availableMmio": [
+    {
+      "start": 8589934592,
+      "end": 68719476736
+    }
+  ],
+  "errors": []
+}

@@ -22,7 +22,7 @@ export interface VendorImage {
 }
 
 type Location = { bus: number; device: number; function: number };
-export type RebootKind = "firmwareSetup" | "configuration";
+export type RebootKind = "firmwareSetup" | "configuration" | "externalBoot";
 export const recommendedBarBytes = 8 * 1024 ** 3;
 
 export function initialMachine(identity: BoardIdentity) {

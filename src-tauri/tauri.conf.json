@@ -32,7 +32,9 @@
     "targets": ["nsis", "msi"],
     "icon": ["icons/icon.ico", "icons/icon.png"],
     "resources": {
-      "../target/x86_64-unknown-uefi/release/NvStrapsReBar.ffs": "NvStrapsReBar.ffs"
+      "../target/x86_64-unknown-uefi/release/NvStrapsReBar.ffs": "NvStrapsReBar.ffs",
+      "../target/x86_64-unknown-uefi/release/NvStrapsDiagnostic.efi": "external/NvStrapsDiagnostic.efi",
+      "../target/x86_64-unknown-uefi/release/NvStrapsLoader.efi": "external/NvStrapsLoader.efi"
     },
     "shortDescription": "Configure NvStrapsReBar from Windows",
     "longDescription": "A Windows desktop interface for inspecting GPUs and configuring the NvStrapsReBar UEFI driver.",

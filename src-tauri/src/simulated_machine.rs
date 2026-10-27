@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     devices::{GpuDevice, PciBridge},
     error::{BackendError, BackendResult},
+    external_boot::core::{BitLocker, EspVolume, ExternalPlatform, UsbVolume},
     firmware::FirmwareAccess,
     resizable_bar::nvidia_smi::NvidiaSmiCapture,
 };
@@ -35,6 +36,8 @@ pub(crate) struct MachineFile {
     firmware_variables: BTreeMap<String, Option<String>>,
     nvidia_smi: NvidiaSmi,
     reboot_requests: Vec<RebootRequest>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    external_boot: Option<ExternalBoot>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -102,6 +105,34 @@ struct NvidiaSmi {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ExternalBoot {
+    secure_boot: bool,
+    bit_locker: BitLocker,
+    bit_locker_suspensions: u64,
+    esp: Option<ExternalEsp>,
+    usb_drives: Vec<ExternalUsbDrive>,
+    variables: BTreeMap<String, String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ExternalEsp {
+    partition_guid: String,
+    directory: PathBuf,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ExternalUsbDrive {
+    root: String,
+    directory: PathBuf,
+    label: String,
+    file_system: String,
+    total_bytes: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct RebootRequest {
     kind: RebootKind,
     requested_at_unix_ms: u64,
@@ -112,6 +143,7 @@ struct RebootRequest {
 pub(crate) enum RebootKind {
     FirmwareSetup,
     Configuration,
+    ExternalBoot,
 }
 
 pub(crate) fn machine_file_path() -> BackendResult<PathBuf> {
@@ -343,6 +375,145 @@ pub(crate) fn current_boot_time_unix_ms() -> BackendResult<u64> {
     Ok(load_from(&machine_file_path()?)?.boot.boot_time_unix_ms)
 }
 
+pub(crate) struct SimulatedExternalPlatform {
+    path: PathBuf,
+}
+
+pub(crate) fn external_platform() -> BackendResult<SimulatedExternalPlatform> {
+    let path = machine_file_path()?;
+    require_external_boot(&load_from(&path)?)?;
+    Ok(SimulatedExternalPlatform { path })
+}
+
+impl ExternalPlatform for SimulatedExternalPlatform {
+    fn uefi(&self) -> bool {
+        load_from(&self.path)
+            .map(|state| state.platform.uefi)
+            .unwrap_or(false)
+    }
+
+    fn elevated(&self) -> bool {
+        load_from(&self.path)
+            .map(|state| state.platform.elevated)
+            .unwrap_or(false)
+    }
+
+    fn read_global(&self, name: &str) -> BackendResult<Option<Vec<u8>>> {
+        if !crate::external_boot::core::read_name_allowed(name) {
+            return Err(simulated_error(format!(
+                "external firmware variable read is not allowed: {name}"
+            )));
+        }
+        let state = load_from(&self.path)?;
+        let external = require_external_boot(&state)?;
+        if name == "SecureBoot" {
+            return Ok(Some(vec![u8::from(external.secure_boot)]));
+        }
+        external
+            .variables
+            .get(name)
+            .map(|value| decode_variable(value))
+            .transpose()
+    }
+
+    fn write_global(&self, name: &str, value: &[u8]) -> BackendResult<()> {
+        if !crate::external_boot::core::write_name_allowed(name) {
+            return Err(simulated_error(format!(
+                "external firmware variable write is not allowed: {name}"
+            )));
+        }
+        let mut state = load_from(&self.path)?;
+        let external = require_external_boot_mut(&mut state)?;
+        if value.is_empty() {
+            external.variables.remove(name);
+        } else {
+            external
+                .variables
+                .insert(name.to_owned(), STANDARD.encode(value));
+        }
+        store_at(&self.path, &state)
+    }
+
+    fn esp_volumes(&self) -> BackendResult<Vec<EspVolume>> {
+        let state = load_from(&self.path)?;
+        Ok(require_external_boot(&state)?
+            .esp
+            .iter()
+            .map(|esp| EspVolume {
+                partition_guid: esp.partition_guid.to_ascii_lowercase(),
+                root: esp.directory.clone(),
+            })
+            .collect())
+    }
+
+    fn usb_volumes(&self) -> BackendResult<Vec<UsbVolume>> {
+        let state = load_from(&self.path)?;
+        Ok(require_external_boot(&state)?
+            .usb_drives
+            .iter()
+            .map(|drive| UsbVolume {
+                root: drive.root.clone(),
+                path: drive.directory.clone(),
+                label: drive.label.clone(),
+                file_system: drive.file_system.clone(),
+                total_bytes: drive.total_bytes,
+            })
+            .collect())
+    }
+
+    fn bitlocker(&self) -> BitLocker {
+        load_from(&self.path)
+            .ok()
+            .and_then(|state| state.external_boot.map(|external| external.bit_locker))
+            .unwrap_or(BitLocker::Unknown)
+    }
+
+    fn suspend_bitlocker_once(&self) -> BackendResult<()> {
+        let mut state = load_from(&self.path)?;
+        let external = require_external_boot_mut(&mut state)?;
+        external.bit_locker_suspensions = external
+            .bit_locker_suspensions
+            .checked_add(1)
+            .ok_or_else(|| simulated_error("BitLocker suspension count overflowed"))?;
+        store_at(&self.path, &state)
+    }
+
+    fn now_unix_ms(&self) -> u64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+            .try_into()
+            .unwrap_or(u64::MAX)
+    }
+
+    fn boot_time_unix_ms(&self) -> BackendResult<u64> {
+        Ok(load_from(&self.path)?.boot.boot_time_unix_ms)
+    }
+
+    fn gpus(&self) -> Vec<GpuDevice> {
+        load_from(&self.path)
+            .map(|state| devices_from_state(&state))
+            .unwrap_or_default()
+    }
+
+    fn reboot(&self) -> BackendResult<()> {
+        append_reboot_request_at(&self.path, RebootKind::ExternalBoot)
+    }
+}
+
+fn require_external_boot(state: &MachineFile) -> BackendResult<&ExternalBoot> {
+    state.external_boot.as_ref().ok_or_else(|| {
+        simulated_error("external boot commands need the optional externalBoot section")
+    })
+}
+
+fn require_external_boot_mut(state: &mut MachineFile) -> BackendResult<&mut ExternalBoot> {
+    state.external_boot.as_mut().ok_or_else(|| {
+        simulated_error("external boot commands need the optional externalBoot section")
+    })
+}
+
 pub(crate) fn ensure_reboot_available() -> BackendResult<PathBuf> {
     if load_from(&machine_file_path()?)?.platform.uefi {
         Ok(PathBuf::from(r"C:\Windows\System32\shutdown.exe"))
@@ -445,6 +616,29 @@ fn validate(state: &MachineFile) -> BackendResult<()> {
             decode_variable(encoded).map_err(|error| {
                 simulated_error(format!(
                     "firmwareVariables.{name} is not standard base64: {error}"
+                ))
+            })?;
+        }
+    }
+    if let Some(external) = &state.external_boot {
+        if let Some(esp) = &external.esp
+            && !esp.directory.is_absolute()
+        {
+            return Err(simulated_error(
+                "externalBoot.esp.directory must be absolute",
+            ));
+        }
+        for (index, drive) in external.usb_drives.iter().enumerate() {
+            if !drive.directory.is_absolute() {
+                return Err(simulated_error(format!(
+                    "externalBoot.usbDrives[{index}].directory must be absolute"
+                )));
+            }
+        }
+        for (name, encoded) in &external.variables {
+            decode_variable(encoded).map_err(|error| {
+                simulated_error(format!(
+                    "externalBoot.variables.{name} is not standard base64: {error}"
                 ))
             })?;
         }
@@ -586,6 +780,7 @@ mod tests {
                 driver_version: "596.36".into(),
             },
             reboot_requests: Vec::new(),
+            external_boot: None,
         }
     }
 
@@ -667,6 +862,96 @@ mod tests {
             requests
                 .iter()
                 .all(|request| request.requested_at_unix_ms > 0)
+        );
+    }
+
+    #[test]
+    fn external_adapter_persists_variables_one_restart_suspensions_and_reboots() {
+        let directory = TestDirectory::new();
+        let path = directory.machine_file();
+        let esp = directory.0.join("esp");
+        let usb = directory.0.join("usb-u");
+        fs::create_dir(&esp).unwrap();
+        fs::create_dir(&usb).unwrap();
+        let mut machine = state();
+        machine.external_boot = Some(ExternalBoot {
+            secure_boot: false,
+            bit_locker: BitLocker::On,
+            bit_locker_suspensions: 0,
+            esp: Some(ExternalEsp {
+                partition_guid: "02D5D49A-D31C-11EB-9DE1-D850E6DCCCD2".into(),
+                directory: esp.clone(),
+            }),
+            usb_drives: vec![ExternalUsbDrive {
+                root: "U:\\".into(),
+                directory: usb.clone(),
+                label: "NVSTRAPS".into(),
+                file_system: "FAT32".into(),
+                total_bytes: 8_000_000_000,
+            }],
+            variables: BTreeMap::new(),
+        });
+        store_at(&path, &machine).unwrap();
+        let platform = SimulatedExternalPlatform { path: path.clone() };
+
+        assert_eq!(platform.read_global("SecureBoot").unwrap(), Some(vec![0]));
+        platform.write_global("BootOrder", &[4, 0]).unwrap();
+        assert_eq!(platform.read_global("BootOrder").unwrap(), Some(vec![4, 0]));
+        platform.write_global("BootOrder", &[]).unwrap();
+        assert_eq!(platform.read_global("BootOrder").unwrap(), None);
+        assert_eq!(platform.bitlocker(), BitLocker::On);
+        platform.suspend_bitlocker_once().unwrap();
+        platform.reboot().unwrap();
+        assert_eq!(
+            platform.esp_volumes().unwrap()[0].partition_guid,
+            "02d5d49a-d31c-11eb-9de1-d850e6dcccd2"
+        );
+        assert_eq!(platform.usb_volumes().unwrap()[0].path, usb);
+
+        let stored = load_from(&path).unwrap();
+        let external = stored.external_boot.unwrap();
+        assert_eq!(external.bit_locker_suspensions, 1);
+        assert!(external.variables.is_empty());
+        assert_eq!(stored.reboot_requests.len(), 1);
+        assert_eq!(stored.reboot_requests[0].kind, RebootKind::ExternalBoot);
+    }
+
+    #[test]
+    fn machine_without_external_section_keeps_working_but_external_commands_refuse_it() {
+        let directory = TestDirectory::new();
+        let path = write_state(&directory);
+        let loaded = load_from(&path).unwrap();
+        assert_eq!(loaded, state());
+        assert!(
+            require_external_boot(&loaded)
+                .unwrap_err()
+                .to_string()
+                .contains("externalBoot section")
+        );
+    }
+
+    #[test]
+    fn simulated_external_directories_must_be_absolute() {
+        let directory = TestDirectory::new();
+        let path = directory.machine_file();
+        let mut machine = state();
+        machine.external_boot = Some(ExternalBoot {
+            secure_boot: false,
+            bit_locker: BitLocker::Off,
+            bit_locker_suspensions: 0,
+            esp: Some(ExternalEsp {
+                partition_guid: "02d5d49a-d31c-11eb-9de1-d850e6dcccd2".into(),
+                directory: PathBuf::from("relative-esp"),
+            }),
+            usb_drives: Vec::new(),
+            variables: BTreeMap::new(),
+        });
+        fs::write(&path, serde_json::to_vec(&machine).unwrap()).unwrap();
+        assert!(
+            load_from(&path)
+                .unwrap_err()
+                .to_string()
+                .contains("esp.directory must be absolute")
         );
     }
 

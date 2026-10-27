@@ -942,6 +942,165 @@ export const messages = {
         "ui.restartDialogSaveWork": { en: "Windows restarts right away. Save your work in other open programs first.", ko: "Windows가 바로 다시 시작됩니다. 열려 있는 프로그램의 작업을 저장한 뒤 누르세요." },
         "ui.restartDialogBiosDetail": { en: "When you are back in Windows after BIOS setup, open this app again. The result is checked automatically.", ko: "BIOS 화면에서 작업을 마치고 Windows로 돌아오면 이 앱을 다시 여세요. 결과를 자동으로 확인합니다." },
         "ui.restartDialogConfigurationDetail": { en: "When Windows starts, open this app again. The new size is checked automatically.", ko: "Windows가 켜지면 이 앱을 다시 여세요. 켜진 크기를 자동으로 확인합니다." },
+
+        "ui.externalCrumb": { en: "Without changing the BIOS", ko: "BIOS 수정 없이" },
+        "ui.homeRowExternalDetail": { en: "Experimental · runs before Windows instead of flashing the BIOS", ko: "실험용 · BIOS를 설치하는 대신 Windows보다 먼저 실행" },
+        "ui.homeStartExternal": { en: "Without changing the BIOS", ko: "BIOS 수정 없이" },
+        "ui.externalOpenFromWarning": { en: "Try without changing the BIOS file", ko: "BIOS 파일을 고치지 않는 방법 보기" },
+        "ui.externalExperimental": { en: "Experimental", ko: "실험용" },
+        "ui.externalTitle": { en: "Turn on Resizable BAR without changing the BIOS", ko: "BIOS를 고치지 않고 Resizable BAR 켜기" },
+        "ui.externalLead": { en: "A small program runs before Windows at startup and increases the GPU's BAR size. The BIOS file stays unchanged.", ko: "PC를 켤 때 작은 프로그램을 Windows보다 먼저 실행해 GPU의 BAR 크기를 늘립니다. BIOS 파일은 그대로 둡니다." },
+        "ui.externalReading": { en: "Checking USB drives and boot settings…", ko: "USB 드라이브와 부팅 설정을 확인하고 있습니다…" },
+        "ui.externalJourneyTitle": { en: "How it works", ko: "진행 순서" },
+        "ui.externalJourneyDiagnose": { en: "Check", ko: "진단" },
+        "ui.externalJourneyDiagnoseDetail": { en: "Restart once to record the GPU and available address space.", ko: "PC를 한 번 다시 시작해 GPU와 사용 가능한 주소 공간을 기록합니다." },
+        "ui.externalJourneyTry": { en: "Try once", ko: "시험 실행" },
+        "ui.externalJourneyTryDetail": { en: "Start once with a larger BAR and check that Windows sees the new size.", ko: "BAR 크기를 늘려 한 번 부팅하고 Windows에서 새 크기를 인식하는지 확인합니다." },
+        "ui.externalJourneyKeep": { en: "Every start", ko: "매번 실행" },
+        "ui.externalJourneyKeepDetail": { en: "After a successful trial, run the program whenever the PC starts.", ko: "시험 실행에 성공하면 PC를 켤 때마다 프로그램을 실행하도록 설정하세요." },
+        "ui.externalModeTitle": { en: "Where to run it", ko: "실행할 곳" },
+        "ui.externalModeUsb": { en: "Try from a USB drive", ko: "USB에서 시험 실행" },
+        "ui.externalModeUsbDetail": { en: "Files go only on the USB drive, not on this PC. Choose the USB drive from the firmware boot menu each time.", ko: "USB에만 파일을 저장하며 PC에는 설치하지 않습니다. 실행할 때마다 펌웨어의 부팅 메뉴에서 USB를 선택하세요." },
+        "ui.externalModeInstall": { en: "Install on this PC", ko: "이 PC에 설치" },
+        "ui.externalModeInstallDetail": { en: "Install on the EFI system partition with a separate boot entry. Try it once, then choose whether to run it on every start.", ko: "EFI 시스템 파티션에 설치하고 별도 부팅 항목을 만듭니다. 한 번 시험한 뒤 매번 실행할지 선택하세요." },
+        "ui.externalUsbTitle": { en: "USB drive", ko: "USB 드라이브" },
+        "ui.externalUsbNoLabel": { en: "(no name)", ko: "(이름 없음)" },
+        "ui.externalUsbNotFat": { en: "not FAT32", ko: "FAT32 아님" },
+        "ui.externalUsbForeign": { en: "already has another boot program", ko: "다른 부팅 프로그램이 있음" },
+        "ui.externalNoUsbTitle": { en: "No usable USB drive", ko: "사용 가능한 USB가 없습니다" },
+        "ui.externalNoUsbDetail": { en: "Connect a FAT32 USB drive. The app adds its files and leaves other files unchanged.", ko: "FAT32로 포맷한 USB를 연결하세요. 앱에서 쓸 파일만 추가하며 다른 파일은 그대로 둡니다." },
+        "ui.externalLookAgain": { en: "Look again", ko: "다시 찾기" },
+        "ui.externalCheckedTitle": { en: "Checked", ko: "확인한 항목" },
+        "ui.externalCheckSecureBoot": { en: "Secure Boot", ko: "Secure Boot" },
+        "ui.externalCheckWindowsBoot": { en: "Windows Boot Manager", ko: "Windows Boot Manager" },
+        "ui.externalCheckBitLocker": { en: "BitLocker", ko: "BitLocker" },
+        "ui.externalWordOff": { en: "Off", ko: "꺼짐" },
+        "ui.externalWordOn": { en: "On", ko: "켜짐" },
+        "ui.externalWordFound": { en: "Found", ko: "찾음" },
+        "ui.externalWordUnknown": { en: "Unknown", ko: "확인하지 못함" },
+        "ui.externalWordPausedOnRestart": { en: "Pauses for each restart", ko: "다시 시작할 때마다 한 번 일시 중단" },
+        "ui.externalCautionTitle": { en: "Not tested on a physical motherboard yet", ko: "아직 실제 메인보드에서 시험하지 않았습니다" },
+        "ui.externalCautionDetail": { en: "A GPU displaying the screen cannot be resized. If the check reports this, connect the monitor to the motherboard and set the BIOS to use integrated graphics first.", ko: "화면을 출력하는 GPU는 BAR 크기를 바꿀 수 없습니다. 진단에서 이 사유를 표시하면 모니터를 메인보드에 연결하고 BIOS에서 내장 그래픽을 먼저 쓰도록 설정하세요." },
+        "ui.externalChooseHintUsb": { en: "The check program goes on the USB drive first.", ko: "먼저 USB에 진단 프로그램을 저장합니다." },
+        "ui.externalChooseHintInstall": { en: "The check runs once at the next start, then Windows starts.", ko: "다음 부팅에서 한 번 진단한 뒤 Windows를 시작합니다." },
+        "ui.externalPrepareDiagnostic": { en: "Prepare the check", ko: "진단 준비" },
+        "ui.externalBlockedUefiTitle": { en: "Windows must start in UEFI mode", ko: "Windows를 UEFI 모드로 부팅해야 합니다" },
+        "ui.externalBlockedUefiLead": { en: "This method runs a UEFI program before Windows. It cannot run while Windows uses legacy (CSM) boot.", ko: "이 방법은 Windows보다 먼저 UEFI 프로그램을 실행합니다. Windows를 레거시(CSM) 모드로 부팅하면 쓸 수 없습니다." },
+        "ui.externalBlockedAdminTitle": { en: "Open the app as administrator", ko: "앱을 관리자 권한으로 여세요" },
+        "ui.externalBlockedAdminLead": { en: "Administrator rights are needed to read boot settings and write to the EFI system partition.", ko: "부팅 설정을 읽고 EFI 시스템 파티션에 파일을 쓰려면 관리자 권한이 필요합니다." },
+        "ui.externalBlockedSecureBootTitle": { en: "Turn off Secure Boot first", ko: "먼저 Secure Boot를 끄세요" },
+        "ui.externalBlockedSecureBootLead": { en: "The program is unsigned, so the firmware will not run it with Secure Boot on. Turn off Secure Boot in BIOS setup, then check again.", ko: "아직 서명하지 않은 프로그램이라 Secure Boot가 켜져 있으면 펌웨어가 실행을 거부합니다. BIOS 설정에서 Secure Boot를 끄고 다시 확인하세요." },
+        "ui.externalBlockedEspTitle": { en: "Windows Boot Manager not found", ko: "Windows Boot Manager를 찾지 못했습니다" },
+        "ui.externalBlockedEspLead": { en: "The app could not find the EFI system partition containing Windows Boot Manager.", ko: "Windows Boot Manager가 있는 EFI 시스템 파티션을 찾지 못했습니다." },
+        "ui.externalSecureBootBitLockerTitle": { en: "Have the BitLocker recovery key ready", ko: "BitLocker 복구 키를 준비하세요" },
+        "ui.externalSecureBootBitLockerDetail": { en: "Turning off Secure Boot can make BitLocker ask for its recovery key at the next start.", ko: "Secure Boot를 끄면 다음 부팅에서 BitLocker 복구 키가 필요할 수 있습니다." },
+        "ui.externalStepDiagnose": { en: "Step 1 · Check", ko: "1단계 · 진단" },
+        "ui.externalStepTry": { en: "Step 2 · Try", ko: "2단계 · 시험 실행" },
+        "ui.externalStepKeep": { en: "Step 3 · Every start", ko: "3단계 · 매번 실행" },
+        "ui.externalDiagnosticUsbTitle": { en: "Start once from the USB drive", ko: "USB로 한 번 부팅하세요" },
+        "ui.externalDiagnosticUsbLead": { en: "As the PC restarts, press {key} to open the boot menu and choose the {drive} USB drive. The check takes a few seconds, then Windows starts.", ko: "PC를 다시 시작하면서 {key} 키로 부팅 메뉴를 열고 USB 드라이브 {drive} 항목을 선택하세요. 몇 초 동안 진단한 뒤 Windows를 시작합니다." },
+        "ui.externalDiagnosticUsbLeadNoKey": { en: "As the PC restarts, open the boot menu (usually F8, F11 or F12) and choose the {drive} USB drive. The check takes a few seconds, then Windows starts.", ko: "PC를 다시 시작하면서 부팅 메뉴를 열고 USB 드라이브 {drive} 항목을 선택하세요. 보통 F8, F11 또는 F12 키를 씁니다. 몇 초 동안 진단한 뒤 Windows를 시작합니다." },
+        "ui.externalDiagnosticEspTitle": { en: "The check runs at the next start", ko: "다음 부팅에서 진단합니다" },
+        "ui.externalDiagnosticEspLead": { en: "After the restart, the check runs once and Windows starts. You do not need to press any keys.", ko: "다시 시작하면 한 번 진단한 뒤 Windows를 시작합니다. 따로 키를 누를 필요는 없습니다." },
+        "ui.externalRestartStep": { en: "Restart", ko: "다시 시작" },
+        "ui.externalBootMenuStep": { en: "Press {key} and choose the {drive} USB drive", ko: "{key} 키를 누르고 USB 드라이브 {drive} 선택" },
+        "ui.externalBootMenuStepNoKey": { en: "Open the boot menu and choose the {drive} USB drive", ko: "부팅 메뉴에서 USB 드라이브 {drive} 선택" },
+        "ui.externalBootMenuStepDetail": { en: "If the drive appears twice, choose the entry marked UEFI.", ko: "같은 USB가 두 개 나오면 UEFI라고 표시된 항목을 선택하세요." },
+        "ui.externalDiagnosticRunsStep": { en: "Open this app again in Windows", ko: "Windows에서 이 앱 다시 열기" },
+        "ui.externalDiagnosticRunsStepDetail": { en: "The app reads the check results and continues here.", ko: "진단 결과를 읽고 이 화면에서 이어서 진행합니다." },
+        "ui.externalReopenHint": { en: "After the restart, open NvStrapsReBar again.", ko: "다시 시작한 뒤 NvStrapsReBar를 다시 여세요." },
+        "ui.externalStop": { en: "Stop", ko: "그만하기" },
+        "ui.externalDiagnosticMissingTitle": { en: "The check did not run", ko: "진단을 실행하지 못했습니다" },
+        "ui.externalDiagnosticMissingUsbLead": { en: "The PC did not boot from the USB drive, or the firmware refused to run the program.", ko: "USB로 부팅하지 않았거나 펌웨어가 프로그램 실행을 거부했습니다." },
+        "ui.externalDiagnosticMissingEspLead": { en: "The firmware skipped the check program at the last start.", ko: "지난 부팅에서 펌웨어가 진단 프로그램을 건너뛰었습니다." },
+        "ui.externalCausesTitle": { en: "What to check", ko: "확인할 것" },
+        "ui.externalCauseSecureBoot": { en: "Secure Boot", ko: "Secure Boot" },
+        "ui.externalCauseSecureBootDetail": { en: "It must be off.", ko: "꺼져 있어야 합니다." },
+        "ui.externalCauseBootMenu": { en: "Boot menu", ko: "부팅 메뉴" },
+        "ui.externalCauseBootMenuDetail": { en: "Choose the USB drive. If it appears twice, choose the entry marked UEFI.", ko: "USB를 선택하세요. 같은 USB가 두 개 나오면 UEFI라고 표시된 항목을 선택하세요." },
+        "ui.externalCauseCsm": { en: "CSM", ko: "CSM" },
+        "ui.externalCauseCsmDetail": { en: "With CSM (legacy boot) on, some motherboards skip UEFI programs on USB drives.", ko: "CSM(레거시 부팅)을 켜면 일부 메인보드는 USB의 UEFI 프로그램을 건너뜁니다." },
+        "ui.externalDiagnoseAgain": { en: "Check again", ko: "다시 진단" },
+        "ui.externalReportReading": { en: "Reading the check results…", ko: "진단 결과를 읽고 있습니다…" },
+        "ui.externalPickTitle": { en: "Increase this GPU's BAR size", ko: "이 GPU의 BAR 크기 늘리기" },
+        "ui.externalPickLead": { en: "The check found space for a larger BAR. Choose a size to try.", ko: "진단에서 BAR 크기를 늘릴 공간을 확인했습니다. 시험할 크기를 고르세요." },
+        "ui.externalPickNoneTitle": { en: "This PC cannot use this method yet", ko: "아직 이 PC에서는 쓸 수 없습니다" },
+        "ui.externalPickNoneLead": { en: "The check ran, but no GPU can be resized. See the reason under each GPU.", ko: "진단은 마쳤지만 BAR 크기를 바꿀 수 있는 GPU가 없습니다. GPU마다 아래에 사유를 표시합니다." },
+        "ui.externalPickHint": { en: "The BAR size stays unchanged until the trial.", ko: "시험 실행 전까지 BAR 크기는 그대로입니다." },
+        "ui.externalPrepareTrial": { en: "Prepare the trial", ko: "시험 실행 준비" },
+        "ui.externalGpuUnknown": { en: "NVIDIA GPU at {slot}", ko: "{slot}의 NVIDIA GPU" },
+        "ui.externalGpuChoose": { en: "Use this GPU", ko: "이 GPU 선택" },
+        "ui.externalGpuChosen": { en: "Selected", ko: "선택됨" },
+        "ui.externalSizeTitle": { en: "BAR size", ko: "BAR 크기" },
+        "ui.externalSizeRecommended": { en: "Recommended for this GPU", ko: "이 GPU의 권장 크기" },
+        "ui.externalNoGpuTitle": { en: "No NVIDIA GPU found", ko: "NVIDIA GPU를 찾지 못했습니다" },
+        "ui.externalNoGpuDetail": { en: "The check did not detect an NVIDIA graphics card on this PC.", ko: "진단에서 이 PC의 NVIDIA 그래픽 카드를 감지하지 못했습니다." },
+        "ui.externalReportIncompleteTitle": { en: "The check could not read all devices", ko: "진단에서 일부 장치를 읽지 못했습니다" },
+        "ui.externalNotPhysicalTitle": { en: "These results are not from this PC", ko: "이 PC에서 얻은 진단 결과가 아닙니다" },
+        "ui.externalRefusalConsole": { en: "This GPU is displaying the screen, so its BAR cannot be resized. Connect the monitor to the motherboard, set the BIOS to use integrated graphics first, then check again.", ko: "이 GPU가 화면을 출력하고 있어 BAR 크기를 바꿀 수 없습니다. 모니터를 메인보드에 연결하고 BIOS에서 내장 그래픽을 먼저 쓰도록 설정한 뒤 다시 진단하세요." },
+        "ui.externalRefusalDriver": { en: "A firmware driver is using this GPU, so its BAR cannot be resized.", ko: "펌웨어 드라이버가 이 GPU를 사용하고 있어 BAR 크기를 바꿀 수 없습니다." },
+        "ui.externalRefusalAddressSpace": { en: "The BIOS left no address space for a larger BAR. Turn on Above 4G Decoding in BIOS setup, then check again.", ko: "BIOS가 확보한 주소 공간에는 더 큰 BAR를 배치할 수 없습니다. BIOS 설정에서 Above 4G Decoding을 켜고 다시 진단하세요." },
+        "ui.externalRefusalIncomplete": { en: "Some devices could not be read, so the app cannot prepare a BAR change.", ko: "일부 장치를 읽지 못해 BAR 크기 변경을 준비할 수 없습니다." },
+        "ui.externalRefusalGpu": { en: "Only NVIDIA Turing GPUs (RTX 20 and GTX 16 series) are supported.", ko: "NVIDIA Turing GPU(RTX 20 및 GTX 16 시리즈)만 지원합니다." },
+        "ui.externalRefusalLayout": { en: "This method does not support this GPU's connection layout.", ko: "이 GPU의 연결 구성은 지원하지 않습니다." },
+        "ui.externalTrialUsbTitle": { en: "Start from the USB drive once more", ko: "USB로 한 번 더 부팅하세요" },
+        "ui.externalTrialUsbLead": { en: "As the PC restarts, press {key} and choose the {drive} USB drive. The program sets the BAR to {size}, then starts Windows.", ko: "PC를 다시 시작하면서 {key} 키를 누르고 USB 드라이브 {drive} 항목을 선택하세요. 프로그램이 BAR 크기를 {size}로 늘린 뒤 Windows를 시작합니다." },
+        "ui.externalTrialUsbLeadNoKey": { en: "As the PC restarts, open the boot menu and choose the {drive} USB drive. The program sets the BAR to {size}, then starts Windows.", ko: "PC를 다시 시작하면서 부팅 메뉴를 열고 USB 드라이브 {drive} 항목을 선택하세요. 프로그램이 BAR 크기를 {size}로 늘린 뒤 Windows를 시작합니다." },
+        "ui.externalTrialEspTitle": { en: "Try it at the next start", ko: "다음 부팅에서 시험합니다" },
+        "ui.externalTrialEspLead": { en: "At the next start, the program runs once, sets the BAR to {size} and starts Windows. Later starts stay unchanged until you choose otherwise.", ko: "다음 부팅에서 프로그램을 한 번 실행해 BAR 크기를 {size}로 늘리고 Windows를 시작합니다. 매번 실행하도록 설정하기 전에는 그다음 부팅부터 원래대로 돌아갑니다." },
+        "ui.externalAfterTrial": { en: "After the trial", ko: "시험 실행 후" },
+        "ui.externalTrialRecoverTitle": { en: "If the screen stays black", ko: "화면이 나오지 않으면" },
+        "ui.externalTrialRecoverUsb": { en: "Turn off the PC, remove the USB drive and turn it on again. It starts as before.", ko: "PC를 끄고 USB를 뺀 뒤 다시 켜세요. 이전처럼 부팅합니다." },
+        "ui.externalTrialRecoverEsp": { en: "Turn the PC off and on again. The trial runs only once, so the next start is as before.", ko: "PC를 껐다가 다시 켜세요. 시험 실행은 한 번만 하므로 다음에는 이전처럼 부팅합니다." },
+        "ui.externalTrialMissingTitle": { en: "The trial did not run", ko: "시험 실행을 하지 못했습니다" },
+        "ui.externalTrialMissingUsbLead": { en: "The PC did not boot from the USB drive, or the program stopped before Windows started.", ko: "USB로 부팅하지 않았거나 Windows를 시작하기 전에 프로그램이 멈췄습니다." },
+        "ui.externalTrialMissingEspLead": { en: "The firmware skipped the program, or the program stopped before Windows started.", ko: "펌웨어가 프로그램을 건너뛰었거나 Windows를 시작하기 전에 프로그램이 멈췄습니다." },
+        "ui.externalTrialMissingUsbCauses": { en: "Choose the USB drive from the boot menu and leave Secure Boot off.", ko: "부팅 메뉴에서 USB를 선택하고 Secure Boot는 꺼 두세요." },
+        "ui.externalTrialMissingEspCauses": { en: "Leave Secure Boot off. Some motherboards ignore a one-time boot choice when Fast Boot is on.", ko: "Secure Boot는 꺼 두세요. 일부 메인보드는 Fast Boot가 켜져 있으면 한 번만 실행하도록 정한 부팅 항목을 무시합니다." },
+        "ui.externalTryAgain": { en: "Try again", ko: "다시 시험" },
+        "ui.externalLastErrorTitle": { en: "The program stopped", ko: "프로그램이 멈췄습니다" },
+        "ui.externalLastErrorSuccessor": { en: "Windows Boot Manager differs from the saved version, so the program did not run it. Prepare the trial again.", ko: "Windows Boot Manager가 저장된 정보와 달라 실행하지 않았습니다. 시험 실행을 다시 준비하세요." },
+        "ui.externalLastErrorChanged": { en: "Hardware or BIOS settings changed after the check. Check again.", ko: "진단 후 하드웨어나 BIOS 설정이 바뀌었습니다. 다시 진단하세요." },
+        "ui.externalLastErrorAddressSpace": { en: "The firmware did not provide the address space needed for the BAR change. Check again.", ko: "펌웨어가 BAR 크기 변경에 필요한 주소 공간을 할당하지 않았습니다. 다시 진단하세요." },
+        "ui.externalLastErrorOther": { en: "See the reason below.", ko: "아래에서 사유를 확인하세요." },
+        "ui.externalResultTitle": { en: "The BAR is now {size}", ko: "BAR 크기가 {size}로 늘었습니다" },
+        "ui.externalResultUsbLead": { en: "The larger BAR is used only when you boot from the USB drive. To use it on every start, install on this PC.", ko: "USB로 부팅할 때만 늘린 BAR 크기를 씁니다. 매번 쓰려면 이 PC에 설치하세요." },
+        "ui.externalResultEspLead": { en: "This start was the trial. Put the program first in the boot order to run it on every start.", ko: "이번 부팅에서 시험 실행을 마쳤습니다. 매번 실행하려면 프로그램을 부팅 순서의 첫 번째로 설정하세요." },
+        "ui.externalResultNotWidenedTitle": { en: "The program ran, but Windows still sees the old size", ko: "프로그램은 실행했지만 Windows는 이전 크기를 인식합니다" },
+        "ui.externalResultNotWidenedLead": { en: "The program measured {size}, but Windows did not use that size. Check again or stop here.", ko: "프로그램이 측정한 크기는 {size}지만 Windows에는 적용되지 않았습니다. 다시 진단하거나 여기서 그만하세요." },
+        "ui.externalBefore": { en: "Before", ko: "변경 전" },
+        "ui.externalInstallOnPc": { en: "Install on this PC", ko: "이 PC에 설치" },
+        "ui.externalMakePermanent": { en: "Run on every start", ko: "부팅할 때마다 실행" },
+        "ui.externalMakePermanentHint": { en: "Windows Boot Manager stays next in the boot order.", ko: "Windows Boot Manager는 부팅 순서에서 그다음에 둡니다." },
+        "ui.externalRemoveFromUsb": { en: "Remove from USB", ko: "USB에서 제거" },
+        "ui.externalInstalledTitle": { en: "The BAR size increases on every start", ko: "부팅할 때마다 BAR 크기를 늘립니다" },
+        "ui.externalInstalledNotNowTitle": { en: "Installed, but the BAR size did not increase this time", ko: "설치는 마쳤지만 이번에는 BAR 크기가 늘지 않았습니다" },
+        "ui.externalInstalledLead": { en: "The program runs before Windows on every start to set the BAR to {size}.", ko: "부팅할 때마다 Windows보다 먼저 프로그램을 실행해 BAR 크기를 {size}로 설정합니다." },
+        "ui.externalInstalledGpuDetail": { en: "BAR {size} on every start", ko: "부팅할 때마다 BAR {size}" },
+        "ui.externalInstalledOrder": { en: "First in the boot order", ko: "부팅 순서의 첫 번째" },
+        "ui.externalInstalledOrderDetail": { en: "If the program stops, the firmware starts Windows Boot Manager next.", ko: "프로그램이 멈추면 펌웨어가 다음으로 Windows Boot Manager를 실행합니다." },
+        "ui.externalSuccessorChangedTitle": { en: "Windows Boot Manager was updated", ko: "Windows Boot Manager가 바뀌었습니다" },
+        "ui.externalSuccessorChangedDetail": { en: "After an update, the program skips the new Windows Boot Manager and leaves the BAR at its old size. Update the startup settings to use the larger size again from the next start.", ko: "업데이트 후에는 새 Windows Boot Manager를 실행하지 않고 BAR 크기를 그대로 둡니다. 다음 부팅부터 크기를 다시 늘리려면 실행 설정을 갱신하세요." },
+        "ui.externalRepin": { en: "Update startup settings", ko: "실행 설정 갱신" },
+        "ui.externalRemoveFromPc": { en: "Remove from this PC", ko: "이 PC에서 제거" },
+        "ui.externalRestartBitLocker": { en: "BitLocker protection pauses for this restart only and resumes when Windows starts.", ko: "이번에 다시 시작할 때만 BitLocker 보호를 일시 중단합니다. Windows가 시작되면 보호가 다시 켜집니다." },
+        "ui.externalRestartBootKey": { en: "Press {key} as the PC starts to open the boot menu.", ko: "PC가 시작될 때 {key} 키를 눌러 부팅 메뉴를 여세요." },
+        "ui.externalRemoveUsbTitle": { en: "Remove from the USB drive", ko: "USB에서 제거" },
+        "ui.externalRemoveUsbDetail": { en: "Only files written by this app are deleted.", ko: "이 앱이 저장한 파일만 지웁니다." },
+        "ui.externalRemovePcTitle": { en: "Remove from this PC", ko: "이 PC에서 제거" },
+        "ui.externalRemovePcDetail": { en: "The app removes its boot entry and files from the EFI system partition. From the next start, the BAR returns to its old size.", ko: "이 앱의 부팅 항목과 EFI 시스템 파티션에 저장한 파일을 지웁니다. 다음 부팅부터 BAR 크기가 원래대로 돌아갑니다." },
+        "ui.externalRemoveConfirm": { en: "Remove", ko: "제거" },
+        "ui.externalErrorSecureBoot": { en: "Secure Boot is on. Turn it off in BIOS setup first.", ko: "Secure Boot가 켜져 있습니다. 먼저 BIOS 설정에서 끄세요." },
+        "ui.externalErrorNoEsp": { en: "The EFI system partition containing Windows Boot Manager was not found.", ko: "Windows Boot Manager가 있는 EFI 시스템 파티션을 찾지 못했습니다." },
+        "ui.externalErrorForeignBootFile": { en: "This USB drive already has another boot program. Use a different drive.", ko: "이 USB에는 다른 부팅 프로그램이 있습니다. 다른 USB를 쓰세요." },
+        "ui.externalErrorNotFat": { en: "This USB drive is not FAT32. Use a FAT32 drive.", ko: "이 USB는 FAT32가 아닙니다. FAT32 USB를 쓰세요." },
+        "ui.externalErrorNoReport": { en: "The check results are missing from the drive. Check again.", ko: "드라이브에 진단 결과가 없습니다. 다시 진단하세요." },
+        "ui.externalErrorPlan": { en: "Could not prepare the BAR change for this GPU and size.", ko: "이 GPU에서 선택한 BAR 크기를 쓰도록 준비하지 못했습니다." },
+        "ui.externalErrorNotPhysical": { en: "These results are from a test machine, not this PC.", ko: "이 PC가 아닌 시험용 컴퓨터의 진단 결과입니다." },
+        "ui.externalErrorBitLocker": { en: "BitLocker protection is on. Pause it for the restart.", ko: "BitLocker 보호가 켜져 있습니다. 다시 시작하려면 보호를 일시 중단해야 합니다." },
+        "ui.externalErrorNoReceipt": { en: "The trial has not run yet.", ko: "아직 시험 실행을 하지 않았습니다." },
+        "ui.externalErrorMediumGone": { en: "The USB drive or EFI system partition can no longer be read.", ko: "USB 드라이브나 EFI 시스템 파티션을 더 이상 읽을 수 없습니다." },
+        "ui.externalErrorOther": { en: "See the details below.", ko: "아래에서 자세한 내용을 확인하세요." },
 } as const;
 
 export type MessageId = keyof typeof messages;
@@ -1027,15 +1186,28 @@ export type MessageParameters = {
         "ui.gamesUndoCount": { count: string };
         "ui.gamesUndoDialogDetail": { count: string };
         "ui.gamesSkippedTitle": { count: string };
+        "ui.externalDiagnosticUsbLead": { key: string; drive: string };
+        "ui.externalDiagnosticUsbLeadNoKey": { drive: string };
+        "ui.externalBootMenuStep": { key: string; drive: string };
+        "ui.externalBootMenuStepNoKey": { drive: string };
+        "ui.externalGpuUnknown": { slot: string };
+        "ui.externalTrialUsbLead": { key: string; drive: string; size: string };
+        "ui.externalTrialUsbLeadNoKey": { drive: string; size: string };
+        "ui.externalTrialEspLead": { size: string };
+        "ui.externalResultTitle": { size: string };
+        "ui.externalResultNotWidenedLead": { size: string };
+        "ui.externalInstalledLead": { size: string };
+        "ui.externalInstalledGpuDetail": { size: string };
+        "ui.externalRestartBootKey": { key: string };
 };
 export type ParameterizedMessageId = keyof MessageParameters;
 export type StaticMessageId = Exclude<MessageId, ParameterizedMessageId>;
 
-export type MessageDescriptor = {
-        [Id in MessageId]: Id extends keyof MessageParameters
-                ? { id: Id; values: MessageParameters[Id] }
-                : { id: Id; values?: never };
-}[MessageId];
+export type MessageDescriptor =
+        | { id: StaticMessageId; values?: never }
+        | {
+                [Id in ParameterizedMessageId]: { id: Id; values: MessageParameters[Id] };
+        }[ParameterizedMessageId];
 
 export function message<Id extends keyof MessageParameters>(
         id: Id,
@@ -1043,7 +1215,7 @@ export function message<Id extends keyof MessageParameters>(
 ): Extract<MessageDescriptor, { id: Id }>;
 export function message<Id extends StaticMessageId>(
         id: Id,
-): Extract<MessageDescriptor, { id: Id }>;
+): { id: Id; values?: never };
 export function message(
         id: MessageId,
         values?: MessageValues,

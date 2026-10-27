@@ -52,6 +52,7 @@ const HomeRows = () => {
                         <ListRow icon="game" title={t("ui.enablePerGame")} detail={t("ui.homeRowGamesDetail")} onClick={() => go("games")} />
                         <ListRow icon="save" title={t("ui.homeRowBackup")} detail={t("ui.homeRowBackupDetail")} onClick={() => go("bar", { settingsFile: true })} />
                         <ListRow icon="swap" title={t("ui.changesTitleShort")} detail={t("ui.homeRowChangesDetail")} onClick={() => go("changes")} />
+                        <ListRow icon="usb" title={t("ui.externalCrumb")} detail={t("ui.homeRowExternalDetail")} onClick={() => go("external")} />
                 </ul>
         );
 };
@@ -126,7 +127,7 @@ export const Home = ({ titleRef }: { titleRef: Ref<HTMLHeadingElement> }) => {
                 const msi = usesMsiProZ690Route(snap);
                 const target = currentGpu?.gpu.patchConfiguration.targetSizeBytes;
                 return (
-                        <HomeFrame bar={<ActionBar center hint={t("ui.homeStartHint")} primary={{ label: t("ui.getStarted"), icon: "arrow", onClick: () => go("install"), disabled }} />}>
+                        <HomeFrame bar={<ActionBar center hint={t("ui.homeStartHint")} secondary={[{ label: t("ui.homeStartExternal"), onClick: () => go("external"), disabled }]} primary={{ label: t("ui.getStarted"), icon: "arrow", onClick: () => go("install"), disabled }} />}>
                                 {errorNotice}
                                 <TaskHead label={eyebrow} title={t("ui.homeStartTitle")} lead={target ? t("ui.homeStartLead", { size: formatBytes(target) }) : t("ui.homeStartLeadGeneric")} titleRef={titleRef} />
                                 {target && <SizeCompare fromLabel={t("ui.now")} from="256 MiB" toLabel={t("ui.whenOn")} to={formatBytes(target)} label={t("ui.compareNowAndOn", { size: formatBytes(target) })} />}

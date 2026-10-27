@@ -1,3 +1,8 @@
+pub mod boot_entries;
+pub mod candidates;
+pub mod load_option;
+pub mod media;
+
 use nvstraps_external::*;
 use std::{
     fs::{self, OpenOptions},
@@ -44,7 +49,7 @@ pub fn write_immutable(path: &Path, bytes: &[u8]) -> Result<(), String> {
     }
     Ok(())
 }
-fn reject_link(path: &Path) -> Result<(), String> {
+pub(crate) fn reject_link(path: &Path) -> Result<(), String> {
     match fs::symlink_metadata(path) {
         Ok(meta) => {
             #[cfg(windows)]
@@ -139,10 +144,13 @@ pub fn package(
     validate_application(&diagnostic)?;
     validate_application(&loader)?;
     let plan_bytes = serde_json::to_vec_pretty(plan).map_err(|e| e.to_string())?;
+    let removable_boot = REMOVABLE_BOOT.trim_start_matches('\\').replace('\\', "/");
+    let esp_diagnostic = ESP_DIAGNOSTIC.trim_start_matches('\\').replace('\\', "/");
+    let plan_path = PLAN.trim_start_matches('\\').replace('\\', "/");
     let files = [
-        ("EFI/BOOT/BOOTX64.EFI", loader),
-        ("EFI/NvStraps/NvStrapsDiagnostic.efi", diagnostic),
-        ("EFI/NvStraps/plan.json", plan_bytes),
+        (removable_boot.as_str(), loader),
+        (esp_diagnostic.as_str(), diagnostic),
+        (plan_path.as_str(), plan_bytes),
     ];
     let manifest = persist_package(output, &files)?;
     let receipt = serde_json::json!({"schema":SCHEMA,"environment":plan.source.environment,"sourceSha256":plan.source_sha256,"handoff":plan.handoff,"files":manifest,"installState":"prepared","scope":"cold boot; existing decode windows; unbound non-console Turing GPU"});
@@ -168,6 +176,15 @@ pub fn inject(source: &Path, driver: &Path, output: &Path) -> Result<(), String>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct Cleanup(std::path::PathBuf);
+
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
     #[test]
     fn partial_package_resume_is_idempotent_and_bound_to_exact_files() {
         let dir = std::env::temp_dir().join(format!(
@@ -178,6 +195,7 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         ));
+        let _cleanup = Cleanup(dir.clone());
         let files = [
             ("EFI/BOOT/BOOTX64.EFI", b"loader".to_vec()),
             ("EFI/NvStraps/plan.json", b"plan".to_vec()),
@@ -223,6 +241,7 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         ));
+        let _cleanup = Cleanup(dir.clone());
         fs::create_dir(&dir).unwrap();
         let file = dir.join("artifact");
         write_immutable(&file, b"first").unwrap();

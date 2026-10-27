@@ -43,6 +43,8 @@ pub enum BackendError {
     NvidiaDriverSettings(String),
     #[error("the NVIDIA driver did not keep the requested Resizable BAR value")]
     NvidiaDriverReadback,
+    #[error("{message}")]
+    External { code: &'static str, message: String },
 }
 
 impl BackendError {
@@ -265,6 +267,7 @@ impl From<BackendError> for ApiError {
             BackendError::NvidiaDriverUnavailable(_) => ("nvidia_driver_unavailable", true, None),
             BackendError::NvidiaDriverSettings(_) => ("nvidia_driver_settings_failed", true, None),
             BackendError::NvidiaDriverReadback => ("nvidia_driver_readback_mismatch", true, None),
+            BackendError::External { code, .. } => (*code, true, None),
         };
 
         Self {
@@ -326,6 +329,16 @@ mod tests {
             ApiError::from(BackendError::ReadbackMismatch).code,
             "readback_mismatch"
         );
+    }
+
+    #[test]
+    fn external_failures_keep_the_command_specific_code() {
+        let error = ApiError::from(BackendError::External {
+            code: "externalBitLockerSuspensionRequired",
+            message: "consent is required".into(),
+        });
+        assert_eq!(error.code, "externalBitLockerSuspensionRequired");
+        assert_eq!(error.message, "consent is required");
     }
 
     #[test]

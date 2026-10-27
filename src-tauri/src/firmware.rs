@@ -88,7 +88,7 @@ pub fn relaunch_elevated() -> BackendResult<()> {
 }
 
 #[cfg(windows)]
-mod windows_impl {
+pub(crate) mod windows_impl {
     use std::{ffi::c_void, mem::size_of, ptr};
 
     use windows_sys::Win32::{
@@ -251,7 +251,7 @@ mod windows_impl {
         }
     }
 
-    fn enable_system_environment_privilege() -> BackendResult<()> {
+    pub(crate) fn enable_system_environment_privilege() -> BackendResult<()> {
         let token = open_process_token(TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY)?;
         let privilege_name = wide("SeSystemEnvironmentPrivilege");
         let mut luid = Default::default();
