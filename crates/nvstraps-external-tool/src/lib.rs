@@ -1,7 +1,9 @@
+pub mod authenticode;
 pub mod boot_entries;
 pub mod candidates;
 pub mod load_option;
 pub mod media;
+pub mod signature_list;
 
 use nvstraps_external::*;
 use std::{
