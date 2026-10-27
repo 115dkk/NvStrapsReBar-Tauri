@@ -226,6 +226,17 @@ export class RealApp {
     await this.launch();
   }
 
+  /**
+   * The restart number `count` that the external route asked for. `boot` stands in for the firmware
+   * and the EFI programs between closing the application and starting it again.
+   */
+  async restartThrough(count: number, boot: () => Promise<void>) {
+    await expect.poll(async () => (await readMachine(this.machineFile)).rebootRequests.filter(request => request.kind === "externalBoot").length).toBe(count);
+    await this.close();
+    await boot();
+    await this.launch();
+  }
+
   async close() {
     this.closing = true;
     try {

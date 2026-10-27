@@ -104,7 +104,7 @@ jobs:
         run: npm ci
       - name: Enforce the Rust-only source boundary
         run: npm run check:riir
-      - name: Build the Rust UEFI resource required by the Tauri manifest
+      - name: Build the UEFI resources required by the Tauri manifest
         run: npm run build:firmware
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -116,7 +116,7 @@ jobs:
         run: cargo check -p nvstraps-core --no-default-features
       - name: Build native application
         run: npm run tauri:ci
-      - name: Build the installer
+      - name: Build the external EFI tools
         run: npm run build:external
       - name: Package the Windows installer
         shell: pwsh
