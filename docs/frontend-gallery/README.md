@@ -1,242 +1,128 @@
 # Frontend gallery
 
-This is a visual archive of the NvStrapsReBar Tauri frontend, from guarded
-configuration to the deployment workflow. The current concept-first surfaces
-are shown first; earlier captures remain below as revision history.
+The current English and Korean interface of the NvStrapsReBar app, in the order a user meets it:
+home, the four install steps, and the pages used after installation.
 
-> [!IMPORTANT]
-> These captures come from the production Chromium build running the
-> repository's browser-preview fixtures. They demonstrate the embedded client
-> layout and mocked journey only. They do **not** prove native WebView2
-> behavior, native dialogs, firmware reads or writes, flashing, reboot, or
-> NVIDIA hardware results.
+> [!NOTE]
+> These captures come from the production build running the repository's browser-preview
+> fixtures, so every screen carries the "PREVIEW DATA" bar. They do not show native WebView2
+> behaviour, native dialogs, firmware reads or writes, flashing, restarts, or results from NVIDIA
+> hardware. They were taken in headless Chromium on Linux: Korean text uses the bundled Pretendard
+> exactly as on Windows, while English text falls back to Pretendard where Windows shows Segoe UI.
 
-The 900 px captures show the app's supported minimum **desktop** window. The
-gallery uses one image per section so it remains comfortable to browse on a
-phone; it does not imply a mobile app or a 390 px application viewport.
+The 900 px captures show the smallest supported desktop window. Every image is captured at device
+scale 2.
 
-## Current concept-first surfaces
+To capture the gallery again after the interface changes:
 
-These captures show the two-step journey shell: a header tagline that states
-what the program does, a step navigation (1. Install firmware, 2. BAR
-Settings) with completion marks, and a status hero that draws the BAR
-aperture itself — a small 256 MiB block expanding into the multi-GiB target.
+```sh
+npm run build
+node scripts/capture-frontend-gallery.mjs
+```
 
-### 21. BAR Settings with the expansion hero
+The script replaces every PNG in this folder. Pass name prefixes such as `11` to capture only those
+images, and set `NVSTRAPS_GALLERY_CHROMIUM` to a Chromium binary when the browser bundled with
+`@playwright/test` is not installed.
 
-The default surface once the driver left evidence in the current boot. The
-hero shows the expanded aperture as a filled bar and the first panel is the
-Resizable BAR expansion switch.
+## Home
 
-[Open full-size image](21-concept-hero-bar-settings-1180x760.png)
+### 1. Resizable BAR is on · English, 1180 × 760
 
-![Current English BAR Settings at 1180 by 760 pixels](21-concept-hero-bar-settings-1180x760.png)
+After NvStrapsReBar has expanded the GPU, home shows its BAR size and links to the rest of the app:
+BAR Settings, the per-game switches, a settings backup, steps for a BIOS or hardware change, and the
+experimental route that leaves the BIOS alone.
 
-### 22. 설치 전 안내와 확장 목표
+![English home screen with Resizable BAR on at 8 GiB](01-home-on-en-1180x760.png)
 
-드라이버 증거가 없으면 1단계(펌웨어 설치)가 열리고, 히어로가 기본 256 MiB BAR와
-점선으로 그린 확장 목표, 그리고 다음 할 일을 한 줄로 보여줍니다.
+### 2. 처음 여는 화면 · 한국어, 1180 × 760
 
-[원본 크기로 보기](22-concept-korean-install-step-900x760.png)
+드라이버가 아직 실행된 적 없는 PC에서 앱을 열면 나오는 화면입니다. 지금 BAR 크기와 켰을 때의 크기, 사용자가
+할 일 세 가지, 준비물, 설치 전에 확인한 항목이 나옵니다. 'BIOS 수정 없이'를 누르면 BIOS를 고치지 않는 실험용
+방식으로 넘어갑니다.
 
-![900×760 한국어 설치 단계 화면](22-concept-korean-install-step-900x760.png)
+![한국어 첫 화면: 256 MiB에서 8 GiB로 늘어나는 크기와 할 일 목록](02-home-start-ko-1180x760.png)
 
-### 23. GPU마다 다른 상태를 그대로 그리기
+## Install
 
-혼재 상태에서는 GPU별로 확장 완료 바와 256 MiB → 목표 바가 나란히 그려져
-어떤 GPU가 아직 확장 가능한지 즉시 드러납니다.
+### 3. Choose the motherboard BIOS file · English, 1180 × 760
 
-[원본 크기로 보기](23-concept-korean-mixed-900x760.png)
+Step 1 of four. The screen shows the detected board and which file in the vendor download to choose.
 
-![900×760 한국어 혼재 상태 화면](23-concept-korean-mixed-900x760.png)
+![English step 1 asking for the motherboard BIOS file](03-install-choose-file-en-1180x760.png)
 
-## Current factual-copy surfaces — `ffe4de9`
+### 4. 설치와 복구 방법 확인 · 한국어, 900 × 760
 
-These four captures show the current English and Korean deployment copy. The UI
-states detected hardware, selected files, operation results, and the next user
-action without presenting internal profile IDs, plan revisions, receipts, or
-backend ownership as reassurance.
+앱에 등록된 보드(MSI PRO Z690-A DDR4)에서는 설치 방법(M-FLASH)과 복구 방법(Flash BIOS Button)이 미리 골라져
+있습니다. 고른 파일의 이름과 크기, 두 방법을 확인할 MSI 안내서 주소도 함께 나옵니다.
 
-### 13. Select the firmware image
+![900×760 한국어 설치·복구 방법 확인 화면](04-install-routes-ko-900x760.png)
 
-The English deployment screen names the detected MSI board and selected image,
-including its size and SHA-256. It tells the user to continue with the vendor
-tool instead of describing the app's internal safety mechanisms.
+### 5. Save to USB · English, 900 × 760
 
-[Open full-size image](13-factual-english-deployment-1180x760.png)
+The install BIOS file passed the check. The screen lists what goes to the USB drive: the install
+file under its original name, MSI.ROM for Flash BIOS Button recovery, and the instructions in
+English and Korean.
 
-![Current English firmware selection at 1180 by 760 pixels](13-factual-english-deployment-1180x760.png)
+![English Save to USB screen at the 900 px minimum width](05-install-save-en-900x760.png)
 
-### 14. Review the recommended configuration
+### 6. BIOS 화면에서 설치 · 한국어, 1180 × 760
 
-The active step shows the current GPU and PCI-topology recommendation, the
-configuration values, and the review action. The sidebar keeps the profile
-display name and active step while internal IDs and plan revisions stay out of
-the routine UI.
+2단계입니다. M-FLASH로 설치하는 순서, 바꿔야 할 BIOS 설정 세 가지(Above 4G Decoding 켜기, CSM 끄기,
+Re-Size BAR 켜기), 설치가 잘못됐을 때 복구하는 방법이 나옵니다. BIOS 화면으로 다시 시작하기 전에 확인 창이
+한 번 더 뜹니다.
 
-[Open full-size image](14-factual-english-recommendation-1180x760.png)
+![한국어 2단계: M-FLASH 설치 순서와 BIOS 설정](06-install-guide-ko-1180x760.png)
 
-![Current English deployment recommendation at 1180 by 760 pixels](14-factual-english-recommendation-1180x760.png)
+### 7. Record what you did in BIOS setup · English, 900 × 760
 
-### 15. 펌웨어 이미지 선택
+Back in Windows, the screen shows that NvStrapsReBar ran during this boot. The user then records
+the two things only they can confirm: the M-FLASH install and the BIOS settings.
 
-한국어 화면도 감지한 MSI 보드, 선택한 이미지, 크기, SHA-256을 그대로
-보여줍니다. 앱의 안전성을 설명하는 대신 제조사 도구에서 이어서 진행할
-작업을 안내합니다.
+![English record screen after returning from BIOS setup](07-install-record-en-900x760.png)
 
-[원본 크기로 보기](15-factual-korean-deployment-1180x760.png)
+### 8. 켤 준비 · 한국어, 1180 × 760
 
-![현재 한국어 펌웨어 이미지 선택 화면 1180×760](15-factual-korean-deployment-1180x760.png)
+3단계입니다. GPU마다 지금 크기와 켰을 때의 크기가 나옵니다. '이 설정으로 저장'을 누르면 설정을 저장하고 다시
+읽어 저장됐는지 확인하며, 설정은 다시 시작한 뒤에 적용됩니다.
 
-### 16. 권장 배포 구성 검토
+![한국어 3단계: RTX 2080 SUPER를 256 MiB에서 8 GiB로 켜는 화면](08-turn-on-ko-1180x760.png)
 
-최소 지원 폭 900 px에서 현재 GPU와 PCI 구성에 맞춘 값, 검토 확인란,
-다음 작업을 확인할 수 있습니다. 프로필 ID나 계획 리비전 같은 내부 정보는
-화면에 표시하지 않습니다.
+## After installation
 
-[원본 크기로 보기](16-factual-korean-recommendation-900x760.png)
+### 9. Only some GPUs are expanded · English, 900 × 760
 
-![현재 한국어 권장 배포 구성 화면 900×760](16-factual-korean-recommendation-900x760.png)
+With two GPUs, home shows which one is still at 256 MiB and links to BAR Settings.
 
-## Earlier interface captures
+![English home screen with one GPU expanded and one at 256 MiB](09-home-mixed-en-900x760.png)
 
-The captures below are retained as visual revision history. Their older labels
-and workflow copy do not describe the current `ffe4de9` interface.
+### 10. BAR Settings · English, 1180 × 760
 
-## 1. Configure at a glance
+The expansion switch, the size each GPU gets after the next restart, and the advanced options
+opened: which GPUs to expand and the motherboard-side BAR size.
 
-Detected hardware, the global policy, target BAR size, and explicit GPU rules
-stay visible in one desktop workspace.
+![English BAR Settings with the advanced options open](10-bar-settings-en-1180x760.png)
 
-[Open full-size image](01-configure-overview-1180x760.png)
+### 11. Turn on for each game · English, 1180 × 760
 
-![Configuration overview at 1180 by 760 pixels](01-configure-overview-1180x760.png)
+The NVIDIA driver decides per game whether to use Resizable BAR. Elden Ring was switched on, so it
+is listed under "Games changed on this PC"; the All games switch covers every game without its own
+setting.
 
-## 2. Review a consequential write
+![English per-game page with Elden Ring switched on](11-games-en-1180x760.png)
 
-Changing policy creates an unsaved draft. The final dialog names the UEFI
-write, restart consequence, topology check, and read-back verification before
-continuing.
+### 12. BIOS를 고치지 않는 방식 · 한국어, 1180 × 760
 
-[Open full-size image](02-save-confirmation-900x760.png)
+실험용 방식입니다. PC를 켤 때 작은 EFI 프로그램을 Windows보다 먼저 실행해 GPU의 BAR 크기를 늘리고, BIOS
+파일은 그대로 둡니다. USB에서 시험해 보거나 이 PC의 EFI 시스템 파티션에 설치할 수 있습니다.
 
-![Consequential UEFI write confirmation at the supported 900 px minimum width](02-save-confirmation-900x760.png)
+![한국어 'BIOS 수정 없이' 화면](12-external-ko-1180x760.png)
 
-## 3. Pin the exact machine and recovery route
+## Earlier captures
 
-Deployment begins with one inspected vendor image, immutable machine identity,
-documented install route, and physical recovery plan. The preview banner and
-**NO AUTO-FLASH** boundary remain visible.
-
-[Open full-size image](03-machine-profile-1180x760.png)
-
-![Exact-machine deployment profile at 1180 by 760 pixels](03-machine-profile-1180x760.png)
-
-## 4. Stop at the vendor-owned flash gate
-
-After the repository verifies a derived artifact, the plan advances to a
-manual vendor handoff. Preparation is kept distinct from flashing, and the
-active step is still explicit at the 900 px desktop minimum.
-
-[Open full-size image](04-manual-flash-gate-900x760.png)
-
-![Manual vendor flash gate at the supported 900 px minimum width](04-manual-flash-gate-900x760.png)
-
-## 5. Bind legacy risk to one firmware fingerprint
-
-Read-only legacy analysis separates a recommended rule, a blocked rule, and a
-risky DSDT modification. Selecting the risky rule requires a note and
-confirmation tied to the exact analyzed image.
-
-[Open full-size image](05-legacy-risk-acknowledgement-900x760.png)
-
-![Fingerprint-specific legacy risk acknowledgement at the supported 900 px minimum width](05-legacy-risk-acknowledgement-900x760.png)
-
-## 6. Review the backend-owned recommendation
-
-After current-boot and Rust DXE verification, the active plan step shows the
-exact registry and fallback recommendation. The guarded write stays disabled
-until the selected profile's recommendation is reviewed.
-
-[Open full-size image](06-backend-recommendation-1180x760.png)
-
-![Backend-recommended deployment configuration at 1180 by 760 pixels](06-backend-recommendation-1180x760.png)
-
-## 7. 한국어로 구성 확인
-
-언어를 바꾸면 페이지를 새로 불러오지 않아도 구성 화면, 접근성 이름,
-상태 문구가 바로 한국어로 바뀝니다. 편집 중인 초안과 선택값은 그대로
-유지됩니다.
-
-[원본 크기로 보기](07-korean-configure-1180x760.png)
-
-![1180×760 한국어 펌웨어 구성 화면](07-korean-configure-1180x760.png)
-
-## 8. 한국어로 배포 권장 구성 검토
-
-최소 지원 폭 900 px에서도 현재 단계, 백엔드 권장 구성, 검토 확인란이
-한 화면에 들어옵니다. 해시, 장치 이름, 선택자 값 같은 기술 정보는
-번역하지 않습니다.
-
-[원본 크기로 보기](08-korean-recommendation-900x760.png)
-
-![900×760 한국어 백엔드 권장 배포 구성 화면](08-korean-recommendation-900x760.png)
+Captures of earlier interfaces were removed when this gallery was replaced. They remain in the
+repository history: [the gallery as of v1.1.2](https://github.com/115dkk/NvStrapsReBar-Tauri/tree/v1.1.2/docs/frontend-gallery).
 
 ---
 
-## 9. Pretendard로 다듬은 한국어 구성 화면
-
-한국어를 선택하면 본문과 제목에 번들된 Pretendard가 적용됩니다. 기술값과
-장치 정보는 기존 고정폭 글꼴을 유지합니다. 화면 상단의 노란 띠는 브라우저
-미리보기 데이터임을 분명히 표시합니다.
-
-[원본 크기로 보기](09-korean-pretendard-configure-1180x760.png)
-
-![Pretendard가 적용된 1180×760 한국어 구성 화면](09-korean-pretendard-configure-1180x760.png)
-
-## 10. UEFI 기록 전 마지막 확인
-
-구성 변수 기록 직전에 다시 확인하는 화면입니다. 감지된 GPU와 PCI 구성이
-이 컴퓨터와 일치하는지 확인하도록 안내합니다. 미리보기에서는 펌웨어를
-기록하지 않습니다.
-
-[원본 크기로 보기](10-korean-write-confirmation-1180x760.png)
-
-![1180×760 한국어 UEFI 기록 확인 화면](10-korean-write-confirmation-1180x760.png)
-
-## 11. 현재 배포 단계와 수동 작업 범위
-
-고정된 미리보기 프로필의 현재 단계와 아직 남은 배포 단계를 함께 보여줍니다.
-제조사 도구, 펌웨어 설정, 전원 작업은 앱이 대신 완료하지 않는다는 경계도
-그대로 보입니다.
-
-[원본 크기로 보기](11-korean-deployment-active-step-900x760.png)
-
-![900×760 한국어 배포 활성 단계 화면](11-korean-deployment-active-step-900x760.png)
-
-## 12. 앱 안에서 읽는 Pretendard 라이선스
-
-구성 요소마다 한 줄씩 이름, 버전, 앱에서 쓰는 곳, 라이선스를 보여 주고, 줄을 열면
-그 아래에 전문이 나옵니다. 전문은 앱에 들어 있는 파일을 읽으므로 네트워크가 필요 없습니다.
-
-[원본 크기로 보기](12-korean-pretendard-license-900x760.png)
-
-![900×760 Pretendard 라이선스 화면](12-korean-pretendard-license-900x760.png)
-
-### 24. Settings file round-trip
-
-The BAR Settings save area keeps a settings-file row: save the current
-configuration to a JSON file before hardware changes or a CMOS clear, and load
-it later to restore. Loading fills the editor draft and the normal review and
-save path takes over.
-
-[Open full-size image](24-settings-file-round-trip-1180x760.png)
-
-![English BAR Settings with the settings-file row and a loaded-file receipt at 1180 by 760 pixels](24-settings-file-round-trip-1180x760.png)
-
----
-
-Captured on Windows with Chromium 151.0.7922.34, 1x device scale, and reduced
-motion. Original English capture source: `7794b6d`. Initial Korean capture
-source: `e53b28b`. Pretendard gallery capture source: `9492711`.
-Current factual-copy capture source: `ffe4de9`.
+Captured from v1.1.2 in headless Chromium 153.0.8010.12 on Linux, at device scale 2 with reduced
+motion.
