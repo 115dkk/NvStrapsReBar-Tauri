@@ -7,6 +7,7 @@ members = [
     "crates/nvstraps-external-tool",
     "crates/nvstraps-ffs",
     "crates/nvstraps-legacy",
+    "crates/nvstraps-linux-helper",
     "crates/nvstraps-s3-probe",
     "crates/nvstraps-uefi",
     "src-tauri",
