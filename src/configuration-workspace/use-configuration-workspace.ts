@@ -413,11 +413,13 @@ export const useConfigurationWorkspace = () => {
 
         const elevate = async () => {
                 if (busy) return;
+                let granted = false;
                 await runSingleFlight(elevationInFlight, async () => {
                         setBusy(true);
                         setError(null);
                         try {
                                 await bridge.elevate();
+                                granted = true;
                         } catch (cause) {
                                 setError(
                                         message("ui.configureOperationFailed", {
@@ -434,6 +436,9 @@ export const useConfigurationWorkspace = () => {
                                 setBusy(false);
                         }
                 });
+                // Windows replaces this window with an elevated copy. Linux keeps the window
+                // and gains the rights in place, so the PC has to be read again to show them.
+                if (granted) await load(true);
         };
 
         return {
