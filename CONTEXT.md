@@ -28,7 +28,7 @@ version/release date and BAR0, while the later configuration reboot may change o
 
 Canonical evidence containing the complete current identity and observation time after a proven
 boot. The first valid volatile DXE status re-pins the post-flash BIOS revision and BAR0. The later
-Windows boot-time proof re-pins configuration-time BAR0. All following actions compare exactly to
+operating-system boot-time proof re-pins configuration-time BAR0. All following actions compare exactly to
 the newest observation.
 
 ### Deployment Plan
@@ -54,7 +54,7 @@ configuration readback, or evidence parsing.
 A Deployment Plan step owned by a person, vendor firmware UI, external tool, or physical process.
 The application may prepare the handoff and record an explicit attestation, but must not infer
 completion from opening a UI. A reboot is a system-observed gate instead: requesting it never
-completes it, while current-boot DXE status or a later Windows boot time may prove it.
+completes it, while current-boot DXE status or a later operating-system boot time may prove it.
 
 ### Firmware artifact
 
@@ -96,7 +96,17 @@ only Rust remains authoritative for durable plan transitions.
 
 A narrowly verified handoff to software the repository does not own. Current external adapters
 are the installed `nvidia-smi.exe` and NVAPI driver settings (DRS) in the driver's `nvapi64.dll`,
-loaded from System32 only.
+loaded from System32 only. On Linux they are `nvidia-smi`, systemd's `systemctl` and polkit's
+`pkexec`, each taken from a fixed system location and only when the file belongs to root and
+nobody else can write it; `PATH` is never searched.
+
+### Privileged helper
+
+The small root program a Linux installation uses in place of an elevated application
+(`nvstraps-rebar-helper`). The desktop application stays an ordinary user process, starts the
+helper once through polkit, and sends it typed requests. The helper owns exactly one
+consequential action, writing or deleting the NvStrapsReBar configuration variable, and
+revalidates the bytes at its own boundary.
 
 ### Driver profile
 
@@ -117,7 +127,7 @@ the current BAR aperture.
 
 ### Resizable BAR observation
 
-The deep Rust Module that owns installed NVIDIA telemetry capture, reconciliation with the Windows
+The deep Rust Module that owns installed NVIDIA telemetry capture, reconciliation with the operating system's
 PCI inventory, per-GPU aperture classification, mixed-state aggregation, application-owned patch
 configuration eligibility, and exact-profile expanded-aperture proof. Its small typed Interface
 separates plan-free current observation from plan-bound deployment evidence. Hardware capability

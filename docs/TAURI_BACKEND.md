@@ -12,14 +12,14 @@ native boundary.
 
 | Command | Arguments | Result and owner |
 | --- | --- | --- |
-| `get_system_snapshot` | none | Cached platform (including the current Windows boot time, `platform.bootedAtUnixMs`), firmware access, current-boot DXE observation, BAR Settings tokens, saved config, GPU inventory (each GPU with its listed, recommended and effective BAR size selectors), machine identity, and notices |
+| `get_system_snapshot` | none | Cached platform (including the current boot time, `platform.bootedAtUnixMs`), firmware access, current-boot DXE observation, BAR Settings tokens, saved config, GPU inventory (each GPU with its listed, recommended and effective BAR size selectors), machine identity, and notices |
 | `refresh_system` | none | Fresh Windows/PCI/EFI enumeration and snapshot |
 | `validate_config` | `{ draft }` | Errors, warnings, affected GPUs, encoded size, change state, and reboot requirement without writing |
 | `save_config` | `{ draft }` | A save receipt only after the EFI variable is written and read back byte-for-byte |
 | `save_bar_settings` | `{ request: { draft, expectedTopologyToken, expectedConfigToken } }` | Settings-only save after control-evidence, topology, and saved-configuration revalidation, followed by exact readback |
 | `export_bar_settings_snapshot` | `{ path }` | Writes the currently saved configuration draft to a JSON settings-snapshot file |
 | `inspect_bar_settings_snapshot` | `{ path }` | Parses a settings-snapshot file and returns its draft with a validation report against the current machine; never writes the EFI variable |
-| `request_elevation` | none | Starts one elevated copy with Windows `runas`, then exits the current copy; concurrent duplicate requests are idempotent |
+| `request_elevation` | none | Windows: starts one elevated copy with `runas`, then exits the current copy. Linux: starts the root helper through polkit's `pkexec` and keeps running, so the client reads the snapshot again. Concurrent duplicate requests are idempotent |
 
 `ConfigDraft` follows this wire shape:
 
@@ -54,13 +54,16 @@ selected GPUs, and `65` changes GPU straps only.
 
 The backend rejects stale topology, duplicate selectors, unsupported sizes, more than eight
 rules, unusable or 64-bit BAR0 ranges, and unaligned BAR0 ranges. Saving requires UEFI mode and
-`SeSystemEnvironmentPrivilege`. Readback proves the variable bytes, not that firmware has applied
-them; a reboot and driver-status check remain separate steps.
+`SeSystemEnvironmentPrivilege` (on Linux, a running root helper; see [Linux support](LINUX.md)).
+Readback proves the variable bytes, not that firmware has applied them; a reboot and
+driver-status check remain separate steps.
 
 Elevation is single-flight at both renderer and native boundaries. The Rust application state
 allows only one `runas` launch per process; a duplicate command returns without launching another
 copy. If the launch fails or UAC is cancelled, the gate resets so a later explicit retry remains
-possible.
+possible. On Linux the same gate covers the wait for the polkit dialog, which runs off the main
+thread; a dismissed or refused dialog resets it, and `platform.elevated` turns true only while the
+helper is alive.
 
 ### BAR Settings state
 
@@ -177,7 +180,7 @@ the expected active step.
 | `verify_deployment_driver` | `{ profileId }` | Reads exactly eight status bytes and accepts only a known non-error Rust DXE status; the volatile variable also proves the current boot and may advance both boot and driver steps |
 | `get_recommended_deployment_config` | `{ profileId }` | Re-enumerated, exact-machine guarded `ConfigDraft` plus Turing, registry-managed, and exact-fallback counts; only valid at the configuration-write step |
 | `save_deployment_config` | `{ request: { profileId, draft } }` | Re-enumeration, validation, EFI write, byte-for-byte readback, save receipt, and advanced plan |
-| `verify_configuration_reboot` | `{ profileId }` | Advances only when the current Windows boot time is later than the recorded configuration readback time |
+| `verify_configuration_reboot` | `{ profileId }` | Advances only when the current boot time is later than the recorded configuration readback time |
 
 Manual confirmation is deliberately narrow. Opening a vendor utility or firmware UI is not
 evidence. The token becomes stale as soon as the profile, active step, or plan
@@ -197,8 +200,8 @@ model, so the client cannot turn a preview constant into a different privileged 
 | Command | Arguments | Result and owner |
 | --- | --- | --- |
 | `preview_firmware_setup_reboot` | `{ profileId }` | Current eligible plan step, exact command preview, profile-bound token, and warnings; no restart |
-| `reboot_to_firmware_setup` | `{ request: { profileId, confirmationToken, unsavedWorkConfirmed } }` | Acceptance only after revalidation; invokes `shutdown.exe /r /fw /t 0` without `/f` |
-| `preview_configuration_reboot` | `{ profileId }` | Revision-bound preview of `shutdown.exe /r /t 0`; no restart or plan transition |
+| `reboot_to_firmware_setup` | `{ request: { profileId, confirmationToken, unsavedWorkConfirmed } }` | Acceptance only after revalidation; invokes `shutdown.exe /r /fw /t 0` without `/f` (Linux: `systemctl reboot --firmware-setup` as the signed-in user, without `--force`) |
+| `preview_configuration_reboot` | `{ profileId }` | Revision-bound preview of `shutdown.exe /r /t 0` (Linux: `systemctl reboot`); no restart or plan transition |
 | `reboot_after_configuration` | `{ request: { profileId, confirmationToken, unsavedWorkConfirmed } }` | Restart acceptance with `planAdvanced: false`; deliberately omits `/f` |
 | `collect_nvidia_smi_evidence` | `{ profileId }` | Advanced plan plus hashed tool and XML evidence only after every profile GPU has complete BAR1 values, consistent total/used/free, an exact Windows PCI-size match, and a size above 256 MiB |
 | `load_nvidia_game_settings` | none | Driver version, the all-games state, every driver profile with programs and its Resizable BAR state and source, and the earliest intact backup |
@@ -255,7 +258,11 @@ close those tools while switching games.
   write therefore cannot expose a transition that was not durably stored.
 - Legacy analysis and preparation never mutate the selected input bytes.
 - The reboot adapter deliberately omits `/f`; the user must still save work and provide the
-  profile- and revision-bound confirmation token. A request never records reboot completion.
+  profile- and revision-bound confirmation token. A request never records reboot completion. On
+  Linux the request goes to systemd as the signed-in user, never through the root helper and
+  never with `--force` or an inhibitor override, so logind's own rules still apply.
+- On Linux the application process never runs as root. The root helper accepts two requests,
+  write and delete the `NvStrapsReBar` configuration variable, and revalidates the bytes itself.
 - The bridge exposes no generic shell execution, arbitrary download, firmware-variable name, or
   raw flash command.
 
