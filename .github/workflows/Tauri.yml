@@ -146,6 +146,45 @@ jobs:
         shell: pwsh
         run: ./scripts/build-installer.ps1
 
+  # The Windows job cannot compile the Linux machine adapter (src-tauri/src/linux), so this job
+  # lints, tests and builds the same workspace against WebKitGTK. Its tests read fixture trees
+  # that stand in for /sys and /proc; the runner's own hardware and firmware are never touched.
+  native-linux:
+    name: Rust backend and Linux shell
+    needs: scope
+    if: needs.scope.outputs.run-heavy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-uefi
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+      - name: Install the WebKitGTK development packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libgtk-3-dev libsoup-3.0-dev \
+            librsvg2-dev libayatana-appindicator3-dev libxdo-dev libssl-dev
+      - name: Install dependencies
+        run: npm ci
+      - name: Build the UEFI resources required by the Tauri manifest
+        run: npm run build:firmware
+      - name: Lint Rust workspace
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Test Rust workspace
+        run: cargo test --workspace --all-targets
+      - name: Build native application
+        run: npm run tauri:ci
+
   # Drives the real application, not the browser preview, through the guided deployment with retail
   # vendor BIOS images. Only the machine's hardware, firmware variables, reboots and nvidia-smi are
   # simulated (docs/REAL_APP_E2E.md). The archives stay in the Actions cache; no step uploads an
