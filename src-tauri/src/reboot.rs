@@ -7,8 +7,19 @@ use crate::{
     error::{ApiError, BackendError, BackendResult, CommandResult},
 };
 
+#[cfg(not(target_os = "linux"))]
+const REBOOT_COMMAND: &str = "Windows shutdown.exe";
+#[cfg(target_os = "linux")]
+const REBOOT_COMMAND: &str = "systemctl";
+
+#[cfg(not(target_os = "linux"))]
 const FIRMWARE_REBOOT_ARGUMENTS: [&str; 4] = ["/r", "/fw", "/t", "0"];
+#[cfg(target_os = "linux")]
+const FIRMWARE_REBOOT_ARGUMENTS: [&str; 2] = ["reboot", "--firmware-setup"];
+#[cfg(not(target_os = "linux"))]
 const CONFIGURATION_REBOOT_ARGUMENTS: [&str; 3] = ["/r", "/t", "0"];
+#[cfg(target_os = "linux")]
+const CONFIGURATION_REBOOT_ARGUMENTS: [&str; 1] = ["reboot"];
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -180,18 +191,14 @@ fn build_preview(
         profile_id: profile_id.to_owned(),
         active_step,
         confirmation_token: format!("REBOOT-TO-FIRMWARE-{}", suffix.to_ascii_uppercase()),
-        command: "Windows shutdown.exe".into(),
+        command: REBOOT_COMMAND.into(),
         arguments: FIRMWARE_REBOOT_ARGUMENTS
             .iter()
             .map(ToString::to_string)
             .collect(),
         immediate: true,
         force_close_applications: false,
-        warnings: vec![
-            "Save and close all work before confirming; Windows will restart immediately.".into(),
-            "This only opens the firmware user interface. It does not flash firmware or change setup values.".into(),
-            "The command deliberately omits /f so applications are not explicitly force-closed.".into(),
-        ],
+        warnings: firmware_reboot_warnings(),
     })
 }
 
@@ -212,19 +219,51 @@ fn build_configuration_preview(
             suffix.to_ascii_uppercase(),
             plan.revision
         ),
-        command: "Windows shutdown.exe".into(),
+        command: REBOOT_COMMAND.into(),
         arguments: CONFIGURATION_REBOOT_ARGUMENTS
             .iter()
             .map(ToString::to_string)
             .collect(),
         immediate: true,
         force_close_applications: false,
-        warnings: vec![
-            "Save and close all work before confirming; Windows will restart immediately.".into(),
-            "The command deliberately omits /f so applications are not explicitly force-closed.".into(),
-            "Accepting the reboot request does not complete the plan; the next app session must prove a later Windows boot.".into(),
-        ],
+        warnings: configuration_reboot_warnings(),
     })
+}
+
+#[cfg(not(target_os = "linux"))]
+fn firmware_reboot_warnings() -> Vec<String> {
+    vec![
+        "Save and close all work before confirming; Windows will restart immediately.".into(),
+        "This only opens the firmware user interface. It does not flash firmware or change setup values.".into(),
+        "The command deliberately omits /f so applications are not explicitly force-closed.".into(),
+    ]
+}
+
+#[cfg(target_os = "linux")]
+fn firmware_reboot_warnings() -> Vec<String> {
+    vec![
+        "Save and close all work before confirming; the system will restart immediately.".into(),
+        "This only opens the firmware user interface. It does not flash firmware or change setup values.".into(),
+        "The command carries no --force, so systemd still honours shutdown inhibitors and other signed-in users.".into(),
+    ]
+}
+
+#[cfg(not(target_os = "linux"))]
+fn configuration_reboot_warnings() -> Vec<String> {
+    vec![
+        "Save and close all work before confirming; Windows will restart immediately.".into(),
+        "The command deliberately omits /f so applications are not explicitly force-closed.".into(),
+        "Accepting the reboot request does not complete the plan; the next app session must prove a later Windows boot.".into(),
+    ]
+}
+
+#[cfg(target_os = "linux")]
+fn configuration_reboot_warnings() -> Vec<String> {
+    vec![
+        "Save and close all work before confirming; the system will restart immediately.".into(),
+        "The command carries no --force, so systemd still honours shutdown inhibitors and other signed-in users.".into(),
+        "Accepting the reboot request does not complete the plan; the next app session must prove a later boot.".into(),
+    ]
 }
 
 fn validate_confirmation(
@@ -264,8 +303,10 @@ fn validate_configuration_confirmation(
     Ok(())
 }
 
-#[cfg(windows)]
-#[cfg_attr(feature = "simulated-machine", allow(unreachable_code))]
+#[cfg_attr(
+    feature = "simulated-machine",
+    allow(unreachable_code, unused_variables)
+)]
 pub(crate) fn execute_reboot(arguments: &[&str], description: &str) -> BackendResult<()> {
     #[cfg(feature = "simulated-machine")]
     {
@@ -283,32 +324,44 @@ pub(crate) fn execute_reboot(arguments: &[&str], description: &str) -> BackendRe
         return crate::simulated_machine::execute_reboot(kind);
     }
 
-    use std::os::windows::process::CommandExt;
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
 
-    let executable = shutdown_executable()?;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    let status = std::process::Command::new(&executable)
-        .args(arguments)
-        .creation_flags(CREATE_NO_WINDOW)
-        .status()
-        .map_err(|error| {
-            BackendError::Deployment(format!(
-                "failed to launch {}: {error}",
-                executable.display()
-            ))
-        })?;
-    if !status.success() {
-        return Err(BackendError::Deployment(format!(
-            "Windows refused the {description} reboot with exit code {}",
-            status
-                .code()
-                .map_or_else(|| "unknown".into(), |code| code.to_string())
-        )));
+        let executable = shutdown_executable()?;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let status = std::process::Command::new(&executable)
+            .args(arguments)
+            .creation_flags(CREATE_NO_WINDOW)
+            .status()
+            .map_err(|error| {
+                BackendError::Deployment(format!(
+                    "failed to launch {}: {error}",
+                    executable.display()
+                ))
+            })?;
+        if !status.success() {
+            return Err(BackendError::Deployment(format!(
+                "Windows refused the {description} reboot with exit code {}",
+                status
+                    .code()
+                    .map_or_else(|| "unknown".into(), |code| code.to_string())
+            )));
+        }
+        Ok(())
     }
-    Ok(())
+
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux::restart::restart(arguments, description)
+    }
+
+    #[cfg(not(any(windows, target_os = "linux")))]
+    {
+        Err(BackendError::UnsupportedPlatform)
+    }
 }
 
-#[cfg(windows)]
 #[cfg_attr(feature = "simulated-machine", allow(unreachable_code))]
 fn ensure_firmware_reboot_available() -> BackendResult<std::path::PathBuf> {
     #[cfg(feature = "simulated-machine")]
@@ -316,23 +369,34 @@ fn ensure_firmware_reboot_available() -> BackendResult<std::path::PathBuf> {
         return crate::simulated_machine::ensure_reboot_available();
     }
 
-    use windows_sys::Win32::System::SystemInformation::{FirmwareTypeUefi, GetFirmwareType};
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::System::SystemInformation::{FirmwareTypeUefi, GetFirmwareType};
 
-    let mut firmware_type = 0;
-    // SAFETY: firmware_type points to writable storage for the duration of the call.
-    if unsafe { GetFirmwareType(&mut firmware_type) } == 0 {
-        return Err(BackendError::windows("GetFirmwareType"));
-    }
-    if firmware_type != FirmwareTypeUefi {
-        return Err(BackendError::Deployment(
-            "Windows reports legacy BIOS boot; a firmware UI reboot is unavailable".into(),
-        ));
+        let mut firmware_type = 0;
+        // SAFETY: firmware_type points to writable storage for the duration of the call.
+        if unsafe { GetFirmwareType(&mut firmware_type) } == 0 {
+            return Err(BackendError::windows("GetFirmwareType"));
+        }
+        if firmware_type != FirmwareTypeUefi {
+            return Err(BackendError::Deployment(
+                "Windows reports legacy BIOS boot; a firmware UI reboot is unavailable".into(),
+            ));
+        }
+        shutdown_executable()
     }
 
-    shutdown_executable()
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux::restart::ensure_firmware_restart_available(&crate::linux::SystemRoots::host())
+    }
+
+    #[cfg(not(any(windows, target_os = "linux")))]
+    {
+        Err(BackendError::UnsupportedPlatform)
+    }
 }
 
-#[cfg(windows)]
 #[cfg_attr(feature = "simulated-machine", allow(unreachable_code))]
 fn ensure_configuration_reboot_available() -> BackendResult<std::path::PathBuf> {
     #[cfg(feature = "simulated-machine")]
@@ -340,7 +404,20 @@ fn ensure_configuration_reboot_available() -> BackendResult<std::path::PathBuf> 
         return crate::simulated_machine::ensure_reboot_available();
     }
 
-    shutdown_executable()
+    #[cfg(windows)]
+    {
+        shutdown_executable()
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux::restart::systemctl_path()
+    }
+
+    #[cfg(not(any(windows, target_os = "linux")))]
+    {
+        Err(BackendError::UnsupportedPlatform)
+    }
 }
 
 #[cfg(windows)]
@@ -372,21 +449,6 @@ fn shutdown_executable() -> BackendResult<std::path::PathBuf> {
     }
 
     Ok(executable)
-}
-
-#[cfg(not(windows))]
-pub(crate) fn execute_reboot(_arguments: &[&str], _description: &str) -> BackendResult<()> {
-    Err(BackendError::UnsupportedPlatform)
-}
-
-#[cfg(not(windows))]
-fn ensure_firmware_reboot_available() -> BackendResult<std::path::PathBuf> {
-    Err(BackendError::UnsupportedPlatform)
-}
-
-#[cfg(not(windows))]
-fn ensure_configuration_reboot_available() -> BackendResult<std::path::PathBuf> {
-    Err(BackendError::UnsupportedPlatform)
 }
 
 #[cfg(test)]
@@ -501,10 +563,44 @@ mod tests {
                     .as_str()
             )
         );
-        assert_eq!(preview.arguments, ["/r", "/fw", "/t", "0"]);
+        assert_eq!(preview.arguments, FIRMWARE_REBOOT_ARGUMENTS);
         assert!(preview.immediate);
         assert!(!preview.force_close_applications);
         assert!(!preview.arguments.iter().any(|argument| argument == "/f"));
+    }
+
+    #[test]
+    fn linux_restart_arguments_never_force_or_ignore_inhibitors() {
+        const FORBIDDEN: [&str; 8] = [
+            "-f",
+            "--force",
+            "-ff",
+            "-i",
+            "--ignore-inhibitors",
+            "--check-inhibitors=no",
+            "--no-wall",
+            "/f",
+        ];
+        for argument in FIRMWARE_REBOOT_ARGUMENTS
+            .iter()
+            .chain(CONFIGURATION_REBOOT_ARGUMENTS.iter())
+        {
+            assert!(!FORBIDDEN.contains(argument));
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_argument_literals_remain_unchanged() {
+        assert_eq!(FIRMWARE_REBOOT_ARGUMENTS, ["/r", "/fw", "/t", "0"]);
+        assert_eq!(CONFIGURATION_REBOOT_ARGUMENTS, ["/r", "/t", "0"]);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_argument_literals_match_systemctl() {
+        assert_eq!(FIRMWARE_REBOOT_ARGUMENTS, ["reboot", "--firmware-setup"]);
+        assert_eq!(CONFIGURATION_REBOOT_ARGUMENTS, ["reboot"]);
     }
 
     #[test]
@@ -557,7 +653,7 @@ mod tests {
         }
 
         let preview = build_configuration_preview(&profile.profile_id, &plan).unwrap();
-        assert_eq!(preview.arguments, ["/r", "/t", "0"]);
+        assert_eq!(preview.arguments, CONFIGURATION_REBOOT_ARGUMENTS);
         assert!(!preview.force_close_applications);
         assert!(!preview.arguments.iter().any(|argument| argument == "/f"));
         assert!(

@@ -24,10 +24,13 @@ impl SystemRoots {
 
 pub(crate) mod dmi;
 pub(crate) mod efivars;
+pub(crate) mod helper;
 #[cfg_attr(feature = "simulated-machine", allow(dead_code))]
 pub(crate) mod nvidia_smi;
 pub(crate) mod pci;
 pub(crate) mod process;
+pub(crate) mod restart;
+pub(crate) mod trusted;
 
 #[cfg(test)]
 pub(super) mod tests {

@@ -32,8 +32,7 @@ pub enum BackendError {
     Deployment(String),
     #[error("application state could not be locked")]
     StatePoisoned,
-    #[cfg_attr(not(windows), allow(dead_code))]
-    #[error("failed to relaunch with administrator privileges: {0}")]
+    #[error("administrator rights could not be obtained: {0}")]
     Elevation(String),
     #[error("settings snapshot failed: {0}")]
     SettingsSnapshot(String),

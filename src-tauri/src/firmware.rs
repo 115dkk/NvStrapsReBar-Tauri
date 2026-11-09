@@ -23,7 +23,9 @@ pub fn inspect_access() -> FirmwareAccess {
 
     #[cfg(target_os = "linux")]
     {
-        crate::linux::efivars::inspect_access(&crate::linux::SystemRoots::host())
+        let mut access = crate::linux::efivars::inspect_access(&crate::linux::SystemRoots::host());
+        access.is_elevated |= crate::linux::helper::session_active();
+        access
     }
 
     #[cfg(not(any(windows, target_os = "linux")))]
@@ -72,26 +74,53 @@ pub fn write_variable(name: &'static str, value: &[u8]) -> BackendResult<()> {
         windows_impl::write_variable(name, value)
     }
 
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    {
+        if name != CONFIG_VARIABLE_NAME {
+            return Err(BackendError::FirmwareUnavailable {
+                name,
+                reason: "only the NvStrapsReBar configuration variable can be written".into(),
+            });
+        }
+        crate::linux::helper::write_configuration(value)
+    }
+
+    #[cfg(not(any(windows, target_os = "linux")))]
     {
         let _ = (name, value);
         Err(BackendError::UnsupportedPlatform)
     }
 }
 
+/// What a successful elevation request did.
+pub enum ElevationOutcome {
+    /// An elevated copy was started; this process must exit (Windows).
+    #[cfg_attr(not(windows), allow(dead_code))]
+    Relaunched,
+    /// This process can now make privileged changes and keeps running (Linux).
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    Granted,
+}
+
 #[cfg_attr(feature = "simulated-machine", allow(unreachable_code))]
-pub fn relaunch_elevated() -> BackendResult<()> {
+pub fn request_elevation() -> BackendResult<ElevationOutcome> {
     #[cfg(feature = "simulated-machine")]
     {
-        return crate::simulated_machine::relaunch_elevated();
+        return crate::simulated_machine::relaunch_elevated()
+            .map(|()| ElevationOutcome::Relaunched);
     }
 
     #[cfg(windows)]
     {
-        windows_impl::relaunch_elevated()
+        windows_impl::relaunch_elevated().map(|()| ElevationOutcome::Relaunched)
     }
 
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux::helper::start_session().map(|()| ElevationOutcome::Granted)
+    }
+
+    #[cfg(not(any(windows, target_os = "linux")))]
     {
         Err(BackendError::UnsupportedPlatform)
     }
