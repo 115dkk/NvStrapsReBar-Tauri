@@ -21,7 +21,12 @@ pub fn inspect_access() -> FirmwareAccess {
         windows_impl::inspect_access()
     }
 
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux::efivars::inspect_access(&crate::linux::SystemRoots::host())
+    }
+
+    #[cfg(not(any(windows, target_os = "linux")))]
     {
         FirmwareAccess {
             is_uefi: false,
@@ -43,7 +48,12 @@ pub fn read_variable(name: &'static str) -> BackendResult<Option<Vec<u8>>> {
         windows_impl::read_variable(name)
     }
 
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux::efivars::read_variable(&crate::linux::SystemRoots::host(), name)
+    }
+
+    #[cfg(not(any(windows, target_os = "linux")))]
     {
         let _ = name;
         Err(BackendError::UnsupportedPlatform)

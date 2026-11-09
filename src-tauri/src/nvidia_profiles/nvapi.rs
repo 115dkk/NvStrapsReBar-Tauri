@@ -2,6 +2,10 @@
 //!
 //! Interface IDs and struct layouts come from NVIDIA's NVAPI SDK (`nvapi_interface.h`, `nvapi.h`,
 //! MIT, Copyright (c) 2019-2026 NVIDIA CORPORATION & AFFILIATES); see THIRD_PARTY_NOTICES.md.
+//!
+//! Only 64-bit Windows loads the library. Other targets still compile the bindings, because the
+//! stand-in tests check the C struct layouts on every host, but nothing there calls the resolver.
+#![cfg_attr(not(all(windows, target_arch = "x86_64")), allow(dead_code))]
 
 use std::{
     ffi::c_void,

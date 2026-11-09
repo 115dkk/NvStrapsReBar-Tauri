@@ -321,9 +321,9 @@ mod tests {
         assert!(unknown_value["motherboardNativeResizableBar"]["catalogId"].is_null());
     }
 
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     #[test]
-    #[ignore = "read-only hardware support assessment of the current Windows machine"]
+    #[ignore = "read-only hardware support assessment of the current machine"]
     fn current_machine_hardware_support_assessment_reports_observed_identity() {
         let devices = crate::devices::enumerate_gpus()
             .expect("read-only NVIDIA GPU inventory should be available");

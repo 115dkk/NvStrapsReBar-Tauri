@@ -171,19 +171,30 @@ fn nvidia_smi_path() -> BackendResult<PathBuf> {
     Ok(path)
 }
 
-#[cfg(all(not(feature = "simulated-machine"), not(windows)))]
+#[cfg(all(not(feature = "simulated-machine"), target_os = "linux"))]
+fn nvidia_smi_path() -> BackendResult<PathBuf> {
+    crate::linux::nvidia_smi::nvidia_smi_path()
+}
+
+#[cfg(all(
+    not(feature = "simulated-machine"),
+    not(any(windows, target_os = "linux"))
+))]
 fn nvidia_smi_path() -> BackendResult<PathBuf> {
     Err(BackendError::UnsupportedPlatform)
 }
 
-#[cfg(all(not(feature = "simulated-machine"), windows))]
+#[cfg(all(not(feature = "simulated-machine"), any(windows, target_os = "linux")))]
 fn run_nvidia_smi(executable: &std::path::Path) -> BackendResult<Vec<u8>> {
-    use std::os::windows::process::CommandExt;
-
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    let mut child = Command::new(executable)
+    let mut command = Command::new(executable);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    let mut child = command
         .args(NVIDIA_SMI_ARGUMENTS)
-        .creation_flags(CREATE_NO_WINDOW)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -236,7 +247,10 @@ fn run_nvidia_smi(executable: &std::path::Path) -> BackendResult<Vec<u8>> {
     Ok(stdout)
 }
 
-#[cfg(all(not(feature = "simulated-machine"), not(windows)))]
+#[cfg(all(
+    not(feature = "simulated-machine"),
+    not(any(windows, target_os = "linux"))
+))]
 fn run_nvidia_smi(_executable: &std::path::Path) -> BackendResult<Vec<u8>> {
     Err(BackendError::UnsupportedPlatform)
 }
@@ -279,7 +293,7 @@ mod tests {
         assert!(parse_pci_bus_id("00000000:01:20.0").is_err());
     }
 
-    #[cfg(all(windows, not(feature = "simulated-machine")))]
+    #[cfg(all(any(windows, target_os = "linux"), not(feature = "simulated-machine")))]
     #[test]
     #[ignore = "read-only hardware smoke test for a machine with an NVIDIA driver"]
     fn installed_nvidia_smi_xml_matches_the_guarded_contract() {

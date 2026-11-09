@@ -83,7 +83,7 @@ pub struct PlatformInfo {
     pub supported: bool,
     pub uefi: bool,
     pub elevated: bool,
-    /// Wall-clock time of the current Windows boot. The guided screens compare it with the time
+    /// Wall-clock time of the current boot. The guided screens compare it with the time
     /// a deployment package was saved, so a driver left by an earlier install is not mistaken for
     /// the file the user is about to flash.
     pub booted_at_unix_ms: Option<String>,
@@ -295,7 +295,7 @@ fn refresh_snapshot(state: &AppState) -> BackendResult<SystemSnapshot> {
     if !access.is_uefi {
         notices.push(Notice {
             kind: "error",
-            message: "Windows is not running in UEFI mode; firmware variables are unavailable."
+            message: "The system was not started in UEFI mode; firmware variables are unavailable."
                 .into(),
         });
     } else if access.privilege_enabled {
@@ -386,7 +386,7 @@ fn refresh_snapshot(state: &AppState) -> BackendResult<SystemSnapshot> {
         platform: PlatformInfo {
             operating_system: std::env::consts::OS,
             architecture: std::env::consts::ARCH,
-            supported: cfg!(windows),
+            supported: cfg!(any(windows, target_os = "linux")),
             uefi: access.is_uefi,
             elevated: access.is_elevated,
             booted_at_unix_ms: current_boot_time_unix_ms()

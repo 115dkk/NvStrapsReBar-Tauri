@@ -1,8 +1,11 @@
 use serde::Serialize;
 
+#[cfg(windows)]
 use nvstraps_core::registry::{NVIDIA_VENDOR_ID, automatic_bar_size, is_turing, registry_bar_size};
 
-use crate::error::{BackendError, BackendResult};
+#[cfg(not(target_os = "linux"))]
+use crate::error::BackendError;
+use crate::error::BackendResult;
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -54,7 +57,12 @@ pub fn enumerate_gpus() -> BackendResult<Vec<GpuDevice>> {
         windows_impl::enumerate_gpus()
     }
 
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux::pci::enumerate_gpus(&crate::linux::SystemRoots::host())
+    }
+
+    #[cfg(not(any(windows, target_os = "linux")))]
     {
         Err(BackendError::UnsupportedPlatform)
     }
