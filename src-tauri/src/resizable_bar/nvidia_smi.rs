@@ -117,6 +117,22 @@ pub(crate) fn parse_memory_bytes(value: &str) -> BackendResult<Option<u64>> {
         .ok_or_else(|| BackendError::Deployment("nvidia-smi memory value overflowed".into()))
 }
 
+/// PCI domain (segment) of an nvidia-smi bus ID such as `00000000:01:00.0`; a bus ID without one
+/// is in domain 0.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub(super) fn parse_pci_domain(value: &str) -> BackendResult<u32> {
+    let parts: Vec<_> = value.trim().split(':').collect();
+    match parts.as_slice() {
+        [_, _] => Ok(0),
+        [domain, _, _] => u32::from_str_radix(domain, 16).map_err(|_| {
+            BackendError::Deployment(format!("nvidia-smi PCI bus ID is malformed: {value}"))
+        }),
+        _ => Err(BackendError::Deployment(format!(
+            "nvidia-smi PCI bus ID is malformed: {value}"
+        ))),
+    }
+}
+
 pub(super) fn parse_pci_bus_id(value: &str) -> BackendResult<(u8, u8, u8)> {
     let parts: Vec<_> = value.trim().split(':').collect();
     if parts.len() < 2 {
@@ -291,6 +307,15 @@ mod tests {
         assert!(parse_memory_bytes("2 GB").is_err());
         assert_eq!(parse_pci_bus_id("00000000:01:00.0").unwrap(), (1, 0, 0));
         assert!(parse_pci_bus_id("00000000:01:20.0").is_err());
+    }
+
+    #[test]
+    fn pci_domain_is_read_from_the_bus_id() {
+        assert_eq!(parse_pci_domain("00000000:01:00.0").unwrap(), 0);
+        assert_eq!(parse_pci_domain("00000001:01:00.0").unwrap(), 1);
+        assert_eq!(parse_pci_domain("01:00.0").unwrap(), 0);
+        assert!(parse_pci_domain("nope:01:00.0").is_err());
+        assert!(parse_pci_domain("01.00.0").is_err());
     }
 
     #[cfg(all(any(windows, target_os = "linux"), not(feature = "simulated-machine")))]

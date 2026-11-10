@@ -58,6 +58,13 @@ fn build_evidence(
     let mut warnings = Vec::new();
     let mut observations = Vec::with_capacity(parsed.gpu.len());
     for gpu in parsed.gpu {
+        // The Linux inventory holds PCI domain 0 only, because the configuration format cannot
+        // name another. A GPU the driver reports elsewhere is not one of ours, and without this
+        // it would be taken for the domain 0 GPU at the same bus address.
+        #[cfg(target_os = "linux")]
+        if super::nvidia_smi::parse_pci_domain(&gpu.pci.pci_bus_id)? != 0 {
+            continue;
+        }
         let (bus, device, function) = parse_pci_bus_id(&gpu.pci.pci_bus_id)?;
         let windows_gpu = devices.iter().find(|candidate| {
             candidate.bus == bus && candidate.device == device && candidate.function == function
@@ -688,6 +695,20 @@ mod tests {
         assert!(
             matches!(result, Err(BackendError::Deployment(message)) if message.contains("duplicate observations"))
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_gpu_outside_pci_domain_zero_is_not_taken_for_the_one_at_the_same_address() {
+        let xml = r#"<nvidia_smi_log>
+  <timestamp>now</timestamp><driver_version>test</driver_version>
+  <gpu><product_name>RTX A</product_name><pci><pci_bus_id>00000000:01:00.0</pci_bus_id></pci><fb_memory_usage><total>8 GiB</total><used>0 B</used><free>8 GiB</free></fb_memory_usage><bar1_memory_usage><total>8 GiB</total><used>0 B</used><free>8 GiB</free></bar1_memory_usage></gpu>
+  <gpu><product_name>RTX B</product_name><pci><pci_bus_id>00000001:01:00.0</pci_bus_id></pci><fb_memory_usage><total>8 GiB</total><used>0 B</used><free>8 GiB</free></fb_memory_usage><bar1_memory_usage><total>256 MiB</total><used>0 B</used><free>256 MiB</free></bar1_memory_usage></gpu>
+</nvidia_smi_log>"#;
+        let evidence =
+            build_current_inventory_evidence(capture(xml), &[test_gpu(1, 8 << 30)]).unwrap();
+        assert_eq!(evidence.gpus.len(), 1);
+        assert_eq!(evidence.gpus[0].product_name, "RTX A");
     }
 
     #[test]
