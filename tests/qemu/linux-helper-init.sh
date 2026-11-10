@@ -31,7 +31,7 @@ case "$stage" in
 1)
 	say "hello=$(: | /bin/nvstraps-rebar-helper)"
 	say "write-first=$(write 1 "$SAMPLE_FIRST")"
-	say "config=$(dump "$CONFIG")"
+	say "config-after-write=$(dump "$CONFIG")"
 	say "user-read=$(su user -c "hexdump -v -e '1/1 \"%02x\"' $CONFIG")"
 	if su user -c "printf x > $CONFIG" 2>/dev/null; then
 		say "user-write=accepted"
@@ -43,19 +43,20 @@ case "$stage" in
 	else
 		say "user-delete=refused"
 	fi
-	say "config=$(dump "$CONFIG")"
+	say "config-after-user-attempts=$(dump "$CONFIG")"
 	;;
 2)
 	# The variable written in stage 1 is immutable now; each of these has to clear that first.
 	say "write-longer=$(write 2 "$SAMPLE_LONGER")"
-	say "config=$(dump "$CONFIG")"
+	say "config-after-longer=$(dump "$CONFIG")"
 	say "write-shorter=$(write 3 "$SAMPLE_SHORTER")"
-	say "config=$(dump "$CONFIG")"
+	say "config-after-shorter=$(dump "$CONFIG")"
 	say "write-invalid=$(write 4 "$SAMPLE_INVALID")"
-	say "config=$(dump "$CONFIG")"
+	say "config-after-invalid=$(dump "$CONFIG")"
 	say "delete=$(remove 5)"
-	say "config=$(dump "$CONFIG")"
+	say "config-after-delete=$(dump "$CONFIG")"
 	say "delete-again=$(remove 6)"
+	say "config-after-delete-again=$(dump "$CONFIG")"
 	;;
 3) ;;
 *)

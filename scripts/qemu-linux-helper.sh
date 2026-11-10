@@ -156,21 +156,24 @@ boot 1
 expect 1 "stage 1 begins: status=${STATUS_UNCONFIGURED} config=absent"
 expect 1 'hello={"hello":{"protocol":1,"privileged":true}}'
 expect 1 'write-first={"id":1,"ok":true}'
-expect 1 "config=07000000${SAMPLE_FIRST}"
+expect 1 "config-after-write=07000000${SAMPLE_FIRST}"
 expect 1 "user-read=07000000${SAMPLE_FIRST}"
 expect 1 "user-write=refused"
 expect 1 "user-delete=refused"
+expect 1 "config-after-user-attempts=07000000${SAMPLE_FIRST}"
 
 boot 2
 expect 2 "stage 2 begins: status=${STATUS_HOOK_INSTALLED} config=07000000${SAMPLE_FIRST}"
 expect 2 'write-longer={"id":2,"ok":true}'
-expect 2 "config=07000000${SAMPLE_LONGER}"
+expect 2 "config-after-longer=07000000${SAMPLE_LONGER}"
 expect 2 'write-shorter={"id":3,"ok":true}'
-expect 2 "config=07000000${SAMPLE_SHORTER}"
+expect 2 "config-after-shorter=07000000${SAMPLE_SHORTER}"
 expect 2 'write-invalid={"id":4,"ok":false,"error":{"code":"invalidConfiguration","message":"too many PCI bridge records"}}'
+expect 2 "config-after-invalid=07000000${SAMPLE_SHORTER}"
 expect 2 'delete={"id":5,"ok":true}'
-expect 2 "config=absent"
+expect 2 "config-after-delete=absent"
 expect 2 'delete-again={"id":6,"ok":true}'
+expect 2 "config-after-delete-again=absent"
 
 boot 3
 expect 3 "stage 3 begins: status=${STATUS_UNCONFIGURED} config=absent"
