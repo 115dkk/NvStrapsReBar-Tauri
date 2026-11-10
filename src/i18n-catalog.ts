@@ -1,3 +1,12 @@
+/** Text of one message in both locales. */
+export type MessageText = { readonly en: string; readonly ko: string };
+/**
+ * A catalog entry: the shared text, and optionally the text shown instead on Linux. An override
+ * carries both locales and the same `{placeholders}` as the shared text (src/i18n.test.ts).
+ */
+export type MessageEntry = MessageText & { readonly linux?: MessageText };
+export type MessageCatalog = Readonly<Record<string, MessageEntry>>;
+
 export const messages = {
         "ui.gpuObservedState": { en: "{gpu}: {state} ({size})", ko: "{gpu}: {state} ({size})" },
         "ui.overviewUefiRequired": { en: "UEFI startup is required", ko: "UEFI 모드로 부팅해야 합니다" },
@@ -1121,7 +1130,7 @@ export const messages = {
         "ui.externalErrorNoReceipt": { en: "The trial has not run yet.", ko: "아직 시험 실행을 하지 않았습니다." },
         "ui.externalErrorMediumGone": { en: "The USB drive or EFI system partition can no longer be read.", ko: "USB 드라이브나 EFI 시스템 파티션을 더 이상 읽을 수 없습니다." },
         "ui.externalErrorOther": { en: "See the details below.", ko: "아래에서 자세한 내용을 확인하세요." },
-} as const;
+} as const satisfies MessageCatalog;
 
 export type MessageId = keyof typeof messages;
 export type MessagePrimitive = string | number;

@@ -25,6 +25,7 @@ import {
         type CheckState,
 } from "./ui";
 import { GpuSizes } from "./home";
+import { pageAvailable } from "./routing";
 
 const preparationRows: { id: StepId; label: StaticMessageId }[] = [
         { id: "verifyProfile", label: "ui.makingRowRecord" },
@@ -40,13 +41,13 @@ const firmwareFileFailure = (ctx: InstallContext) =>
         ctx.view.activity?.tone === "error" && ctx.view.activity.message.id.startsWith("ui.firmwareInjection");
 
 export const ActivityNotice = ({ ctx }: { ctx: InstallContext }) => {
-        const { t, locale, view } = ctx;
+        const { t, locale, os, view } = ctx;
         if (view.activity?.tone !== "error" || firmwareFileFailure(ctx)) return null;
-        return <Notice title={t("ui.taskDidNotFinish")}>{translateMessage(locale, view.activity.message)}</Notice>;
+        return <Notice title={t("ui.taskDidNotFinish")}>{translateMessage(locale, view.activity.message, os)}</Notice>;
 };
 
 export const Making = ({ ctx }: { ctx: InstallContext }) => {
-        const { t, locale, view, commands, busy, navigation } = ctx;
+        const { t, locale, os, view, commands, busy, navigation } = ctx;
         const attempted = useRef<string>("");
         const plan = view.plan!;
         const failed = firmwareFileFailure(ctx);
@@ -67,7 +68,7 @@ export const Making = ({ ctx }: { ctx: InstallContext }) => {
                                 bar={<ActionBar hint={t("ui.makingFailedHint")} primary={{ label: t("ui.chooseAnotherFile"), icon: "folder", disabled: busy, onClick: () => { navigation.startNewPreparation(); commands.chooseFirmware(); } }} />}
                         >
                                 {view.firmware && <FileCard name={view.firmware.fileName} />}
-                                <Notice title={translateMessage(locale, view.activity!.message)}>{t("ui.makingFailedDetail")}</Notice>
+                                <Notice title={translateMessage(locale, view.activity!.message, os)}>{t("ui.makingFailedDetail")}</Notice>
                                 <Facts><Fact icon="info" title={t("ui.makingFailedOtherVersion")} detail={t("ui.makingFailedOtherVersionDetail")} /></Facts>
                         </TaskPanel>
                 );
@@ -262,7 +263,7 @@ export const CheckingDriver = ({ ctx }: { ctx: InstallContext }) => {
 };
 
 export const Missing = ({ ctx }: { ctx: InstallContext }) => {
-        const { t, locale, view, commands, busy, navigation, config, rebootButton } = ctx;
+        const { t, locale, os, view, commands, busy, navigation, config, rebootButton } = ctx;
         const canRestart = view.activeStep?.id === "flashWithVendorRoute" || view.activeStep?.id === "configureFirmwareSetup";
         const recheck = () => {
                 if (canRestart) void config.load(true);
@@ -288,7 +289,7 @@ export const Missing = ({ ctx }: { ctx: InstallContext }) => {
                 >
                         <ActivityNotice ctx={ctx} />
                         <ul className="nv-checklist"><Check state="waiting" label={t("ui.driverRunState")} word={t("ui.checkWordNotFound")} /></ul>
-                        {view.autoCheck?.status === "failed" && view.autoCheck.message && <p className="nv-supporting">{translateMessage(locale, view.autoCheck.message)}</p>}
+                        {view.autoCheck?.status === "failed" && view.autoCheck.message && <p className="nv-supporting">{translateMessage(locale, view.autoCheck.message, os)}</p>}
                         <section className="nv-group" aria-labelledby="try">
                                 <h2 className="nv-section" id="try">{t("ui.thingsToCheck")}</h2>
                                 <Steps>
@@ -326,7 +327,7 @@ export const AdminNeeded = ({ ctx }: { ctx: InstallContext }) => {
 
 /** NvStrapsReBar ran in this boot, but recording the check failed (a changed PC, a moved plan). */
 export const CheckFailed = ({ ctx }: { ctx: InstallContext }) => {
-        const { t, locale, view, commands, busy } = ctx;
+        const { t, locale, os, view, commands, busy } = ctx;
         return (
                 <TaskPanel
                         label={t("ui.stageLabelInstall")}
@@ -343,7 +344,7 @@ export const CheckFailed = ({ ctx }: { ctx: InstallContext }) => {
                 >
                         <ActivityNotice ctx={ctx} />
                         <ul className="nv-checklist"><Check state="done" label={t("ui.driverRanThisBoot")} word={t("ui.checkWordConfirmed")} /></ul>
-                        {view.autoCheck?.status === "failed" && view.autoCheck.message && <Notice title={t("ui.taskDidNotFinish")}>{translateMessage(locale, view.autoCheck.message)}</Notice>}
+                        {view.autoCheck?.status === "failed" && view.autoCheck.message && <Notice title={t("ui.taskDidNotFinish")}>{translateMessage(locale, view.autoCheck.message, os)}</Notice>}
                 </TaskPanel>
         );
 };
@@ -419,7 +420,7 @@ const RecommendedSizes = ({ ctx }: { ctx: InstallContext }) => {
 };
 
 export const TurnOn = ({ ctx }: { ctx: InstallContext }) => {
-        const { t, locale, view, commands, busy } = ctx;
+        const { t, locale, os, view, commands, busy } = ctx;
         const ready = view.recommendationStatus === "ready" && Boolean(view.configRecommendation);
         const failed = view.recommendationStatus === "error";
         return (
@@ -439,7 +440,7 @@ export const TurnOn = ({ ctx }: { ctx: InstallContext }) => {
                         {view.recommendationStatus !== "error" && <ActivityNotice ctx={ctx} />}
                         <Result title={t("ui.driverRunConfirmed")} detail={t("ui.driverRunConfirmedDetail")} />
                         {view.recommendationStatus === "error" && view.recommendationError && (
-                                <Notice title={t("ui.recommendationFailed")}>{translateMessage(locale, view.recommendationError)}</Notice>
+                                <Notice title={t("ui.recommendationFailed")}>{translateMessage(locale, view.recommendationError, os)}</Notice>
                         )}
                         <RecommendedSizes ctx={ctx} />
                         <p className="nv-body nv-muted">{t("ui.turnOnAppliesAfterRestart")}</p>
@@ -473,7 +474,7 @@ export const RestartAfterSave = ({ ctx }: { ctx: InstallContext }) => {
 };
 
 export const CheckingResult = ({ ctx }: { ctx: InstallContext }) => {
-        const { t, locale, view, commands, busy } = ctx;
+        const { t, locale, os, view, commands, busy } = ctx;
         const failed = view.autoCheck?.stepId === "verifyResizableBar" && view.autoCheck.status === "failed";
         return (
                 <TaskPanel
@@ -487,13 +488,13 @@ export const CheckingResult = ({ ctx }: { ctx: InstallContext }) => {
                                 <Check state="done" label={t("ui.resultRowRestarted")} word={t("ui.checkWordAuto")} />
                                 <Check state={failed ? "alert" : "running"} label={t("ui.resultRowBar")} word={t(failed ? "ui.checkWordFailed" : "ui.checkWordChecking")} />
                         </ul>
-                        {failed && view.autoCheck?.message && <Notice title={t("ui.resultCheckFailedNotice")}>{translateMessage(locale, view.autoCheck.message)}</Notice>}
+                        {failed && view.autoCheck?.message && <Notice title={t("ui.resultCheckFailedNotice")}>{translateMessage(locale, view.autoCheck.message, os)}</Notice>}
                 </TaskPanel>
         );
 };
 
 export const Done = ({ ctx }: { ctx: InstallContext }) => {
-        const { t, view, config, navigation } = ctx;
+        const { t, os, view, config, navigation } = ctx;
         const evidence = view.barEvidence?.gpus.find((gpu) => gpu.matchedProfileGpu) ?? view.barEvidence?.gpus[0];
         const observed = config.rebarStatus.gpus.find((row) => row.gpu.state === "expanded")?.gpu;
         const size = evidence?.bar1TotalBytes ?? observed?.bar1TotalBytes ?? null;
@@ -517,12 +518,16 @@ export const Done = ({ ctx }: { ctx: InstallContext }) => {
                                 />
                         )}
                         {driverVersion && <p className="nv-supporting">{t("ui.doneSizeSource", { version: driverVersion })}</p>}
-                        <hr className="nv-divider" />
-                        <section className="nv-group" aria-labelledby="games">
-                                <h2 className="nv-section" id="games">{t("ui.doneGamesTitle")}</h2>
-                                <p className="nv-body nv-muted">{t("ui.gamesExplanation")}</p>
-                                <ul className="nv-rows"><ListRow icon="game" title={t("ui.enablePerGame")} detail={t("ui.doneGamesRowDetail")} onClick={() => navigation.go("games")} /></ul>
-                        </section>
+                        {pageAvailable("games", os) && (
+                                <>
+                                        <hr className="nv-divider" />
+                                        <section className="nv-group" aria-labelledby="games">
+                                                <h2 className="nv-section" id="games">{t("ui.doneGamesTitle")}</h2>
+                                                <p className="nv-body nv-muted">{t("ui.gamesExplanation")}</p>
+                                                <ul className="nv-rows"><ListRow icon="game" title={t("ui.enablePerGame")} detail={t("ui.doneGamesRowDetail")} onClick={() => navigation.go("games")} /></ul>
+                                        </section>
+                                </>
+                        )}
                 </TaskPanel>
         );
 };

@@ -1,13 +1,36 @@
 import { describe, expect, it } from "vitest";
-import { messages } from "./i18n-catalog";
+import { messages, type MessageCatalog } from "./i18n-catalog";
 import {
         formatGpuCountLabel,
         formatNumber,
+        messageTemplate,
         resolveLocale,
         translate,
+        translateMessage,
         messageIds,
 } from "./i18n";
 import { stepTitleIds } from "./deployment-workspace/messages";
+
+const placeholdersOf = (text: string) =>
+        [...text.matchAll(/\{([A-Za-z][A-Za-z0-9]*)\}/g)].map((match) => match[1]).sort();
+
+/** Every Linux override carries both locales and the same placeholders as its shared text. */
+const expectValidLinuxOverrides = (catalog: MessageCatalog) => {
+        for (const [id, entry] of Object.entries(catalog)) {
+                if (!entry.linux) continue;
+                for (const locale of ["en", "ko"] as const) {
+                        expect(typeof entry.linux[locale], `${id} linux.${locale}`).toBe("string");
+                        expect(entry.linux[locale].trim(), `${id} linux.${locale}`).not.toBe("");
+                        expect(placeholdersOf(entry.linux[locale]), `${id} linux.${locale}`).toEqual(placeholdersOf(entry[locale]));
+                }
+        }
+};
+
+const linuxFixture: MessageCatalog = {
+        "ui.fixtureRestart": { en: "Restart Windows", ko: "Windows 다시 시작", linux: { en: "Restart Linux", ko: "Linux 다시 시작" } },
+        "ui.fixtureSaved": { en: "Saved {file}", ko: "{file} 저장", linux: { en: "Saved {file} on Linux", ko: "Linux에 {file} 저장" } },
+        "ui.fixtureShared": { en: "Save", ko: "저장" },
+};
 
 const guardedSources = import.meta.glob(
         [
@@ -138,6 +161,35 @@ describe("i18n locale policy", () => {
                                 placeholders(messages[id].en),
                         );
                 }
+        });
+
+        it("keeps every Linux override complete and its placeholders identical to the shared text", () => {
+                expectValidLinuxOverrides(messages);
+                expect(() => expectValidLinuxOverrides(linuxFixture)).not.toThrow();
+                expect(() =>
+                        expectValidLinuxOverrides({
+                                "ui.fixtureBroken": { en: "Saved {file}", ko: "{file} 저장", linux: { en: "Saved", ko: "{file} 저장" } },
+                        }),
+                ).toThrow();
+                expect(() =>
+                        expectValidLinuxOverrides({
+                                "ui.fixtureHalf": { en: "Restart", ko: "다시 시작", linux: { en: "Restart Linux", ko: " " } },
+                        }),
+                ).toThrow();
+        });
+
+        it("uses a Linux override only on Linux and falls back to the shared text", () => {
+                expect(messageTemplate(linuxFixture, "ui.fixtureRestart", "en", "linux")).toBe("Restart Linux");
+                expect(messageTemplate(linuxFixture, "ui.fixtureRestart", "ko", "linux")).toBe("Linux 다시 시작");
+                expect(messageTemplate(linuxFixture, "ui.fixtureRestart", "en", "windows")).toBe("Restart Windows");
+                expect(messageTemplate(linuxFixture, "ui.fixtureRestart", "ko")).toBe("Windows 다시 시작");
+                expect(messageTemplate(linuxFixture, "ui.fixtureShared", "en", "linux")).toBe("Save");
+                expect(messageTemplate(linuxFixture, "ui.fixtureShared", "ko", "linux")).toBe("저장");
+                // The real catalog without overrides reads the same on both systems.
+                expect(translate("en", "ui.tryAgain", undefined, "linux")).toBe(translate("en", "ui.tryAgain"));
+                expect(translate("ko", "ui.ruleMatchScope", { rule: 3 }, "linux")).toBe("3번 규칙 일치 범위");
+                expect(translateMessage("ko", { id: "ui.ruleMatchScope", values: { rule: 3 } }, "linux")).toBe("3번 규칙 일치 범위");
+                expect(translateMessage("en", { id: "ui.tryAgain" })).toBe("Try again");
         });
 
         it("keeps everyday settings copy free of implementation and safety narration", () => {

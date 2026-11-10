@@ -236,8 +236,17 @@ const notObservedPreviewInspection: ResizableBarInspection = {
                 },
         ],
 };
+/**
+ * The preview reports Windows unless the page address carries `?os=linux`. The address survives a
+ * reload and composes with the preview state kept in session storage.
+ */
+export const previewOperatingSystem = (): "windows" | "linux" => {
+        if (typeof location === "undefined") return "windows";
+        return new URLSearchParams(location.search).get("os") === "linux" ? "linux" : "windows";
+};
 const currentPreviewSnapshot = (): SystemSnapshot => {
         const value = structuredClone(previewSnapshot);
+        value.platform.operatingSystem = previewOperatingSystem();
         // A simulated restart moves the boot time, as a real restart does.
         if (typeof sessionStorage !== "undefined")
                 value.platform.bootedAtUnixMs = sessionStorage.getItem(PREVIEW_BOOTED_AT_KEY) ?? PREVIEW_FIRST_BOOT_UNIX_MS;

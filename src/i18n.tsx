@@ -1,11 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
         messages,
+        type MessageCatalog,
         type MessageDescriptor,
         type MessageId,
         type MessageParameters,
         type MessageValues,
 } from "./i18n-catalog";
+import type { HostOs } from "./platform";
 
 export type Locale = "en" | "ko";
 export const LANGUAGE_STORAGE_KEY = "nvstraps-rebar.ui.language";
@@ -42,65 +44,76 @@ export function formatGpuCountLabel(locale: Locale, value: number): string {
         if (locale === "ko") return "감지된 NVIDIA GPU";
         return `NVIDIA GPU${value === 1 ? "" : "s"}`;
 }
+/**
+ * The text for one message: the Linux override on Linux when the entry has one, otherwise the
+ * shared text. Takes the catalog so tests can check the rule without real overrides.
+ */
+export function messageTemplate(
+        catalog: MessageCatalog,
+        id: string,
+        locale: Locale,
+        os: HostOs = "windows",
+): string {
+        const entry = catalog[id];
+        return (os === "linux" ? entry.linux?.[locale] : undefined) ?? entry[locale];
+}
+
+const fill = (template: string, values: MessageValues | undefined) =>
+        values
+                ? template.replace(/\{([A-Za-z][A-Za-z0-9]*)\}/g, (token, key: string) =>
+                          Object.prototype.hasOwnProperty.call(values, key)
+                                  ? String(values[key])
+                                  : token,
+                  )
+                : template;
+
 export function translate<Id extends keyof MessageParameters>(
         locale: Locale,
         id: Id,
         values: MessageParameters[Id],
+        os?: HostOs,
 ): string;
 export function translate<Id extends Exclude<MessageId, keyof MessageParameters>>(
         locale: Locale,
         id: Id,
+        values?: undefined,
+        os?: HostOs,
 ): string;
 export function translate(
         locale: Locale,
         id: MessageId,
         values?: MessageValues,
+        os: HostOs = "windows",
 ): string {
-        const template = messages[id][locale];
-        if (!values) return template;
-        return template.replace(/\{([A-Za-z][A-Za-z0-9]*)\}/g, (token, key: string) =>
-                Object.prototype.hasOwnProperty.call(values, key)
-                        ? String(values[key])
-                        : token,
-        );
+        return fill(messageTemplate(messages, id, locale, os), values);
 }
 
 export const translateMessage = (
         locale: Locale,
         descriptor: MessageDescriptor,
+        os: HostOs = "windows",
 ): string => {
-        const template = messages[descriptor.id][locale];
-        if (!("values" in descriptor) || !descriptor.values) return template;
-        const values: MessageValues = descriptor.values;
-        return template.replace(/\{([A-Za-z][A-Za-z0-9]*)\}/g, (token, key: string) =>
-                Object.prototype.hasOwnProperty.call(values, key)
-                        ? String(values[key])
-                        : token,
-        );
+        const values: MessageValues | undefined = "values" in descriptor ? descriptor.values : undefined;
+        return fill(messageTemplate(messages, descriptor.id, locale, os), values);
 };
 
 type TranslateFunction = {
         <Id extends keyof MessageParameters>(id: Id, values: MessageParameters[Id]): string;
         <Id extends Exclude<MessageId, keyof MessageParameters>>(id: Id): string;
 };
-type I18nValue = { locale: Locale; setLocale(locale: Locale): void; t: TranslateFunction; n(value: number): string; exactMatches(value: number): string; absentRules(value: number): string; validationSummary(gpuCount: number): string; gpuCountLabel(value: number): string };
+type I18nValue = { locale: Locale; setLocale(locale: Locale): void; os: HostOs; setOs(os: HostOs): void; t: TranslateFunction; n(value: number): string; exactMatches(value: number): string; absentRules(value: number): string; validationSummary(gpuCount: number): string; gpuCountLabel(value: number): string };
 const I18nContext = createContext<I18nValue | null>(null);
 export function I18nProvider({ children }: { children: ReactNode }) {
         const [locale, updateLocale] = useState<Locale>(() => resolveLocale(localStorage.getItem(LANGUAGE_STORAGE_KEY), navigator.languages?.length ? navigator.languages : [navigator.language]));
         const setLocale = useCallback((next: Locale) => { localStorage.setItem(LANGUAGE_STORAGE_KEY, next); updateLocale(next); }, []);
+        // The host OS comes from the system snapshot (App.tsx); Windows until one arrives.
+        const [os, setOs] = useState<HostOs>("windows");
         useEffect(() => {
                 document.documentElement.lang = locale;
                 document.title = locale === "ko" ? "NvStrapsReBar — 펌웨어 배포" : "NvStrapsReBar";
         }, [locale]);
-        const value = useMemo<I18nValue>(() => ({ locale, setLocale, t: ((id: MessageId, values?: MessageValues) => {
-                const template = messages[id][locale];
-                if (!values) return template;
-                return template.replace(/\{([A-Za-z][A-Za-z0-9]*)\}/g, (token, key: string) =>
-                        Object.prototype.hasOwnProperty.call(values, key)
-                                ? String(values[key])
-                                : token,
-                );
-        }) as TranslateFunction, n: (value) => formatNumber(locale, value), exactMatches: (value) => formatExactMatches(locale, value), absentRules: (value) => formatAbsentRules(locale, value), validationSummary: (gpuCount) => formatValidationSummary(locale, gpuCount), gpuCountLabel: (value) => formatGpuCountLabel(locale, value) }), [locale, setLocale]);
+        const value = useMemo<I18nValue>(() => ({ locale, setLocale, os, setOs, t: ((id: MessageId, values?: MessageValues) =>
+                fill(messageTemplate(messages, id, locale, os), values)) as TranslateFunction, n: (value) => formatNumber(locale, value), exactMatches: (value) => formatExactMatches(locale, value), absentRules: (value) => formatAbsentRules(locale, value), validationSummary: (gpuCount) => formatValidationSummary(locale, gpuCount), gpuCountLabel: (value) => formatGpuCountLabel(locale, value) }), [locale, setLocale, os]);
         return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 export function useI18n(): I18nValue { const value = useContext(I18nContext); if (!value) throw new Error("useI18n must be used inside I18nProvider"); return value; }

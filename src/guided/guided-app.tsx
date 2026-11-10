@@ -15,7 +15,7 @@ import { GuidedNavigationProvider, initialInstallUi, type GuidedNavigation, type
 import { ExternalBootPage } from "./external-boot";
 import { GamesPage } from "./games";
 import { BarPage, ChangesPage, ProfilesPage, RecordPage } from "./pages";
-import { installInProgress, type GuidedPage, type InstallScreen } from "./routing";
+import { installInProgress, resolvePage, type GuidedPage, type InstallScreen } from "./routing";
 
 /**
  * Guided interface root. The system state picks the first page: an install in
@@ -23,7 +23,7 @@ import { installInProgress, type GuidedPage, type InstallScreen } from "./routin
  * fixed navigation; home rows and the menu reach every other page.
  */
 export const GuidedApp = ({ snapshot }: { snapshot: SystemSnapshot }) => {
-        const { t, locale } = useI18n();
+        const { t, locale, os } = useI18n();
         const { showLicenses, closeLicenses, licenseButton } = useConfigurationWorkspaceController();
         // The session survives page changes; a new system snapshot still replaces it.
         const deployment = useDeploymentWorkspace(snapshot);
@@ -35,7 +35,8 @@ export const GuidedApp = ({ snapshot }: { snapshot: SystemSnapshot }) => {
         const [screen, setScreen] = useState<InstallScreen | null>(null);
         const titleRef = useRef<HTMLHeadingElement>(null);
         const automatic: GuidedPage = installInProgress(view) || installUi.startNew ? "install" : "home";
-        const page = chosenPage ?? automatic;
+        // Games and the external route exist only on Windows; elsewhere they open home.
+        const page = resolvePage(chosenPage ?? automatic, os);
 
         // Once an install is under way it keeps the window, also while a refresh reloads the records.
         useEffect(() => {

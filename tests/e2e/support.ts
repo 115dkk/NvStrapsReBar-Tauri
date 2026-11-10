@@ -6,9 +6,9 @@ mkdirSync(evidence, { recursive: true });
 
 export type PreviewState = "expanded" | "not-observed" | "driver-cleared" | "mixed" | "unavailable" | "expanded-no-access";
 
-/** Opens the preview with a clean session, a chosen system state and language. */
-export async function open(page: Page, state: PreviewState = "expanded", locale: "en" | "ko" = "en") {
-        await page.goto("/");
+/** Opens the preview with a clean session, a chosen system state, language and host OS. */
+export async function open(page: Page, state: PreviewState = "expanded", locale: "en" | "ko" = "en", os: "windows" | "linux" = "windows") {
+        await page.goto(os === "linux" ? "/?os=linux" : "/");
         await page.evaluate(
                 ([value, language]) => {
                         localStorage.clear();

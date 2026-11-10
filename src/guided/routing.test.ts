@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { DeploymentPlan, StepId } from "../deployment-workspace/contract";
 import type { DeploymentWorkspaceView } from "../deployment-workspace/session-contract";
 import type { SystemSnapshot } from "../types";
-import { homeState, installFinished, installInProgress, installScreen, stageFor, type InstallUiState } from "./routing";
+import { homeState, installFinished, installInProgress, installScreen, listedSteps, OPTIONAL_FINAL_STEP, pageAvailable, resolvePage, stageFor, type GuidedPage, type InstallUiState } from "./routing";
 
 const snapshot = (installed = false, dxe: SystemSnapshot["barSettings"]["currentBootDxeState"] = "notObservedThisBoot") => ({
         platform: { uefi: true, elevated: true },
@@ -164,5 +164,31 @@ describe("install screen", () => {
                 expect(stageFor("turnOn")).toBe(3);
                 expect(stageFor("checkingResult")).toBe(4);
                 expect(stageFor("done")).toBe(5);
+        });
+});
+
+describe("pages by host OS", () => {
+        const pages: GuidedPage[] = ["home", "install", "bar", "games", "changes", "record", "profiles", "external"];
+
+        it("keeps every page on Windows", () => {
+                for (const page of pages) {
+                        expect(pageAvailable(page, "windows")).toBe(true);
+                        expect(resolvePage(page, "windows")).toBe(page);
+                }
+        });
+
+        it("opens home for the Windows-only pages on Linux", () => {
+                expect(resolvePage("games", "linux")).toBe("home");
+                expect(resolvePage("external", "linux")).toBe("home");
+                expect(pageAvailable("games", "linux")).toBe(false);
+                expect(pageAvailable("external", "linux")).toBe(false);
+                for (const page of pages.filter((page) => page !== "games" && page !== "external"))
+                        expect(resolvePage(page, "linux")).toBe(page);
+        });
+
+        it("lists the per-game plan step only where per-game settings exist", () => {
+                const steps = [{ id: "verifyProfile" as const }, { id: OPTIONAL_FINAL_STEP }];
+                expect(listedSteps(steps, "windows")).toEqual(steps);
+                expect(listedSteps(steps, "linux")).toEqual([{ id: "verifyProfile" }]);
         });
 });
