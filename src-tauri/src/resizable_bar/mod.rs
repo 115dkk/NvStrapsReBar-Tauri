@@ -120,17 +120,16 @@ pub fn collect_exact_profile_evidence(
     Ok(evidence)
 }
 
-#[cfg(test)]
+#[cfg(all(test, any(windows, target_os = "linux")))]
 mod tests {
     use super::*;
 
-    #[cfg(windows)]
     #[test]
-    #[ignore = "read-only hardware inspection of the current Windows NVIDIA GPU"]
+    #[ignore = "read-only hardware inspection of the current machine's NVIDIA GPU"]
     fn current_machine_resizable_bar_inspection_reports_observed_state() {
         let devices = crate::devices::enumerate_gpus().expect("enumerate current NVIDIA GPUs");
         let inspection =
-            observe_current_apertures(&devices).expect("inspect the current Windows NVIDIA GPU");
+            observe_current_apertures(&devices).expect("inspect the current NVIDIA GPU");
         println!(
             "{}",
             serde_json::to_string_pretty(&inspection).expect("serialize inspection")

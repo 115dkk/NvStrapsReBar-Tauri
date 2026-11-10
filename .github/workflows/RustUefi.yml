@@ -48,7 +48,8 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-unknown-uefi
+          # musl: the Linux root helper is booted from an initramfs, so it has to be static.
+          targets: x86_64-unknown-uefi, x86_64-unknown-linux-musl
           components: clippy, rustfmt
 
       - uses: Swatinem/rust-cache@v2
@@ -60,19 +61,19 @@ jobs:
         run: npm run check:riir
 
       - name: Test the portable Rust modules
-        run: cargo test -p nvstraps-core -p nvstraps-deploy -p nvstraps-ffs -p nvstraps-uefi -p nvstraps-s3-probe -p nvstraps-external -p nvstraps-external-tool --all-targets
+        run: cargo test -p nvstraps-core -p nvstraps-deploy -p nvstraps-ffs -p nvstraps-uefi -p nvstraps-s3-probe -p nvstraps-external -p nvstraps-external-tool -p nvstraps-linux-helper --all-targets
 
       - name: Build, validate, and wrap the Rust boot-service driver
         run: npm run build:firmware
 
       - name: Reject warnings in host-side firmware tooling
-        run: cargo clippy -p nvstraps-ffs -p nvstraps-uefi -p nvstraps-s3-probe -p nvstraps-external -p nvstraps-external-tool --all-targets -- -D warnings
+        run: cargo clippy -p nvstraps-ffs -p nvstraps-uefi -p nvstraps-s3-probe -p nvstraps-external -p nvstraps-external-tool -p nvstraps-linux-helper --all-targets -- -D warnings
 
       - name: Reject warnings in the UEFI target
         run: cargo clippy -p nvstraps-uefi -p nvstraps-s3-probe -p nvstraps-external-efi --release --target x86_64-unknown-uefi -- -D warnings
 
       - name: Install OVMF and QEMU
-        run: sudo apt-get update && sudo apt-get install --yes ovmf qemu-system-x86 dosfstools mtools python3-virt-firmware osslsigncode
+        run: sudo apt-get update && sudo apt-get install --yes ovmf qemu-system-x86 dosfstools mtools python3-virt-firmware osslsigncode busybox-static cpio
 
       - name: Prove dispatch, the host-bridge hook, S3 protocol access and an S3 suspend/resume cycle
         run: npm run test:qemu
@@ -82,6 +83,20 @@ jobs:
 
       - name: Prove Secure Boot runs the signed diagnostic and refuses unsigned or changed ones
         run: npm run test:qemu:secure-boot
+
+      # Boots a stock Ubuntu kernel (downloaded as a package, never installed) on OVMF with the
+      # driver injected, and lets the production helper be the only writer of the variable.
+      - name: Prove the driver acts on the configuration the Linux helper writes, and stops after it deletes it
+        run: npm run test:qemu:linux-helper
+
+      - name: Upload Linux helper evidence (logs only)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-helper-qemu-evidence
+          path: target/qemu-linux-helper/**/logs/*
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Upload Secure Boot evidence (logs and reports only)
         if: always()

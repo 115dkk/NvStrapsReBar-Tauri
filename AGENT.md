@@ -22,7 +22,13 @@ authoritative. Keep RIIR, deployment automation, and physical-machine proof as s
 - A prepared artifact is not a flashed artifact. Opening firmware setup or an external tool is not
   completion. Accepting a restart request is not a completed restart.
 - Keep `/f` out of every Windows restart command. Require saved-work confirmation immediately
-  before a real restart request.
+  before a real restart request. On Linux a restart goes to systemd as the signed-in user: never
+  through the root helper, and never with `--force` or an inhibitor override.
+- On Linux the desktop application never runs as root. `nvstraps-rebar-helper` is the only code
+  that does, and it stays small: no GUI libraries, typed requests only, and every write
+  revalidated inside the helper. Do not add a request that takes a variable name, a path or a
+  command line; a new privileged action is a new typed request with its own validation and its
+  own proof under `npm run test:qemu:linux-helper`.
 - Keep vendor flash, firmware settings, physical recovery, and hardware changes as manual gates.
   Present each gate as the user's next action (what to do, where, and how to record it), never as
   a disclaimer about what the app cannot do. Automate only evidence the owning system can actually
@@ -39,7 +45,8 @@ authoritative. Keep RIIR, deployment automation, and physical-machine proof as s
   failed NVAPI call, every write, and every skip leaves a line in the diagnostic log, and command
   errors carry the log path. Do not panic for a recoverable condition; release builds abort.
 - Browser preview, Playwright, compilation, OVMF, and QEMU evidence must state their target. None
-  of them proves a real vendor image, native dialog, WebView2 lifecycle, flash, reboot, or GPU.
+  of them proves a real vendor image, native dialog, polkit prompt, WebView2 or WebKitGTK
+  lifecycle, flash, reboot, or GPU.
 
 ## Architecture
 
@@ -186,3 +193,12 @@ ignored Rust smoke tests require real NVIDIA hardware or network access and must
 opt-in evidence rather than silently joining ordinary validation. `nvidia_profiles::on_pc` runs the
 driver settings handoff against the installed driver; its write tests change real driver profiles,
 need administrator rights and `NVSTRAPS_DRIVER_WRITE=1`, and end with the undo.
+
+The Tauri workflow's Linux job lints, tests and builds the workspace on Ubuntu with WebKitGTK; the
+Linux readers in `src-tauri/src/linux` are tested there against fixture trees that stand in for
+`/sys` and `/proc`. `npm run test:qemu:linux-helper` (QEMU, OVMF, a static BusyBox, and a kernel
+with `CONFIG_EFIVAR_FS=y`, downloaded as an Ubuntu package when `NVSTRAPS_LINUX_KERNEL` is unset)
+boots a real kernel on OVMF with the driver injected and lets the production helper be the only
+writer of the variable: it proves the write, the immutable-flag handling, the delete, and that the
+driver acts on what Linux wrote. It does not involve polkit, the desktop application or a GPU.
+See [docs/LINUX.md](docs/LINUX.md).

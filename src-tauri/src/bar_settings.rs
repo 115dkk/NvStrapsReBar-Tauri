@@ -429,7 +429,7 @@ mod tests {
         );
     }
 
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     #[test]
     #[ignore = "read-only current-machine DXE/config observation"]
     fn current_machine_bar_settings_control_reports_observed_state() {

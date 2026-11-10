@@ -145,6 +145,7 @@ OVMF 사본으로 부팅해 드라이버를 설정하고, 가상 머신을 ACPI 
 
 - [Rust UEFI 구현 상태](docs/RUST_UEFI_PORT.md)
 - [Tauri 백엔드 계약](docs/TAURI_BACKEND.md)
+- [Linux 지원 (진행 중)](docs/LINUX.md)
 - [RIIR와 원클릭 배포의 경계](docs/RIIR_AND_ONE_CLICK.md)
 - [도메인 용어](CONTEXT.md)
 

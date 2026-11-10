@@ -117,6 +117,22 @@ pub(crate) fn parse_memory_bytes(value: &str) -> BackendResult<Option<u64>> {
         .ok_or_else(|| BackendError::Deployment("nvidia-smi memory value overflowed".into()))
 }
 
+/// PCI domain (segment) of an nvidia-smi bus ID such as `00000000:01:00.0`; a bus ID without one
+/// is in domain 0.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub(super) fn parse_pci_domain(value: &str) -> BackendResult<u32> {
+    let parts: Vec<_> = value.trim().split(':').collect();
+    match parts.as_slice() {
+        [_, _] => Ok(0),
+        [domain, _, _] => u32::from_str_radix(domain, 16).map_err(|_| {
+            BackendError::Deployment(format!("nvidia-smi PCI bus ID is malformed: {value}"))
+        }),
+        _ => Err(BackendError::Deployment(format!(
+            "nvidia-smi PCI bus ID is malformed: {value}"
+        ))),
+    }
+}
+
 pub(super) fn parse_pci_bus_id(value: &str) -> BackendResult<(u8, u8, u8)> {
     let parts: Vec<_> = value.trim().split(':').collect();
     if parts.len() < 2 {
@@ -171,19 +187,30 @@ fn nvidia_smi_path() -> BackendResult<PathBuf> {
     Ok(path)
 }
 
-#[cfg(all(not(feature = "simulated-machine"), not(windows)))]
+#[cfg(all(not(feature = "simulated-machine"), target_os = "linux"))]
+fn nvidia_smi_path() -> BackendResult<PathBuf> {
+    crate::linux::nvidia_smi::nvidia_smi_path()
+}
+
+#[cfg(all(
+    not(feature = "simulated-machine"),
+    not(any(windows, target_os = "linux"))
+))]
 fn nvidia_smi_path() -> BackendResult<PathBuf> {
     Err(BackendError::UnsupportedPlatform)
 }
 
-#[cfg(all(not(feature = "simulated-machine"), windows))]
+#[cfg(all(not(feature = "simulated-machine"), any(windows, target_os = "linux")))]
 fn run_nvidia_smi(executable: &std::path::Path) -> BackendResult<Vec<u8>> {
-    use std::os::windows::process::CommandExt;
-
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    let mut child = Command::new(executable)
+    let mut command = Command::new(executable);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    let mut child = command
         .args(NVIDIA_SMI_ARGUMENTS)
-        .creation_flags(CREATE_NO_WINDOW)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -236,7 +263,10 @@ fn run_nvidia_smi(executable: &std::path::Path) -> BackendResult<Vec<u8>> {
     Ok(stdout)
 }
 
-#[cfg(all(not(feature = "simulated-machine"), not(windows)))]
+#[cfg(all(
+    not(feature = "simulated-machine"),
+    not(any(windows, target_os = "linux"))
+))]
 fn run_nvidia_smi(_executable: &std::path::Path) -> BackendResult<Vec<u8>> {
     Err(BackendError::UnsupportedPlatform)
 }
@@ -279,7 +309,16 @@ mod tests {
         assert!(parse_pci_bus_id("00000000:01:20.0").is_err());
     }
 
-    #[cfg(all(windows, not(feature = "simulated-machine")))]
+    #[test]
+    fn pci_domain_is_read_from_the_bus_id() {
+        assert_eq!(parse_pci_domain("00000000:01:00.0").unwrap(), 0);
+        assert_eq!(parse_pci_domain("00000001:01:00.0").unwrap(), 1);
+        assert_eq!(parse_pci_domain("01:00.0").unwrap(), 0);
+        assert!(parse_pci_domain("nope:01:00.0").is_err());
+        assert!(parse_pci_domain("01.00.0").is_err());
+    }
+
+    #[cfg(all(any(windows, target_os = "linux"), not(feature = "simulated-machine")))]
     #[test]
     #[ignore = "read-only hardware smoke test for a machine with an NVIDIA driver"]
     fn installed_nvidia_smi_xml_matches_the_guarded_contract() {

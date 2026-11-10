@@ -1,9 +1,8 @@
 use nvstraps_deploy::{GpuFingerprint, MachineIdentity, PciLocation};
 
-use crate::{
-    devices::GpuDevice,
-    error::{BackendError, BackendResult},
-};
+#[cfg(not(target_os = "linux"))]
+use crate::error::BackendError;
+use crate::{devices::GpuDevice, error::BackendResult};
 
 #[cfg_attr(feature = "simulated-machine", allow(unreachable_code))]
 pub fn collect_machine_identity(devices: &[GpuDevice]) -> BackendResult<MachineIdentity> {
@@ -17,7 +16,12 @@ pub fn collect_machine_identity(devices: &[GpuDevice]) -> BackendResult<MachineI
         windows_impl::collect(devices)
     }
 
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux::dmi::collect_machine_identity(&crate::linux::SystemRoots::host(), devices)
+    }
+
+    #[cfg(not(any(windows, target_os = "linux")))]
     {
         let _ = devices;
         Err(BackendError::UnsupportedPlatform)

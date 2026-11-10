@@ -358,7 +358,6 @@ fn boot_proves_configuration_reboot(configuration_saved_at: u64, booted_at: u64)
     booted_at > configuration_saved_at
 }
 
-#[cfg(windows)]
 #[cfg_attr(feature = "simulated-machine", allow(unreachable_code))]
 pub(crate) fn current_boot_time_unix_ms() -> BackendResult<u64> {
     #[cfg(feature = "simulated-machine")]
@@ -366,24 +365,34 @@ pub(crate) fn current_boot_time_unix_ms() -> BackendResult<u64> {
         return crate::simulated_machine::current_boot_time_unix_ms();
     }
 
-    use windows_sys::Win32::System::SystemInformation::GetTickCount64;
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::System::SystemInformation::GetTickCount64;
 
-    let now: u64 = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|_| BackendError::Deployment("the Windows clock predates the Unix epoch".into()))?
-        .as_millis()
-        .try_into()
-        .map_err(|_| BackendError::Deployment("the Windows clock value is too large".into()))?;
-    // SAFETY: GetTickCount64 has no preconditions and returns milliseconds since system start.
-    let uptime = unsafe { GetTickCount64() };
-    now.checked_sub(uptime).ok_or_else(|| {
-        BackendError::Deployment("Windows uptime exceeds the current wall-clock value".into())
-    })
-}
+        let now: u64 = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| {
+                BackendError::Deployment("the Windows clock predates the Unix epoch".into())
+            })?
+            .as_millis()
+            .try_into()
+            .map_err(|_| BackendError::Deployment("the Windows clock value is too large".into()))?;
+        // SAFETY: GetTickCount64 has no preconditions and returns milliseconds since system start.
+        let uptime = unsafe { GetTickCount64() };
+        now.checked_sub(uptime).ok_or_else(|| {
+            BackendError::Deployment("Windows uptime exceeds the current wall-clock value".into())
+        })
+    }
 
-#[cfg(not(windows))]
-pub(crate) fn current_boot_time_unix_ms() -> BackendResult<u64> {
-    Err(BackendError::UnsupportedPlatform)
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux::process::boot_time_unix_ms(&crate::linux::SystemRoots::host())
+    }
+
+    #[cfg(not(any(windows, target_os = "linux")))]
+    {
+        Err(BackendError::UnsupportedPlatform)
+    }
 }
 
 fn read_driver_status_raw() -> BackendResult<u64> {

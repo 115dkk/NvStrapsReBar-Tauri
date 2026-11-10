@@ -8,7 +8,7 @@ use std::{
 
 use nvstraps_deploy::MachineIdentity;
 use serde::Serialize;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 use crate::{
     bar_settings::{
@@ -23,8 +23,8 @@ use crate::{
     devices::{GpuDevice, enumerate_gpus},
     error::{ApiError, BackendError, BackendResult, CommandResult},
     firmware::{
-        CONFIG_VARIABLE_NAME, STATUS_VARIABLE_NAME, inspect_access, read_variable,
-        relaunch_elevated, write_variable,
+        CONFIG_VARIABLE_NAME, ElevationOutcome, STATUS_VARIABLE_NAME, inspect_access,
+        read_variable, request_elevation as request_firmware_elevation, write_variable,
     },
     hardware_support::{HardwareSupportAssessment, determine_hardware_support},
     machine::collect_machine_identity,
@@ -83,7 +83,7 @@ pub struct PlatformInfo {
     pub supported: bool,
     pub uefi: bool,
     pub elevated: bool,
-    /// Wall-clock time of the current Windows boot. The guided screens compare it with the time
+    /// Wall-clock time of the current boot. The guided screens compare it with the time
     /// a deployment package was saved, so a driver left by an earlier install is not mistaken for
     /// the file the user is about to flash.
     pub booted_at_unix_ms: Option<String>,
@@ -267,17 +267,51 @@ pub(crate) fn save_config_for_devices_inner(
     })
 }
 
-#[tauri::command]
-pub fn request_elevation(app: AppHandle, state: State<'_, AppState>) -> CommandResult<()> {
+/// Runs one elevation request. A second request while one is in flight returns at once.
+fn elevate(app: &AppHandle) -> CommandResult<()> {
+    let state = app.state::<AppState>();
     if !state.elevation_request.try_begin() {
         return Ok(());
     }
-    if let Err(error) = relaunch_elevated() {
-        state.elevation_request.reset();
-        return Err(ApiError::from(error));
+    match request_firmware_elevation() {
+        Ok(ElevationOutcome::Relaunched) => {
+            app.exit(0);
+            Ok(())
+        }
+        Ok(ElevationOutcome::Granted) => {
+            state.elevation_request.reset();
+            Ok(())
+        }
+        Err(error) => {
+            state.elevation_request.reset();
+            Err(ApiError::from(error))
+        }
     }
-    app.exit(0);
-    Ok(())
+}
+
+/// Starts an elevated copy and exits this one. The UAC prompt is modal, so the command stays on
+/// the main thread, where it has always run.
+#[cfg(not(target_os = "linux"))]
+#[tauri::command]
+pub fn request_elevation(app: AppHandle) -> CommandResult<()> {
+    elevate(&app)
+}
+
+/// Starts the root helper and keeps running. The polkit dialog can stay open for minutes, so the
+/// wait happens off the main thread and the window stays responsive.
+#[cfg(target_os = "linux")]
+#[tauri::command]
+pub async fn request_elevation(app: AppHandle) -> CommandResult<()> {
+    let worker = app.clone();
+    match tauri::async_runtime::spawn_blocking(move || elevate(&worker)).await {
+        Ok(result) => result,
+        Err(error) => {
+            app.state::<AppState>().elevation_request.reset();
+            Err(ApiError::from(BackendError::Deployment(format!(
+                "elevation worker failed: {error}"
+            ))))
+        }
+    }
 }
 
 fn refresh_snapshot(state: &AppState) -> BackendResult<SystemSnapshot> {
@@ -295,7 +329,7 @@ fn refresh_snapshot(state: &AppState) -> BackendResult<SystemSnapshot> {
     if !access.is_uefi {
         notices.push(Notice {
             kind: "error",
-            message: "Windows is not running in UEFI mode; firmware variables are unavailable."
+            message: "The system was not started in UEFI mode; firmware variables are unavailable."
                 .into(),
         });
     } else if access.privilege_enabled {
@@ -386,7 +420,7 @@ fn refresh_snapshot(state: &AppState) -> BackendResult<SystemSnapshot> {
         platform: PlatformInfo {
             operating_system: std::env::consts::OS,
             architecture: std::env::consts::ARCH,
-            supported: cfg!(windows),
+            supported: cfg!(any(windows, target_os = "linux")),
             uefi: access.is_uefi,
             elevated: access.is_elevated,
             booted_at_unix_ms: current_boot_time_unix_ms()

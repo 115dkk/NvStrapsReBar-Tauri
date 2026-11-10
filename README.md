@@ -151,6 +151,7 @@ Deeper documentation:
 
 - [Rust UEFI implementation status](docs/RUST_UEFI_PORT.md)
 - [Tauri backend contract](docs/TAURI_BACKEND.md)
+- [Linux support (in progress)](docs/LINUX.md)
 - [RIIR and one-click deployment boundaries](docs/RIIR_AND_ONE_CLICK.md)
 - [Domain language](CONTEXT.md)
 

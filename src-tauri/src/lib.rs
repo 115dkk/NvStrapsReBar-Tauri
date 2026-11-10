@@ -14,6 +14,8 @@ mod error;
 mod external_boot;
 mod firmware;
 mod hardware_support;
+#[cfg(target_os = "linux")]
+mod linux;
 mod machine;
 mod nvidia_profiles;
 mod reboot;

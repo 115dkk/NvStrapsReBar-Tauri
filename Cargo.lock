@@ -1932,6 +1932,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "nvstraps-linux-helper"
+version = "1.1.2"
+dependencies = [
+ "libc",
+ "nvstraps-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "nvstraps-rebar"
 version = "1.1.2"
 dependencies = [
@@ -1942,6 +1952,7 @@ dependencies = [
  "nvstraps-external-tool",
  "nvstraps-ffs",
  "nvstraps-legacy",
+ "nvstraps-linux-helper",
  "quick-xml 0.41.0",
  "serde",
  "serde_json",

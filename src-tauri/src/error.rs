@@ -2,9 +2,10 @@ use serde::Serialize;
 
 #[derive(Debug, thiserror::Error)]
 pub enum BackendError {
-    #[allow(dead_code)]
-    #[error("this operation is only supported on Windows")]
+    #[cfg_attr(windows, allow(dead_code))]
+    #[error("this operation is not available on this operating system")]
     UnsupportedPlatform,
+    #[cfg_attr(not(windows), allow(dead_code))]
     #[error("{operation} failed with Windows error {code}")]
     Windows { operation: &'static str, code: u32 },
     #[error("firmware variable {name} is unavailable: {reason}")]
@@ -31,7 +32,7 @@ pub enum BackendError {
     Deployment(String),
     #[error("application state could not be locked")]
     StatePoisoned,
-    #[error("failed to relaunch with administrator privileges: {0}")]
+    #[error("administrator rights could not be obtained: {0}")]
     Elevation(String),
     #[error("settings snapshot failed: {0}")]
     SettingsSnapshot(String),
@@ -48,6 +49,7 @@ pub enum BackendError {
 }
 
 impl BackendError {
+    #[cfg_attr(not(windows), allow(dead_code))]
     pub fn windows(operation: &'static str) -> Self {
         #[cfg(windows)]
         {
