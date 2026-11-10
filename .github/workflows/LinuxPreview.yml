@@ -1,0 +1,54 @@
+name: Linux preview
+
+# Started by hand, from master only. It builds the Linux packages from that commit, checks them
+# the way the pull request job does (including installing the .deb and starting the application),
+# and publishes them as a GitHub pre-release of their own. The stable release stays the Windows
+# build that Release.yml publishes: a preview never becomes Latest, and its tag does not start
+# with "v", so the release planner does not take it for a release.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-preview
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build, check and publish the Linux preview
+    if: github.ref == 'refs/heads/master'
+    # The oldest supported Ubuntu, so the packages also run on everything newer.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-uefi, x86_64-unknown-linux-musl
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+      - name: Install the WebKitGTK development packages and the packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libgtk-3-dev libsoup-3.0-dev \
+            librsvg2-dev libayatana-appindicator3-dev libxdo-dev libssl-dev rpm xvfb
+      - name: Install dependencies
+        run: npm ci
+      - name: Build the application and its deb and rpm packages
+        run: npm run build:linux-packages
+      - name: Check the packages, install the deb and start the application
+        run: npm run check:linux-packages -- --install
+      - name: Publish the pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/publish-linux-preview.mjs
