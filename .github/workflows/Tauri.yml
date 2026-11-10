@@ -156,7 +156,9 @@ jobs:
     name: Rust backend and Linux shell
     needs: scope
     if: needs.scope.outputs.run-heavy == 'true'
-    runs-on: ubuntu-latest
+    # The oldest supported Ubuntu, the one the Linux preview is built on, so a package that
+    # builds, installs and starts here also runs on everything newer.
+    runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
