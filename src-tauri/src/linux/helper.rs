@@ -156,10 +156,23 @@ fn session_is_live(session: &mut Session) -> bool {
     matches!(session.child.try_wait(), Ok(None))
 }
 
-fn stop_session(session: &mut Session) {
+/// Ends a session without ever waiting for the helper. Closing the pipes is what stops it: the
+/// helper exits at end of input. One started through pkexec runs as root, so this process cannot
+/// signal it, and waiting for it while still holding its input would never return.
+fn stop_session(session: Session) {
     SESSION_ACTIVE.store(false, Ordering::Release);
-    let _ = session.child.kill();
-    let _ = session.child.wait();
+    let Session { child, connection } = session;
+    drop(connection);
+    release_child(child);
+}
+
+/// `kill` only reaches a helper this process started directly (when it is root itself). The exit
+/// status is collected on its own thread, because callers may be on the main thread.
+fn release_child(mut child: Child) {
+    let _ = child.kill();
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
 }
 
 /// Never waits. `start_session` holds the lock for as long as the polkit dialog stays open, and
@@ -169,8 +182,8 @@ pub(crate) fn session_active() -> bool {
     match SESSION.try_lock() {
         Ok(mut guard) => {
             let live = guard.as_mut().is_some_and(session_is_live);
-            if !live && let Some(mut stale) = guard.take() {
-                stop_session(&mut stale);
+            if !live && let Some(stale) = guard.take() {
+                stop_session(stale);
             }
             SESSION_ACTIVE.store(live, Ordering::Release);
             live
@@ -186,8 +199,8 @@ pub(crate) fn start_session() -> BackendResult<()> {
     if guard.as_mut().is_some_and(session_is_live) {
         return Ok(());
     }
-    if let Some(mut stale) = guard.take() {
-        stop_session(&mut stale);
+    if let Some(stale) = guard.take() {
+        stop_session(stale);
     }
 
     let helper = helper_path()?;
@@ -255,8 +268,8 @@ fn helper_path() -> BackendResult<PathBuf> {
     Ok(path)
 }
 
-fn cleanup_start_failure(mut child: Child, reason: String) -> BackendError {
-    stop_session_child(&mut child);
+fn cleanup_start_failure(child: Child, reason: String) -> BackendError {
+    release_child(child);
     BackendError::Elevation(reason)
 }
 
@@ -277,8 +290,7 @@ fn cleanup_open_failure(mut child: Child, original: BackendError) -> BackendErro
         }
     }
     if exited.is_none() {
-        let _ = child.kill();
-        exited = child.wait().ok();
+        release_child(child);
     }
     match exited.and_then(|status| status.code()) {
         Some(126) => BackendError::Elevation("the authorisation dialog was dismissed".into()),
@@ -290,11 +302,6 @@ fn cleanup_open_failure(mut child: Child, original: BackendError) -> BackendErro
             error => error.to_string(),
         }),
     }
-}
-
-fn stop_session_child(child: &mut Child) {
-    let _ = child.kill();
-    let _ = child.wait();
 }
 
 /// Empty data deletes the variable.
@@ -319,9 +326,9 @@ pub(crate) fn write_configuration(data: &[u8]) -> BackendResult<()> {
     };
     let result = session.connection.call(request);
     if session.connection.transport_failed
-        && let Some(mut failed) = guard.take()
+        && let Some(failed) = guard.take()
     {
-        stop_session(&mut failed);
+        stop_session(failed);
     }
     result
 }
