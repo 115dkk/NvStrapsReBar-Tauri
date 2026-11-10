@@ -252,20 +252,34 @@ pub(crate) fn start_session() -> BackendResult<()> {
     }
 }
 
+/// Where a package installs the helper. The polkit policy shipped beside it names this path.
+const INSTALLED_HELPER: &str = "/usr/lib/nvstraps-rebar/nvstraps-rebar-helper";
+
+/// A build from source keeps the helper beside the application. An installed package keeps it
+/// in a system directory, where it must pass the same ownership checks as any system program.
 fn helper_path() -> BackendResult<PathBuf> {
     let executable =
         std::env::current_exe().map_err(|error| BackendError::Elevation(error.to_string()))?;
-    let path = executable
+    let beside = executable
         .parent()
         .unwrap_or_else(|| std::path::Path::new(""))
         .join("nvstraps-rebar-helper");
-    if !path.is_file() {
-        return Err(BackendError::Elevation(format!(
-            "the helper program was not found at {}",
-            path.display()
-        )));
+    choose_helper(
+        &beside,
+        trusted_executable(&[PathBuf::from(INSTALLED_HELPER)]),
+    )
+}
+
+fn choose_helper(beside: &std::path::Path, installed: Option<PathBuf>) -> BackendResult<PathBuf> {
+    if beside.is_file() {
+        return Ok(beside.to_path_buf());
     }
-    Ok(path)
+    installed.ok_or_else(|| {
+        BackendError::Elevation(format!(
+            "the helper program was not found at {} or {INSTALLED_HELPER}",
+            beside.display()
+        ))
+    })
 }
 
 fn cleanup_start_failure(child: Child, reason: String) -> BackendError {
@@ -479,6 +493,33 @@ mod tests {
         bytes.extend(serde_json::to_vec(&response).unwrap());
         bytes.push(b'\n');
         bytes
+    }
+
+    #[test]
+    fn the_helper_beside_the_application_wins_over_the_installed_one() {
+        let directory = std::env::temp_dir().join(format!(
+            "nvstraps-helper-path-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir(&directory).unwrap();
+        let beside = directory.join("nvstraps-rebar-helper");
+        let installed = PathBuf::from(INSTALLED_HELPER);
+
+        assert_eq!(
+            choose_helper(&beside, Some(installed.clone())).unwrap(),
+            installed
+        );
+        let error = choose_helper(&beside, None).unwrap_err().to_string();
+        assert!(error.contains(beside.to_str().unwrap()) && error.contains(INSTALLED_HELPER));
+
+        std::fs::write(&beside, b"fixture, never executed").unwrap();
+        assert_eq!(choose_helper(&beside, Some(installed)).unwrap(), beside);
+        assert_eq!(choose_helper(&beside, None).unwrap(), beside);
+        std::fs::remove_dir_all(&directory).unwrap();
     }
 
     #[test]
