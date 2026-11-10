@@ -30,9 +30,10 @@ tests against fixture trees and by QEMU with OVMF and a real kernel, as stated f
 | UEFI or legacy boot | `/sys/firmware/efi` |
 | `NvStrapsReBar` and `NvStrapsReBarStatus` | efivarfs, `/sys/firmware/efi/efivars/<name>-e3ee4a27-e2a2-4435-bba3-184ccad935a8` |
 | Boot time | `btime` in `/proc/stat` |
-| BAR1 size as the driver sees it | `nvidia-smi -q -x`, taken only from `/usr/bin`, `/usr/local/bin` or `/run/current-system/sw/bin`, and only if the file belongs to root and nobody else can write it; `PATH` is not searched |
+| BAR1 size as the driver sees it | `nvidia-smi -q -x`, taken only from `/usr/bin`, `/usr/local/bin` or `/run/current-system/sw/bin`, and only if the file belongs to root, nobody else can write it, and nobody else can replace it in any directory on the way to it; `PATH` is not searched |
 
 Only PCI domain `0000` is read: the configuration format names a GPU by bus, device and function.
+A GPU that `nvidia-smi` reports in another domain is left out of the comparison as well.
 A GPU that sits directly on the root bus, with no bridge above it, is an inventory error, as it is
 on Windows.
 
@@ -40,7 +41,9 @@ on Windows.
 
 An efivarfs file starts with a four-byte attribute word and then holds the variable's data.
 Anybody can read it; only root can write it. So on Linux the desktop application never runs as
-root. The existing "administrator" step starts a small helper instead:
+root. The existing "administrator" step starts a small helper instead. The screens still treat
+reading and saving as one permission, so the app shows the saved configuration only once the
+helper is running, as it does with administrator rights on Windows.
 
 ```
 NvStrapsReBar (your user, GTK and WebKit)
@@ -53,7 +56,7 @@ nvstraps-rebar-helper (root, no GUI libraries)
 ```
 
 The helper (`crates/nvstraps-linux-helper`) lives as long as the application and ends when its
-input closes. It accepts two requests, write the configuration and delete it. No request can name
+input closes; the application, which cannot signal a root process, never waits for it. It accepts two requests, write the configuration and delete it. No request can name
 a variable. It checks every write itself, whatever the application already checked: the bytes must
 decode as a configuration and must be exactly what the encoder emits for it.
 
