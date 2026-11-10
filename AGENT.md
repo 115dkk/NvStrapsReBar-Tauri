@@ -156,6 +156,12 @@ authoritative. Keep RIIR, deployment automation, and physical-machine proof as s
   artifact store (its quota is tight); the only uploads left are small diagnostics with a
   seven-day retention. A push made with the workflow token starts no workflow run, so the bump
   commit does not release itself. There are no per-commit pre-releases any more.
+- The Linux packages are not part of that release. The `Linux preview` workflow is started by
+  hand from `master`: it builds the `.deb` and `.rpm` on the oldest supported Ubuntu, runs
+  `npm run check:linux-packages -- --install`, and `tools/publish-linux-preview.mjs` publishes
+  them as a pre-release tagged `linux-preview-<version>`, once per version. A preview never
+  becomes Latest, and its tag must not start with `v`: the release planner takes the newest
+  `v<version>` tag as its baseline. Start it only when the user asks for a preview.
 
 Use the smallest relevant subset while iterating, then the full applicable floor before handoff:
 

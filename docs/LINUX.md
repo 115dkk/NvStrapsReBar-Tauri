@@ -16,7 +16,7 @@ tests against fixture trees and by QEMU with OVMF and a real kernel, as stated f
 | Saving the configuration | Works in the backend, through the root helper below |
 | Restarting, also into BIOS setup | Works in the backend, through systemd |
 | The screens | Worded for Linux; Games, the external EFI route and the vendor Windows utility are not offered there |
-| Packages | `.deb` and `.rpm` build and are checked in CI; they are not attached to releases yet. No AppImage |
+| Packages | `.deb` and `.rpm`, published by hand as a pre-release of their own (`linux-preview-<version>`), never as the Latest release. No AppImage |
 | Turning it on without changing the BIOS (external EFI route) | Not ported yet |
 | Per-game settings | Not planned: they need NVAPI |
 
@@ -102,6 +102,12 @@ the installed application running under a virtual display.
 
 There is no AppImage: root cannot read files inside an AppImage's mount, so `pkexec` could not
 start a helper from there.
+
+The stable release stays the Windows build. The Linux packages go out through the `Linux preview`
+workflow, which a maintainer starts by hand from `master`. It builds on Ubuntu 22.04, the oldest
+supported release, runs the same check with `--install`, and publishes the two packages with
+their checksums as a GitHub pre-release tagged `linux-preview-<version>`. A preview is published
+once per version.
 
 ## Restart
 
