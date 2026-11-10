@@ -148,7 +148,10 @@ jobs:
 
   # The Windows job cannot compile the Linux machine adapter (src-tauri/src/linux), so this job
   # lints, tests and builds the same workspace against WebKitGTK. Its tests read fixture trees
-  # that stand in for /sys and /proc; the runner's own hardware and firmware are never touched.
+  # that stand in for /sys and /proc. It then builds the .deb and .rpm, installs the .deb on the
+  # runner and starts the application under a virtual display: the application only reads the
+  # runner, and the root helper is started with no input, so no firmware variable is written.
+  # The packages are checked here and not uploaded.
   native-linux:
     name: Rust backend and Linux shell
     needs: scope
@@ -163,17 +166,18 @@ jobs:
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-unknown-uefi
+          # musl: the packaged root helper is the static build.
+          targets: x86_64-unknown-uefi, x86_64-unknown-linux-musl
           components: clippy
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: . -> target
-      - name: Install the WebKitGTK development packages
+      - name: Install the WebKitGTK development packages and the packaging tools
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends \
             libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libgtk-3-dev libsoup-3.0-dev \
-            librsvg2-dev libayatana-appindicator3-dev libxdo-dev libssl-dev
+            librsvg2-dev libayatana-appindicator3-dev libxdo-dev libssl-dev rpm xvfb
       - name: Install dependencies
         run: npm ci
       - name: Build the UEFI resources required by the Tauri manifest
@@ -182,8 +186,10 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Test Rust workspace
         run: cargo test --workspace --all-targets
-      - name: Build native application
-        run: npm run tauri:ci
+      - name: Build the application and its deb and rpm packages
+        run: npm run build:linux-packages
+      - name: Check the packages, install the deb and start the application
+        run: npm run check:linux-packages -- --install
 
   # Drives the real application, not the browser preview, through the guided deployment with retail
   # vendor BIOS images. Only the machine's hardware, firmware variables, reboots and nvidia-smi are

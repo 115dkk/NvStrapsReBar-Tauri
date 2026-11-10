@@ -16,7 +16,7 @@ tests against fixture trees and by QEMU with OVMF and a real kernel, as stated f
 | Saving the configuration | Works in the backend, through the root helper below |
 | Restarting, also into BIOS setup | Works in the backend, through systemd |
 | The screens | Worded for Linux; Games, the external EFI route and the vendor Windows utility are not offered there |
-| Packages (`.deb`, `.rpm`, AppImage) and releases | Not built yet; build from source |
+| Packages | `.deb` and `.rpm` build and are checked in CI; they are not attached to releases yet. No AppImage |
 | Turning it on without changing the BIOS (external EFI route) | Not ported yet |
 | Per-game settings | Not planned: they need NVAPI |
 
@@ -75,6 +75,33 @@ Two efivarfs rules shape the write, both seen on Linux 6.8 under OVMF:
 Without polkit's `pkexec` the step reports that it is missing. Starting the application itself as
 root also works (the helper is then started directly), but a graphical application running as
 root is not the supported way.
+
+## Packages
+
+`npm run build:linux-packages` writes `nvstraps-rebar_<version>_amd64.deb` and
+`nvstraps-rebar-<version>-1.x86_64.rpm` under `target/release/bundle/`
+(`src-tauri/tauri.linux.conf.json`). Both install the same files:
+
+| Path | What |
+| --- | --- |
+| `/usr/bin/nvstraps-rebar` | the application |
+| `/usr/lib/nvstraps-rebar/nvstraps-rebar-helper` | the root helper, the static build that the QEMU proof boots |
+| `/usr/lib/nvstraps-rebar/` | the UEFI driver and the other bundled files |
+| `/usr/share/polkit-1/actions/io.github.nvstrapsrebar.helper.policy` | lets `pkexec` start that one helper path after an administrator's password |
+| `/usr/share/applications/nvstraps-rebar.desktop` | the menu entry |
+
+The `.deb` depends on `pkexec` (or `policykit-1` on older releases) and the `.rpm` on `polkit`.
+An installed application takes the helper from that system path, and only if it passes the same
+ownership check as any other system program; a build from source takes the one beside it.
+
+`npm run check:linux-packages` checks the two packages: their names and contents, their
+dependencies, that the packaged helper is static and answers, and that the policy names the path
+the helper is installed to. The Tauri workflow's Linux job runs it with `--install`, which also
+installs the `.deb` on the runner, starts the installed helper as root with no input, and keeps
+the installed application running under a virtual display.
+
+There is no AppImage: root cannot read files inside an AppImage's mount, so `pkexec` could not
+start a helper from there.
 
 ## Restart
 

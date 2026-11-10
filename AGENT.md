@@ -201,4 +201,8 @@ with `CONFIG_EFIVAR_FS=y`, downloaded as an Ubuntu package when `NVSTRAPS_LINUX_
 boots a real kernel on OVMF with the driver injected and lets the production helper be the only
 writer of the variable: it proves the write, the immutable-flag handling, the delete, and that the
 driver acts on what Linux wrote. It does not involve polkit, the desktop application or a GPU.
-See [docs/LINUX.md](docs/LINUX.md).
+`npm run build:linux-packages` builds the `.deb` and `.rpm`, and `npm run check:linux-packages`
+checks them; with `--install` (CI only: it uses sudo and installs the `.deb`) it also starts the
+installed helper with no input and the installed application under a virtual display. The polkit
+policy, the helper's install path in `src-tauri/src/linux/helper.rs` and the package file lists
+name the same path; change them together. See [docs/LINUX.md](docs/LINUX.md).

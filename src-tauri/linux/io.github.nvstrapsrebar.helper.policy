@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!--
+  Lets pkexec start nvstraps-rebar-helper, the only part of NvStrapsReBar that runs as root
+  (docs/LINUX.md). The helper stays up for as long as the application, so the password is asked
+  once per application start. The path below must be the path the packages install the helper to.
+-->
+<policyconfig>
+  <vendor>NvStrapsReBar</vendor>
+  <vendor_url>https://github.com/115dkk/NvStrapsReBar-Tauri</vendor_url>
+  <action id="io.github.nvstrapsrebar.helper">
+    <description>Save NvStrapsReBar settings to the firmware</description>
+    <description xml:lang="ko">NvStrapsReBar 설정을 펌웨어에 저장</description>
+    <message>Authentication is required to save NvStrapsReBar settings to the firmware</message>
+    <message xml:lang="ko">NvStrapsReBar 설정을 펌웨어에 저장하려면 인증이 필요합니다</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/nvstraps-rebar/nvstraps-rebar-helper</annotate>
+  </action>
+</policyconfig>
