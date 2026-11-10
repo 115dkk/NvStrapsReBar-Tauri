@@ -25,6 +25,10 @@ pub fn inspect_access() -> FirmwareAccess {
     {
         let mut access = crate::linux::efivars::inspect_access(&crate::linux::SystemRoots::host());
         access.is_elevated |= crate::linux::helper::session_active();
+        // efivarfs can be read without privilege, but the screens treat `privilege_enabled` as
+        // "can read and save": with it set they open the editor and never offer the
+        // administrator step. Report it only once saving is possible too, as on Windows.
+        access.privilege_enabled &= access.is_elevated;
         access
     }
 
