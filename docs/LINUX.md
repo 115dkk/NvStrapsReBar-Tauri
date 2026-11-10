@@ -15,10 +15,14 @@ tests against fixture trees and by QEMU with OVMF and a real kernel, as stated f
 | Reading the PC: GPUs, board and BIOS, the NvStrapsReBar variables, boot time, `nvidia-smi` | Works in the backend |
 | Saving the configuration | Works in the backend, through the root helper below |
 | Restarting, also into BIOS setup | Works in the backend, through systemd |
-| The screens | Still worded for Windows; the Games page is not hidden yet |
+| The screens | Worded for Linux; Games, the external EFI route and the vendor Windows utility are not offered there |
 | Packages (`.deb`, `.rpm`, AppImage) and releases | Not built yet; build from source |
 | Turning it on without changing the BIOS (external EFI route) | Not ported yet |
 | Per-game settings | Not planned: they need NVAPI |
+
+The client learns the host from `snapshot.platform.operatingSystem`. A message in
+`src/i18n-catalog.ts` may carry a `linux` text for both languages, used on Linux in place of the
+shared one; the browser preview shows the Linux screens with `?os=linux`.
 
 ## Where the facts come from
 
