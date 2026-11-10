@@ -132,6 +132,42 @@ test("linux: a remembered external route opens home instead", async ({ page }) =
         await expect(page.locator(".nv-root")).toHaveAttribute("data-page", "home");
 });
 
+test("linux: UEFI and administrator copy follows the host in both languages", async ({ page }) => {
+        const copy = {
+                en: {
+                        linux: { uefi: "Linux started in UEFI mode", admin: "Grant administrator rights", lead: "Grant administrator rights to load and change BAR settings." },
+                        windows: { uefi: "Windows started in UEFI mode", admin: "Reopen as administrator", lead: "Reopen the app as administrator to load and change BAR settings." },
+                        bar: "BAR Settings",
+                },
+                ko: {
+                        linux: { uefi: "Linux가 UEFI 모드로 부팅됨", admin: "관리자 권한 승인", lead: "BAR 설정을 불러와 바꾸려면 관리자 권한을 승인하세요." },
+                        windows: { uefi: "Windows가 UEFI 모드로 부팅됨", admin: "관리자 권한으로 다시 열기", lead: "BAR 설정을 불러와 바꾸려면 앱을 관리자 권한으로 다시 여세요." },
+                        bar: "BAR 설정",
+                },
+        } as const;
+        for (const locale of ["en", "ko"] as const) {
+                for (const os of ["linux", "windows"] as const) {
+                        const text = copy[locale][os];
+                        await page.setViewportSize({ width: 1180, height: 760 });
+                        await open(page, "unavailable", locale, os);
+                        expect(new URL(page.url()).searchParams.get("os")).toBe(os === "linux" ? "linux" : null);
+                        await expect(page.getByText(text.uefi, { exact: true })).toBeVisible();
+                        await page.screenshot({ path: `${evidence}/${os}-${locale}-uefi-copy-1180.png` });
+                        await open(page, "expanded-no-access", locale, os);
+                        await homeRow(page, copy[locale].bar).click();
+                        await expect(button(page, text.admin)).toBeVisible();
+                        await expect(page.getByText(text.lead, { exact: true })).toBeVisible();
+                        expect(await missingMessages(page)).toEqual([]);
+                        expect(await noHorizontalOverflow(page)).toBe(true);
+                        await page.screenshot({ path: `${evidence}/${os}-${locale}-admin-copy-1180.png` });
+                        await page.setViewportSize({ width: 900, height: 760 });
+                        await expect(button(page, text.admin)).toBeVisible();
+                        expect(await noHorizontalOverflow(page)).toBe(true);
+                        await page.screenshot({ path: `${evidence}/${os}-${locale}-admin-copy-900.png` });
+                }
+        }
+});
+
 test("linux: the OS switch survives the preview state and the language", async ({ page }) => {
         const state: PreviewState = "mixed";
         await open(page, state, "ko", "linux");
