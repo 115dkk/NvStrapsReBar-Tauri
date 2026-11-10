@@ -128,7 +128,7 @@ const UndoSection = ({ games, locked }: { games: GameSettingsController; locked:
 
 /** Per-game Resizable BAR: one switch for all games, the games changed here, search, and the undo. */
 export const GamesPage = ({ titleRef }: { titleRef: Ref<HTMLHeadingElement> }) => {
-        const { t, locale, n } = useI18n();
+        const { t, locale, os, n } = useI18n();
         const games = useGameSettings();
         const { snap } = useConfigurationWorkspaceController();
         const { view, commands } = useDeploymentWorkspaceController();
@@ -154,7 +154,7 @@ export const GamesPage = ({ titleRef }: { titleRef: Ref<HTMLHeadingElement> }) =
                                 <div className="nv-task-body" style={{ paddingTop: 32, gap: 24 }}>
                                         <Crumb here={t("ui.enablePerGame")} onHome={() => go("home")} />
                                         <TaskHead title={t("ui.gamesTitle")} lead={t("ui.gamesLead")} titleRef={titleRef} />
-                                        {view.activity?.tone === "error" && <Notice title={t("ui.taskDidNotFinish")}>{translateMessage(locale, view.activity.message)}</Notice>}
+                                        {view.activity?.tone === "error" && <Notice title={t("ui.taskDidNotFinish")}>{translateMessage(locale, view.activity.message, os)}</Notice>}
                                         {recorded && <Result title={t("ui.gamesRecorded")} />}
                                         {games.error && <ErrorNotice title={t("ui.taskDidNotFinish")} error={games.error} />}
                                         {games.load.status === "loading" && (

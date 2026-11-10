@@ -261,7 +261,7 @@ const Caution = ({ children }: { children: ReactNode }) => (
 
 /** BAR settings: expansion switch, size for each GPU, advanced options and the settings file; a save bar appears on change. */
 export const BarSettingsPage = ({ titleRef }: { titleRef: Ref<HTMLHeadingElement> }) => {
-        const { t, locale } = useI18n();
+        const { t, locale, os } = useI18n();
         const config = useConfigurationWorkspaceController();
         const { snap, draft, baseline, dirty, report, busy, receipt, error, systemNotices, settingsFile, patch, setDraft, setReport, openSaveConfirmation, reviewButton } = config;
         const navigation = useGuidedNavigation();
@@ -296,7 +296,7 @@ export const BarSettingsPage = ({ titleRef }: { titleRef: Ref<HTMLHeadingElement
                                         <div className="nv-task-body" style={{ paddingTop: 32, gap: 24, paddingBottom: dirty && loaded ? 120 : 32 }}>
                                                 <Crumb here={t("ui.barSettings")} onHome={() => navigation.go("home")} />
                                                 <TaskHead title={t("ui.barSettings")} lead={t("ui.barSettingsLead")} titleRef={titleRef} />
-                                                {error && <Notice title={t("ui.taskDidNotFinish")}>{translateMessage(locale, error)}</Notice>}
+                                                {error && <Notice title={t("ui.taskDidNotFinish")}>{translateMessage(locale, error, os)}</Notice>}
                                                 {systemNotices.map((notice) => <Caution key={notice.id}>{t(notice.id)}</Caution>)}
                                                 {snap.barSettings.savedConfigurationState === "invalid" && loaded && <Caution>{t("ui.savedConfigurationInvalidNotice")}</Caution>}
                                                 {receipt?.path === savePath && !dirty && (

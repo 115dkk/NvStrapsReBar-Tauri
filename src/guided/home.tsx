@@ -8,7 +8,7 @@ import { translateMessage, useI18n } from "../i18n";
 import type { ResizableBarGpuPresentation } from "../resizable-bar-status";
 import { Icon } from "./icons";
 import { useGuidedNavigation } from "./navigation";
-import { homeState, installInProgress, installScreen, stageFor } from "./routing";
+import { homeState, installInProgress, installScreen, pageAvailable, stageFor } from "./routing";
 import { ActionBar, Check, Fact, Facts, GpuRow, ListRow, Notice, SizeCompare, Step, Steps, TaskHead } from "./ui";
 
 const stageNameIds = ["ui.stagePrepare", "ui.stageInstall", "ui.stageTurnOn", "ui.stageFinish", "ui.stageFinish"] as const;
@@ -44,15 +44,15 @@ const GpuRows = () => {
 };
 
 const HomeRows = () => {
-        const { t } = useI18n();
+        const { t, os } = useI18n();
         const { go } = useGuidedNavigation();
         return (
                 <ul className="nv-rows">
                         <ListRow icon="sliders" title={t("ui.barSettings")} detail={t("ui.homeRowBarSettingsDetail")} onClick={() => go("bar")} />
-                        <ListRow icon="game" title={t("ui.enablePerGame")} detail={t("ui.homeRowGamesDetail")} onClick={() => go("games")} />
+                        {pageAvailable("games", os) && <ListRow icon="game" title={t("ui.enablePerGame")} detail={t("ui.homeRowGamesDetail")} onClick={() => go("games")} />}
                         <ListRow icon="save" title={t("ui.homeRowBackup")} detail={t("ui.homeRowBackupDetail")} onClick={() => go("bar", { settingsFile: true })} />
                         <ListRow icon="swap" title={t("ui.changesTitleShort")} detail={t("ui.homeRowChangesDetail")} onClick={() => go("changes")} />
-                        <ListRow icon="usb" title={t("ui.externalCrumb")} detail={t("ui.homeRowExternalDetail")} onClick={() => go("external")} />
+                        {pageAvailable("external", os) && <ListRow icon="usb" title={t("ui.externalCrumb")} detail={t("ui.homeRowExternalDetail")} onClick={() => go("external")} />}
                 </ul>
         );
 };
@@ -67,7 +67,7 @@ const HomeFrame = ({ children, bar }: { children: ReactNode; bar?: ReactNode }) 
 );
 
 export const Home = ({ titleRef }: { titleRef: Ref<HTMLHeadingElement> }) => {
-        const { t, locale } = useI18n();
+        const { t, locale, os } = useI18n();
         const config = useConfigurationWorkspaceController();
         const { snap, rebarStatus, busy, load, elevate, error } = config;
         const { view } = useDeploymentWorkspaceController();
@@ -75,7 +75,7 @@ export const Home = ({ titleRef }: { titleRef: Ref<HTMLHeadingElement> }) => {
         if (!snap) return null;
         const continuing = installInProgress(view) || Boolean(view.firmware && !view.plan);
         const state = homeState(snap, rebarStatus.tone, continuing);
-        const errorNotice = error && <Notice title={t("ui.taskDidNotFinish")}>{translateMessage(locale, error)}</Notice>;
+        const errorNotice = error && <Notice title={t("ui.taskDidNotFinish")}>{translateMessage(locale, error, os)}</Notice>;
         const currentGpu = rebarStatus.gpus.find((row) => row.gpu.state === "legacy256MiB") ?? rebarStatus.gpus[0];
         const eyebrow = currentGpu ? t("ui.homeEyebrowGpu", { gpu: currentGpu.gpu.productName.replace(/^NVIDIA GeForce /, "") }) : t("ui.homeEyebrow");
         const disabled = busy || Boolean(view.busyAction);
@@ -127,7 +127,7 @@ export const Home = ({ titleRef }: { titleRef: Ref<HTMLHeadingElement> }) => {
                 const msi = usesMsiProZ690Route(snap);
                 const target = currentGpu?.gpu.patchConfiguration.targetSizeBytes;
                 return (
-                        <HomeFrame bar={<ActionBar center hint={t("ui.homeStartHint")} secondary={[{ label: t("ui.homeStartExternal"), onClick: () => go("external"), disabled }]} primary={{ label: t("ui.getStarted"), icon: "arrow", onClick: () => go("install"), disabled }} />}>
+                        <HomeFrame bar={<ActionBar center hint={t("ui.homeStartHint")} secondary={pageAvailable("external", os) ? [{ label: t("ui.homeStartExternal"), onClick: () => go("external"), disabled }] : []} primary={{ label: t("ui.getStarted"), icon: "arrow", onClick: () => go("install"), disabled }} />}>
                                 {errorNotice}
                                 <TaskHead label={eyebrow} title={t("ui.homeStartTitle")} lead={target ? t("ui.homeStartLead", { size: formatBytes(target) }) : t("ui.homeStartLeadGeneric")} titleRef={titleRef} />
                                 {target && <SizeCompare fromLabel={t("ui.now")} from="256 MiB" toLabel={t("ui.whenOn")} to={formatBytes(target)} label={t("ui.compareNowAndOn", { size: formatBytes(target) })} />}

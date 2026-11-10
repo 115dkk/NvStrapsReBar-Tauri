@@ -40,3 +40,6 @@ test-results/
 
 # Local skill evidence
 _workspace/humanize-korean/
+
+# Worktrees the Claude Code Agent tool creates for subagents
+.claude/worktrees/

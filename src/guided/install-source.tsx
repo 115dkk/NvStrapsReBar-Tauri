@@ -6,8 +6,10 @@ import { legacyRuleKey } from "../deployment-workspace/session-projection";
 import { MSI_MANUAL } from "../deployment-workspace/session-state";
 import { messages, type StaticMessageId } from "../i18n-catalog";
 import { translateMessage } from "../i18n";
+import type { HostOs } from "../platform";
 import { Icon } from "./icons";
 import type { InstallContext } from "./install-context";
+import { pageAvailable } from "./routing";
 import { ActionBar, Caution, Choices, FileCard, Notice, RouteCard, Step, Steps, TaskPanel } from "./ui";
 
 export const installMethodIds: Record<FirmwareInstallMethod, { title: StaticMessageId; detail: StaticMessageId }> = {
@@ -16,6 +18,13 @@ export const installMethodIds: Record<FirmwareInstallMethod, { title: StaticMess
         vendorWindowsUtility: { title: "ui.methodWindowsUtility", detail: "ui.methodWindowsUtilityDetail" },
         externalSpiProgrammer: { title: "ui.methodSpiProgrammer", detail: "ui.methodSpiProgrammerDetail" },
 };
+
+/** Methods that run only on Windows; a plan that already uses one still shows its guide. */
+const WINDOWS_ONLY_METHODS: readonly FirmwareInstallMethod[] = ["vendorWindowsUtility"];
+
+/** Install methods offered in the method choice on this OS, in catalog order. */
+export const offeredInstallMethods = (os: HostOs): FirmwareInstallMethod[] =>
+        (Object.keys(installMethodIds) as FirmwareInstallMethod[]).filter((method) => os === "windows" || !WINDOWS_ONLY_METHODS.includes(method));
 
 export const recoveryMethodIds: Record<RecoveryMethod, { title: StaticMessageId; detail: StaticMessageId }> = {
         dualBios: { title: "ui.recoveryDualBios", detail: "ui.recoveryDualBiosDetail" },
@@ -47,9 +56,9 @@ const stageLabel = (ctx: InstallContext, question?: 1 | 2 | 3) =>
  * the BIOS-file refusals (signed capsule, several DXE areas) included: no later screen is reached.
  */
 const SourceFailure = ({ ctx }: { ctx: InstallContext }) => {
-        const { t, locale, view } = ctx;
+        const { t, locale, os, view } = ctx;
         if (view.activity?.tone !== "error") return null;
-        return <Notice title={t("ui.taskDidNotFinish")}>{translateMessage(locale, view.activity.message)}</Notice>;
+        return <Notice title={t("ui.taskDidNotFinish")}>{translateMessage(locale, view.activity.message, os)}</Notice>;
 };
 
 /**
@@ -57,13 +66,17 @@ const SourceFailure = ({ ctx }: { ctx: InstallContext }) => {
  * and point to the route that leaves the BIOS file alone.
  */
 const SignedFirmwareWarning = ({ ctx }: { ctx: InstallContext }) => {
-        const { t, view, navigation, busy } = ctx;
+        const { t, os, view, navigation, busy } = ctx;
         if (!view.signedUpdateCoversDriver) return null;
         return (
                 <Caution title={t("ui.signedFirmwareWarningTitle")}>
                         {t("ui.signedFirmwareWarningDetail")}
-                        <br />
-                        <button type="button" className="nv-btn nv-btn-text" disabled={busy} onClick={() => navigation.go("external")}>{t("ui.externalOpenFromWarning")}</button>
+                        {pageAvailable("external", os) && (
+                                <>
+                                        <br />
+                                        <button type="button" className="nv-btn nv-btn-text" disabled={busy} onClick={() => navigation.go("external")}>{t("ui.externalOpenFromWarning")}</button>
+                                </>
+                        )}
                 </Caution>
         );
 };
@@ -134,7 +147,7 @@ export const BoardQuestion = ({ ctx }: { ctx: InstallContext }) => {
 };
 
 export const LegacyAnalysis = ({ ctx }: { ctx: InstallContext }) => {
-        const { t, n, exactMatches, absentRules, locale, view, commands, navigation, busy, routing } = ctx;
+        const { t, n, exactMatches, absentRules, locale, os, view, commands, navigation, busy, routing } = ctx;
         const analyzed = Boolean(view.legacyAnalysis && view.legacyAnalysisValid);
         useEffect(() => {
                 // Analysis only reads the chosen file, so it starts on its own.
@@ -149,7 +162,7 @@ export const LegacyAnalysis = ({ ctx }: { ctx: InstallContext }) => {
                         titleRef={ctx.titleRef}
                         bar={
                                 <ActionBar
-                                        hint={view.legacyNextAction ? translateMessage(locale, view.legacyNextAction) : undefined}
+                                        hint={view.legacyNextAction ? translateMessage(locale, view.legacyNextAction, os) : undefined}
                                         secondary={routing.catalogBoard ? [] : [{ label: t("ui.previousQuestion"), onClick: () => navigation.setInstallUi({ question: 1 }) }]}
                                         primary={analyzed
                                                 ? { label: t("ui.next"), icon: "arrow", disabled: busy || !view.legacyReady, onClick: next }
@@ -159,7 +172,7 @@ export const LegacyAnalysis = ({ ctx }: { ctx: InstallContext }) => {
                 >
                         <ChosenFile ctx={ctx} />
                         {view.legacyAnalysisStatus === "error" && view.legacyNextAction && (
-                                <div className="nv-notice" role="alert"><Icon name="alert" /><div className="nv-fact-text"><strong>{t("ui.legacyAnalysisFailed")}</strong><span>{translateMessage(locale, view.legacyNextAction)}</span></div></div>
+                                <div className="nv-notice" role="alert"><Icon name="alert" /><div className="nv-fact-text"><strong>{t("ui.legacyAnalysisFailed")}</strong><span>{translateMessage(locale, view.legacyNextAction, os)}</span></div></div>
                         )}
                         {analyzed && view.legacyAnalysis!.value.catalogs.map((catalog) => {
                                 const applicable = catalog.rules.filter((rule) => rule.status === "applicable");
@@ -313,7 +326,7 @@ export const Routes = ({ ctx }: { ctx: InstallContext }) => {
 };
 
 export const InstallQuestion = ({ ctx }: { ctx: InstallContext }) => {
-        const { t, view, commands, navigation, busy } = ctx;
+        const { t, os, view, commands, navigation, busy } = ctx;
         const urlId = useId();
         const urlValid = view.instructionsUrl.startsWith("https://");
         return (
@@ -335,7 +348,7 @@ export const InstallQuestion = ({ ctx }: { ctx: InstallContext }) => {
                                 legend={t("ui.installQuestionTitle")}
                                 value={view.installMethod}
                                 onChange={commands.setInstallMethod}
-                                choices={(Object.keys(installMethodIds) as FirmwareInstallMethod[]).map((value) => ({ value, title: t(installMethodIds[value].title), detail: t(installMethodIds[value].detail) }))}
+                                choices={offeredInstallMethods(os).map((value) => ({ value, title: t(installMethodIds[value].title), detail: t(installMethodIds[value].detail) }))}
                         />
                         <label className="nv-field" htmlFor={urlId}>
                                 <span>{t("ui.manualAddressLabel")}</span>

@@ -2,6 +2,7 @@ import { firmwareInstalled } from "../bar-settings-routing";
 import type { DeploymentWorkspaceView } from "../deployment-workspace/session-contract";
 import type { StepId } from "../deployment-workspace/contract";
 import type { ResizableBarStatusPresentation } from "../resizable-bar-status";
+import type { HostOs } from "../platform";
 import type { SystemSnapshot } from "../types";
 
 /**
@@ -12,8 +13,23 @@ import type { SystemSnapshot } from "../types";
 
 export type GuidedPage = "home" | "install" | "bar" | "games" | "changes" | "record" | "profiles" | "external";
 
+/**
+ * Pages that exist only on Windows: per-game settings use NVIDIA's Windows driver API, and the
+ * external route has no Linux build yet.
+ */
+const WINDOWS_ONLY_PAGES: readonly GuidedPage[] = ["games", "external"];
+
+export const pageAvailable = (page: GuidedPage, os: HostOs) => os === "windows" || !WINDOWS_ONLY_PAGES.includes(page);
+
+/** The page actually shown: a page that does not exist on this OS opens home instead. */
+export const resolvePage = (page: GuidedPage, os: HostOs): GuidedPage => (pageAvailable(page, os) ? page : "home");
+
 /** The NVIDIA per-application step is offered after the install, not required by it. */
 export const OPTIONAL_FINAL_STEP: StepId = "configureNvidiaApplications";
+
+/** The plan steps a record lists: the per-game step is left out where per-game settings do not exist. */
+export const listedSteps = <Step extends { id: StepId }>(steps: readonly Step[], os: HostOs): readonly Step[] =>
+        pageAvailable("games", os) ? steps : steps.filter((step) => step.id !== OPTIONAL_FINAL_STEP);
 
 type PlanView = Pick<DeploymentWorkspaceView, "plan" | "activeStep">;
 

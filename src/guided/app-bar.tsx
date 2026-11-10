@@ -5,6 +5,7 @@ import { useDeploymentWorkspaceController } from "../deployment-workspace/contex
 import { useI18n } from "../i18n";
 import { Icon } from "./icons";
 import { useGuidedNavigation } from "./navigation";
+import { pageAvailable } from "./routing";
 import { StatusChip } from "./ui";
 
 /** Largest BAR1 among the observed GPUs, used by the status chip. */
@@ -32,7 +33,7 @@ export const ResizableBarChip = () => {
 };
 
 export const AppBar = () => {
-        const { t, locale, setLocale } = useI18n();
+        const { t, locale, setLocale, os } = useI18n();
         const navigation = useGuidedNavigation();
         const { load, busy, showConfirm, setShowLicenses, licenseButton } = useConfigurationWorkspaceController();
         const { view } = useDeploymentWorkspaceController();
@@ -107,7 +108,7 @@ export const AppBar = () => {
                                         <button type="button" role="menuitem" disabled={!hasRecord} onClick={() => choose(() => navigation.go("record"))}><Icon name="clock" />{t("ui.menuInstallRecord")}</button>
                                         <button type="button" role="menuitem" onClick={() => choose(navigation.startNewPreparation)}><Icon name="file" />{t("ui.menuNewPreparation")}</button>
                                         <button type="button" role="menuitem" disabled={view.profiles.length < 2} onClick={() => choose(() => navigation.go("profiles"))}><Icon name="folder" />{t("ui.menuOpenPreparation")}</button>
-                                        <button type="button" role="menuitem" onClick={() => choose(() => navigation.go("external"))}><Icon name="usb" />{t("ui.externalCrumb")}</button>
+                                        {pageAvailable("external", os) && <button type="button" role="menuitem" onClick={() => choose(() => navigation.go("external"))}><Icon name="usb" />{t("ui.externalCrumb")}</button>}
                                         <hr />
                                         <div role="group" aria-label={t("ui.language")}>
                                                 <div className="nv-menu-label" aria-hidden="true">{t("ui.language")}</div>

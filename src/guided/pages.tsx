@@ -7,7 +7,7 @@ import { BarSettingsPage } from "./bar-settings";
 import { recallExport } from "./export-memory";
 import { Icon } from "./icons";
 import { initialInstallUi, useGuidedNavigation } from "./navigation";
-import { OPTIONAL_FINAL_STEP } from "./routing";
+import { OPTIONAL_FINAL_STEP, listedSteps } from "./routing";
 import { ActionBar, type ActionBarProps, Crumb, Fact, Facts, FileCard, Notice, Result, Step, Steps, TaskHead } from "./ui";
 
 const SubPage = ({ here, title, lead, titleRef, children, bar, wide = false, testId }: {
@@ -74,7 +74,7 @@ export const ChangesPage = ({ titleRef }: { titleRef: Ref<HTMLHeadingElement> })
 };
 
 export const RecordPage = ({ titleRef }: { titleRef: Ref<HTMLHeadingElement> }) => {
-        const { t, locale } = useI18n();
+        const { t, locale, os } = useI18n();
         const { view, commands } = useDeploymentWorkspaceController();
         const busy = Boolean(view.busyAction);
         const remembered = view.packageReceipt ?? recallExport(view.selectedProfileId);
@@ -89,12 +89,12 @@ export const RecordPage = ({ titleRef }: { titleRef: Ref<HTMLHeadingElement> }) 
                 >
                         {view.activity && (
                                 view.activity.tone === "success"
-                                        ? <Result title={translateMessage(locale, view.activity.message)} />
-                                        : <Notice title={t("ui.taskDidNotFinish")}>{translateMessage(locale, view.activity.message)}</Notice>
+                                        ? <Result title={translateMessage(locale, view.activity.message, os)} />
+                                        : <Notice title={t("ui.taskDidNotFinish")}>{translateMessage(locale, view.activity.message, os)}</Notice>
                         )}
                         {view.plan && (
                                 <ol className="nv-ledger" aria-label={t("ui.deploymentPlan")}>
-                                        {view.plan.steps.map((step) => (
+                                        {listedSteps(view.plan.steps, os).map((step) => (
                                                 <li key={step.id} className={`nv-check ${step.state === "completed" ? "done" : step.state === "ready" ? "running" : "waiting"}`}>
                                                         <span className="nv-check-mark" aria-hidden="true">{step.state === "completed" ? <Icon name="check" /> : null}</span>
                                                         <span className="nv-fact-text"><span>{t(stepTitleIds[step.id])}</span><span className="nv-supporting">{t(stepKindIds[step.kind])}{step.id === OPTIONAL_FINAL_STEP ? ` · ${t("ui.optional")}` : ""}</span></span>
