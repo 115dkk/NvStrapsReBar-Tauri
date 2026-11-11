@@ -236,6 +236,17 @@ pub fn list_machine_profiles(app: AppHandle) -> CommandResult<Vec<MachineProfile
 }
 
 #[tauri::command]
+pub fn delete_machine_profile(app: AppHandle, profile_id: String) -> CommandResult<()> {
+    store(&app)
+        .and_then(|store| {
+            store
+                .delete_profile(&profile_id)
+                .map_err(BackendError::from)
+        })
+        .map_err(ApiError::from)
+}
+
+#[tauri::command]
 pub fn get_deployment_plan(app: AppHandle, profile_id: String) -> CommandResult<DeploymentPlan> {
     store(&app)
         .and_then(|store| {

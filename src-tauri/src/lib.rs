@@ -72,6 +72,7 @@ pub fn run() {
             deployment::analyze_legacy_firmware,
             deployment::create_machine_profile,
             deployment::list_machine_profiles,
+            deployment::delete_machine_profile,
             deployment::get_deployment_plan,
             deployment::compare_machine_profile,
             deployment::prepare_firmware_artifact,

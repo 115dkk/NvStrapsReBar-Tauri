@@ -460,15 +460,13 @@ impl FirmwareInstallRoute {
         if !self.tested_or_documented {
             return Err(ProfileError::FirmwareInstallRouteNotEstablished);
         }
-        self.official_instructions_url = required_text(
-            "official firmware install instructions URL",
-            self.official_instructions_url,
-        )?;
-        if !self.official_instructions_url.starts_with("https://")
-            || self
-                .official_instructions_url
-                .chars()
-                .any(char::is_whitespace)
+        self.official_instructions_url = self.official_instructions_url.trim().to_owned();
+        if !self.official_instructions_url.is_empty()
+            && (!self.official_instructions_url.starts_with("https://")
+                || self
+                    .official_instructions_url
+                    .chars()
+                    .any(char::is_whitespace))
         {
             return Err(ProfileError::InvalidOfficialInstructionsUrl);
         }
@@ -2112,6 +2110,53 @@ mod tests {
                 Err(ProfileError::FirmwareTargetPolicyRequiresCurrentSchema)
             ));
         }
+    }
+
+    #[test]
+    fn official_instructions_url_is_optional_but_nonempty_values_require_https() {
+        let create = |official_instructions_url: &str| {
+            let mut install = firmware_install();
+            install.official_instructions_url = official_instructions_url.into();
+            MachineProfile::create(
+                "machine",
+                BoardPath::NativeResizableBar,
+                identity(vec![gpu(0x1e81, 1)]),
+                firmware(),
+                RecoveryCapability {
+                    method: RecoveryMethod::UsbFlashback,
+                    tested_or_documented: true,
+                    note: "rear-panel flashback tested".into(),
+                },
+                install,
+            )
+        };
+
+        for value in ["", "  \t\n"] {
+            let profile = create(value).unwrap();
+            assert_eq!(
+                profile
+                    .firmware_install
+                    .as_ref()
+                    .unwrap()
+                    .official_instructions_url,
+                ""
+            );
+            let loaded: MachineProfile =
+                serde_json::from_slice(&serde_json::to_vec(&profile).unwrap()).unwrap();
+            assert_eq!(loaded.profile_id, profile.profile_id);
+            loaded.validate().unwrap();
+        }
+
+        assert!(matches!(
+            create("http://example.com"),
+            Err(ProfileError::InvalidOfficialInstructionsUrl)
+        ));
+
+        let existing = profile(BoardPath::NativeResizableBar);
+        let loaded: MachineProfile =
+            serde_json::from_slice(&serde_json::to_vec(&existing).unwrap()).unwrap();
+        assert_eq!(loaded.profile_id, existing.profile_id);
+        loaded.validate().unwrap();
     }
 
     #[test]
