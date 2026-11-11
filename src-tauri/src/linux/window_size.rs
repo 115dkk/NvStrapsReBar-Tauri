@@ -35,10 +35,42 @@ struct SavedWindow {
     maximized: bool,
 }
 
+/// What one settled reading says about the window.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Reading {
+    Maximized,
+    /// Held against a screen edge by the window manager, which also chose the size.
+    Tiled,
+    Normal(Size),
+}
+
+impl Reading {
+    /// `None` while the window is hidden, minimized or full screen: that says nothing about the
+    /// size and state the user left it in.
+    fn of(state: gdk::WindowState, size: Size) -> Option<Self> {
+        if state.intersects(
+            gdk::WindowState::WITHDRAWN
+                | gdk::WindowState::ICONIFIED
+                | gdk::WindowState::FULLSCREEN,
+        ) {
+            return None;
+        }
+        // GNOME's window manager reports a maximized window as tiled as well (issue #63), so
+        // the maximized state is looked at first.
+        Some(if state.contains(gdk::WindowState::MAXIMIZED) {
+            Self::Maximized
+        } else if state.contains(gdk::WindowState::TILED) {
+            Self::Tiled
+        } else {
+            Self::Normal(size)
+        })
+    }
+}
+
 /// What is known about the window from the settled readings so far.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Memory {
-    /// The size the window has, or last had, while not maximized.
+    /// The size the window has, or last had, while neither maximized nor tiled.
     normal: Size,
     maximized: bool,
 }
@@ -53,16 +85,24 @@ impl Memory {
 
     /// Takes one settled reading. Returns the size to give the window when it left the
     /// maximized state at another size than its normal one.
-    fn observe(&mut self, size: Size, maximized: bool) -> Option<Size> {
-        if maximized {
-            self.maximized = true;
-            return None;
+    fn observe(&mut self, reading: Reading) -> Option<Size> {
+        match reading {
+            Reading::Maximized => {
+                self.maximized = true;
+                None
+            }
+            Reading::Tiled => {
+                self.maximized = false;
+                None
+            }
+            Reading::Normal(size) => {
+                if std::mem::replace(&mut self.maximized, false) {
+                    return (size != self.normal).then_some(self.normal);
+                }
+                self.normal = size;
+                None
+            }
         }
-        if std::mem::replace(&mut self.maximized, false) {
-            return (size != self.normal).then_some(self.normal);
-        }
-        self.normal = size;
-        None
     }
 
     fn saved(&self) -> SavedWindow {
@@ -123,23 +163,13 @@ fn read_when_settled(tracker: &Rc<Tracker>, window: &gtk::ApplicationWindow) {
 
 impl Tracker {
     fn read(&self, window: &gtk::ApplicationWindow) {
-        let Some(state) = window.window().map(|window| window.state()) else {
+        let Some(reading) = window
+            .window()
+            .and_then(|surface| Reading::of(surface.state(), window.size()))
+        else {
             return;
         };
-        // None of these is a size the user chose for the window.
-        if state.intersects(
-            gdk::WindowState::WITHDRAWN
-                | gdk::WindowState::ICONIFIED
-                | gdk::WindowState::FULLSCREEN
-                | gdk::WindowState::TILED,
-        ) {
-            return;
-        }
-        let give_back = self
-            .memory
-            .borrow_mut()
-            .observe(window.size(), window.is_maximized());
-        if let Some((width, height)) = give_back {
+        if let Some((width, height)) = self.memory.borrow_mut().observe(reading) {
             // The resize comes back as a new reading, which becomes the normal size.
             window.resize(width, height);
             return;
@@ -176,47 +206,34 @@ mod tests {
     const NORMAL: Size = (1180, 760);
     const FULL: Size = (1920, 1048);
 
+    fn saved(width: i32, height: i32, maximized: bool) -> SavedWindow {
+        SavedWindow {
+            width,
+            height,
+            maximized,
+        }
+    }
+
     #[test]
     fn a_resized_window_is_remembered_at_its_new_size() {
         let mut memory = Memory::starting_at(NORMAL);
-        assert_eq!(memory.observe((1000, 700), false), None);
-        assert_eq!(
-            memory.saved(),
-            SavedWindow {
-                width: 1000,
-                height: 700,
-                maximized: false
-            }
-        );
+        assert_eq!(memory.observe(Reading::Normal((1000, 700))), None);
+        assert_eq!(memory.saved(), saved(1000, 700, false));
     }
 
     #[test]
     fn a_maximized_window_keeps_its_normal_size_for_later() {
         let mut memory = Memory::starting_at(NORMAL);
-        assert_eq!(memory.observe(FULL, true), None);
-        assert_eq!(
-            memory.saved(),
-            SavedWindow {
-                width: 1180,
-                height: 760,
-                maximized: true
-            }
-        );
+        assert_eq!(memory.observe(Reading::Maximized), None);
+        assert_eq!(memory.saved(), saved(1180, 760, true));
     }
 
     #[test]
     fn leaving_the_maximized_state_at_the_normal_size_changes_nothing() {
         let mut memory = Memory::starting_at(NORMAL);
-        memory.observe(FULL, true);
-        assert_eq!(memory.observe(NORMAL, false), None);
-        assert_eq!(
-            memory.saved(),
-            SavedWindow {
-                width: 1180,
-                height: 760,
-                maximized: false
-            }
-        );
+        memory.observe(Reading::Maximized);
+        assert_eq!(memory.observe(Reading::Normal(NORMAL)), None);
+        assert_eq!(memory.saved(), saved(1180, 760, false));
     }
 
     #[test]
@@ -224,29 +241,62 @@ mod tests {
         // Still as large as the screen (Wayland), or the size the window was created with (X11).
         for left_at in [FULL, (1920, 1040), (900, 620)] {
             let mut memory = Memory::starting_at(NORMAL);
-            memory.observe(FULL, true);
-            assert_eq!(memory.observe(left_at, false), Some(NORMAL));
-            assert_eq!(
-                memory.saved(),
-                SavedWindow {
-                    width: 1180,
-                    height: 760,
-                    maximized: false
-                }
-            );
+            memory.observe(Reading::Maximized);
+            assert_eq!(memory.observe(Reading::Normal(left_at)), Some(NORMAL));
+            assert_eq!(memory.saved(), saved(1180, 760, false));
             // The resize arrives as the next reading.
-            assert_eq!(memory.observe(NORMAL, false), None);
-            assert_eq!(memory.saved().width, 1180);
+            assert_eq!(memory.observe(Reading::Normal(NORMAL)), None);
+            assert_eq!(memory.saved(), saved(1180, 760, false));
         }
     }
 
     #[test]
     fn a_window_resized_after_leaving_the_maximized_state_keeps_the_new_size() {
         let mut memory = Memory::starting_at(NORMAL);
-        memory.observe(FULL, true);
-        memory.observe(NORMAL, false);
-        assert_eq!(memory.observe(FULL, false), None);
-        assert_eq!(memory.saved().width, 1920);
+        memory.observe(Reading::Maximized);
+        memory.observe(Reading::Normal(NORMAL));
+        assert_eq!(memory.observe(Reading::Normal(FULL)), None);
+        assert_eq!(memory.saved(), saved(1920, 1048, false));
+    }
+
+    #[test]
+    fn a_window_tiled_to_one_side_is_not_maximized_and_keeps_its_normal_size() {
+        let mut memory = Memory::starting_at(NORMAL);
+        memory.observe(Reading::Maximized);
+        assert_eq!(memory.observe(Reading::Tiled), None);
+        assert_eq!(memory.saved(), saved(1180, 760, false));
+        // Taken off the edge again, at whatever size it has then.
+        assert_eq!(memory.observe(Reading::Normal((900, 620))), None);
+        assert_eq!(memory.saved(), saved(900, 620, false));
+    }
+
+    #[test]
+    fn a_maximized_window_that_is_also_reported_as_tiled_is_maximized() {
+        use gdk::WindowState as State;
+
+        // What GNOME's window manager tells a GTK 3 window that the user maximized.
+        let on_gnome = State::MAXIMIZED | State::FOCUSED | State::TILED;
+        assert_eq!(Reading::of(on_gnome, FULL), Some(Reading::Maximized));
+        assert_eq!(
+            Reading::of(State::MAXIMIZED | State::FOCUSED, FULL),
+            Some(Reading::Maximized)
+        );
+        assert_eq!(
+            Reading::of(State::FOCUSED | State::TILED, (960, 1048)),
+            Some(Reading::Tiled)
+        );
+        assert_eq!(
+            Reading::of(State::FOCUSED, NORMAL),
+            Some(Reading::Normal(NORMAL))
+        );
+        assert_eq!(
+            Reading::of(State::empty(), NORMAL),
+            Some(Reading::Normal(NORMAL))
+        );
+        for unseen in [State::WITHDRAWN, State::ICONIFIED, State::FULLSCREEN] {
+            assert_eq!(Reading::of(unseen | on_gnome, FULL), None);
+            assert_eq!(Reading::of(unseen, NORMAL), None);
+        }
     }
 
     #[test]
@@ -261,13 +311,9 @@ mod tests {
         ));
         let file = directory.join(FILE_NAME);
         assert_eq!(read(&file), None);
-        let saved = SavedWindow {
-            width: 1000,
-            height: 700,
-            maximized: true,
-        };
-        write(&file, saved);
-        assert_eq!(read(&file), Some(saved));
+        let kept = saved(1000, 700, true);
+        write(&file, kept);
+        assert_eq!(read(&file), Some(kept));
         fs::write(&file, br#"{"width":0,"height":700,"maximized":false}"#).unwrap();
         assert_eq!(read(&file), None);
         fs::write(&file, b"not json").unwrap();
