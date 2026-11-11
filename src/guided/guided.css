@@ -117,7 +117,8 @@
 .nv-app .nv-compare .from { color: var(--warn); }
 .nv-app .nv-compare .to { color: var(--ink); }
 .nv-app .nv-compare .achieved { color: var(--ok); }
-.nv-app .nv-compare-arrow { color: var(--muted); padding-bottom: 8px; }
+/* As tall as the value beside it, so the arrow sits on the middle of the digits. */
+.nv-app .nv-compare-arrow { display: flex; align-items: center; height: 44px; color: var(--muted); }
 .nv-app .nv-gpu { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 12px 16px; border-radius: var(--radius-md); background: var(--surface2); }
 .nv-app .nv-gpu-name { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .nv-app .nv-size { display: inline-flex; align-items: center; height: 26px; padding: 0 8px; border-radius: var(--radius-xs); font-family: var(--font-mono); font-size: 13px; line-height: 18px; font-weight: 600; white-space: nowrap; }
@@ -198,7 +199,7 @@
 .nv-app .nv-dialog h2 { font-size: 20px; line-height: 28px; font-weight: 700; text-wrap: balance; }
 .nv-app .nv-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
 .nv-app .nv-menu { position: absolute; top: 52px; right: 12px; width: 260px; padding: 6px; border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--shadow-dialog); display: flex; flex-direction: column; }
-.nv-app .nv-menu button { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 10px; border: 0; border-radius: var(--radius-sm); background: transparent; text-align: left; cursor: pointer; }
+.nv-app .nv-menu button { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 0 10px; border: 0; border-radius: var(--radius-sm); background: transparent; text-align: left; cursor: pointer; }
 .nv-app .nv-menu button:hover { background: var(--surface2); }
 .nv-app .nv-menu hr { width: 100%; height: 1px; border: 0; margin: 4px 0; background: var(--line); }
 .nv-app .nv-menu .nv-icon { color: var(--muted); }
@@ -236,6 +237,7 @@
 .nv-app .nv-menu [role="menuitemradio"][aria-checked="true"] { color: var(--accent); }
 .nv-app .nv-menu button:disabled { opacity: 0.42; cursor: not-allowed; }
 .nv-app .nv-menu-label { padding: 8px 10px 4px; font-size: 12px; line-height: 16px; font-weight: 550; color: var(--muted); }
+.nv-app .nv-menu-version { padding: 4px 10px 6px; font-weight: 400; font-variant-numeric: tabular-nums; user-select: text; }
 .nv-app .nv-crumb { display: flex; align-items: center; gap: 6px; font-size: 13px; line-height: 20px; }
 .nv-app .nv-crumb button { min-height: 0; padding: 0; border: 0; background: transparent; color: var(--accent); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .nv-app .nv-notice.inline, .nv-app .nv-result.inline { padding: 12px 14px; }
@@ -253,8 +255,9 @@
 .nv-app .nv-field > .nv-field-error { color: var(--bad); }
 .nv-app .nv-field:has(> .nv-field-error) { scroll-margin-block: 16px; }
 .nv-app .nv-input { width: 100%; }
-.nv-app .nv-input[aria-invalid="true"] { border-color: var(--bad); box-shadow: inset 0 0 0 1px var(--bad); }
-.nv-app .nv-input[aria-invalid="true"]:focus-visible { outline-color: var(--bad); }
+/* One red line: the border while the field is not focused, the focus ring while it is. */
+.nv-app .nv-input[aria-invalid="true"] { border-color: var(--bad); }
+.nv-app .nv-input[aria-invalid="true"]:focus-visible { border-color: var(--control-line); outline-color: var(--bad); }
 .nv-app .nv-textarea { min-height: 72px; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--control-line); background: var(--surface); color: var(--ink); resize: vertical; }
 .nv-app .nv-choice.disabled { opacity: 0.6; cursor: not-allowed; }
 .nv-app .nv-home > .nv-task-body.wide { max-width: 1000px; }
