@@ -12,7 +12,7 @@ import type { HostOs } from "../platform";
 import { Icon } from "./icons";
 import type { InstallContext } from "./install-context";
 import { pageAvailable } from "./routing";
-import { ActionBar, Caution, Choices, FileCard, Notice, RouteCard, Step, Steps, TaskPanel } from "./ui";
+import { ActionBar, Caution, Choices, ConfirmDialog, FileCard, Notice, RouteCard, Step, Steps, TaskPanel } from "./ui";
 
 export const installMethodIds: Record<FirmwareInstallMethod, { title: StaticMessageId; detail: StaticMessageId }> = {
         firmwareSetupUtility: { title: "ui.methodSetupUtility", detail: "ui.methodSetupUtilityDetail" },
@@ -400,33 +400,62 @@ export const InstallQuestion = ({ ctx }: { ctx: InstallContext }) => {
         );
 };
 
+/** What can go wrong on a board that cannot put its BIOS back, as the confirmation lists it. */
+const RECOVERY_NONE_RISKS: readonly StaticMessageId[] = [
+        "ui.recoveryNoneRiskInterrupted",
+        "ui.recoveryNoneRiskNoStart",
+        "ui.recoveryNoneRiskRepair",
+        "ui.recoveryNoneRiskWarranty",
+];
+
 export const RecoveryQuestion = ({ ctx }: { ctx: InstallContext }) => {
         const { t, view, commands, navigation, busy } = ctx;
-        const ready = view.recoveryMethod !== "none" && policyReady(ctx) && view.legacyReady;
+        const ready = policyReady(ctx) && view.legacyReady;
+        const none = view.recoveryMethod === "none";
+        // A board with no way to recover is a true answer, so it goes on, after one question that says what can go wrong.
+        const [asking, setAsking] = useState(false);
         return (
-                <TaskPanel
-                        label={stageLabel(ctx, 3)}
-                        title={t("ui.recoveryQuestionTitle")}
-                        lead={t("ui.recoveryQuestionLead")}
-                        titleRef={ctx.titleRef}
-                        bar={
-                                <ActionBar
-                                        hint={t(view.recoveryMethod === "none" ? "ui.recoveryNoneHint" : "ui.recoveryQuestionHint")}
-                                        secondary={[{ label: t("ui.previousQuestion"), onClick: () => navigation.setInstallUi({ question: 2 }) }]}
-                                        primary={{ label: t("ui.confirmAndMakeFile"), icon: "arrow", busy: view.busyAction === "profile", disabled: busy || !ready, onClick: () => confirmAndCreate(ctx) }}
+                <>
+                        <TaskPanel
+                                label={stageLabel(ctx, 3)}
+                                title={t("ui.recoveryQuestionTitle")}
+                                lead={t("ui.recoveryQuestionLead")}
+                                titleRef={ctx.titleRef}
+                                bar={
+                                        <ActionBar
+                                                hint={t(none ? "ui.recoveryNoneHint" : "ui.recoveryQuestionHint")}
+                                                secondary={[{ label: t("ui.previousQuestion"), onClick: () => navigation.setInstallUi({ question: 2 }) }]}
+                                                primary={{ label: t("ui.confirmAndMakeFile"), icon: "arrow", busy: view.busyAction === "profile", disabled: busy || !ready, onClick: () => (none ? setAsking(true) : confirmAndCreate(ctx)) }}
+                                        />
+                                }
+                        >
+                                <SourceFailure ctx={ctx} />
+                                <SignedFirmwareWarning ctx={ctx} />
+                                <Choices
+                                        name="recovery-method"
+                                        legend={t("ui.recoveryQuestionTitle")}
+                                        value={view.recoveryMethod}
+                                        onChange={commands.setRecoveryMethod}
+                                        choices={(Object.keys(recoveryMethodIds) as RecoveryMethod[]).map((value) => ({ value, title: t(recoveryMethodIds[value].title), detail: t(recoveryMethodIds[value].detail) }))}
                                 />
-                        }
-                >
-                        <SourceFailure ctx={ctx} />
-                        <SignedFirmwareWarning ctx={ctx} />
-                        <Choices
-                                name="recovery-method"
-                                legend={t("ui.recoveryQuestionTitle")}
-                                value={view.recoveryMethod}
-                                onChange={commands.setRecoveryMethod}
-                                choices={(Object.keys(recoveryMethodIds) as RecoveryMethod[]).map((value) => ({ value, title: t(recoveryMethodIds[value].title), detail: t(recoveryMethodIds[value].detail) }))}
-                        />
-                        <AdvancedPolicy ctx={ctx} />
-                </TaskPanel>
+                                <AdvancedPolicy ctx={ctx} />
+                        </TaskPanel>
+                        {asking && (
+                                <ConfirmDialog
+                                        title={t("ui.recoveryNoneConfirmTitle")}
+                                        confirmLabel={t("ui.recoveryNoneConfirmAction")}
+                                        onClose={() => setAsking(false)}
+                                        onConfirm={() => {
+                                                setAsking(false);
+                                                confirmAndCreate(ctx);
+                                        }}
+                                >
+                                        {t("ui.recoveryNoneConfirmLead")}
+                                        <span className="nv-dialog-list" role="list">
+                                                {RECOVERY_NONE_RISKS.map((id) => <span key={id} role="listitem">{t(id)}</span>)}
+                                        </span>
+                                </ConfirmDialog>
+                        )}
+                </>
         );
 };

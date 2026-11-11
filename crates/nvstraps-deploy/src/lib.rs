@@ -607,7 +607,10 @@ impl MachineProfile {
         if original_firmware.byte_length == 0 {
             return Err(ProfileError::EmptyFirmwareImage);
         }
-        if recovery.method == RecoveryMethod::None || !recovery.tested_or_documented {
+        // "No way to recover" is an answer like the others: the person at the PC has to have
+        // confirmed it, and it stays out of the policies that need a recovery that works
+        // without a start (see `validate_firmware_target_policy`).
+        if !recovery.tested_or_documented {
             return Err(ProfileError::RecoveryNotEstablished);
         }
         recovery.note = required_text("recovery note", recovery.note)?;
@@ -665,7 +668,7 @@ impl MachineProfile {
         if self.original_firmware.byte_length == 0 {
             return Err(ProfileError::EmptyFirmwareImage);
         }
-        if self.recovery.method == RecoveryMethod::None || !self.recovery.tested_or_documented {
+        if !self.recovery.tested_or_documented {
             return Err(ProfileError::RecoveryNotEstablished);
         }
         let normalized_recovery_note = required_text("recovery note", self.recovery.note.clone())?;
@@ -1239,7 +1242,7 @@ pub enum ProfileError {
     MissingFirmwareFileName,
     #[error("failed to read the firmware image: {0}")]
     ReadFirmware(#[source] io::Error),
-    #[error("a tested or documented recovery route is required before deployment")]
+    #[error("the answer about recovery must be confirmed before deployment")]
     RecoveryNotEstablished,
     #[error("the recovery capability note must be trimmed and canonical")]
     RecoveryCapabilityNotCanonical,
@@ -1814,21 +1817,41 @@ mod tests {
     }
 
     #[test]
-    fn profile_requires_a_real_recovery_route() {
-        let error = MachineProfile::create(
-            "machine",
-            BoardPath::LegacyAbove4g,
-            identity(vec![gpu(0x1e81, 1)]),
-            firmware(),
-            RecoveryCapability {
-                method: RecoveryMethod::None,
-                tested_or_documented: false,
-                note: String::new(),
-            },
-            firmware_install(),
-        )
-        .unwrap_err();
-        assert!(matches!(error, ProfileError::RecoveryNotEstablished));
+    fn profile_requires_a_confirmed_answer_about_recovery() {
+        let create = |method, tested_or_documented| {
+            MachineProfile::create(
+                "machine",
+                BoardPath::NativeResizableBar,
+                identity(vec![gpu(0x1e81, 1)]),
+                firmware(),
+                RecoveryCapability {
+                    method,
+                    tested_or_documented,
+                    note: "confirmed at the PC".into(),
+                },
+                firmware_install(),
+            )
+        };
+        for method in [RecoveryMethod::None, RecoveryMethod::UsbFlashback] {
+            assert!(matches!(
+                create(method, false),
+                Err(ProfileError::RecoveryNotEstablished)
+            ));
+        }
+
+        // A board with no way to recover is recorded as such once that was confirmed; the
+        // record keeps the answer and still loads.
+        let profile = create(RecoveryMethod::None, true).unwrap();
+        assert_eq!(profile.recovery.method, RecoveryMethod::None);
+        let loaded: MachineProfile =
+            serde_json::from_slice(&serde_json::to_vec(&profile).unwrap()).unwrap();
+        loaded.validate().unwrap();
+        assert_ne!(
+            profile.profile_id,
+            create(RecoveryMethod::UsbFlashback, true)
+                .unwrap()
+                .profile_id
+        );
     }
 
     #[test]
