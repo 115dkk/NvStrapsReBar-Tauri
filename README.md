@@ -33,9 +33,12 @@ the release lists the checksums of both downloads.
 [releases page](https://github.com/115dkk/NvStrapsReBar-Tauri/releases). Download the package for
 your system and install it with `sudo apt install ./nvstraps-rebar_<version>_amd64.deb` (Ubuntu
 22.04 or later, Debian 12 or later) or `sudo dnf install ./nvstraps-rebar-<version>-1.x86_64.rpm`
-(Fedora). It does what the Windows app does except the per-game switches and the route that leaves
-the BIOS alone. [docs/LINUX.md](docs/LINUX.md) says how it works, what has been proven, and how to
-check the signature of the `.rpm`.
+(Fedora). On Debian and Ubuntu you can add the project's
+[apt repository](https://115dkk.github.io/NvStrapsReBar-Tauri/) instead, and `apt` then offers
+each new preview with the system's other updates. The Linux build does what the Windows app does
+except the per-game switches and the route that leaves the BIOS alone.
+[docs/LINUX.md](docs/LINUX.md) says how it works, what has been proven, and how to check the
+signature of the `.rpm`.
 
 ## How the app guides you
 

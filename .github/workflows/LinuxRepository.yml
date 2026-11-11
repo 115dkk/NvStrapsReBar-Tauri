@@ -1,0 +1,80 @@
+name: Linux repository
+
+# Builds the apt repository from the .deb of every published Linux preview, signs it with the
+# project's package key and publishes it on GitHub Pages. The Linux preview workflow calls it
+# after it has published a preview; it can also be started by hand from master, which publishes
+# the repository again from the previews that exist.
+#
+# The repository is built from nothing each time: what it offers is exactly the previews on the
+# releases page, and nothing is kept between runs.
+on:
+  workflow_dispatch:
+  workflow_call:
+    secrets:
+      NVSTRAPS_RPM_SIGNING_KEY:
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-repository
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and sign the apt repository
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - name: Require the package signing key
+        env:
+          NVSTRAPS_RPM_SIGNING_KEY: ${{ secrets.NVSTRAPS_RPM_SIGNING_KEY }}
+        run: |
+          # apt refuses a repository without a signature, so an unsigned one is not published.
+          if [ -z "${NVSTRAPS_RPM_SIGNING_KEY}" ]; then
+            echo "The NVSTRAPS_RPM_SIGNING_KEY secret is missing" >&2
+            exit 1
+          fi
+      - uses: actions/checkout@v7
+      - name: Install the repository tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends apt-utils gnupg
+      - name: Download the deb of every published Linux preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p target/apt-debs
+          gh release list --repo "${GITHUB_REPOSITORY}" --limit 200 --exclude-drafts \
+            --json tagName --jq '.[].tagName | select(startswith("linux-preview-"))' >target/apt-previews.txt
+          while read -r tag; do
+            gh release download "${tag}" --repo "${GITHUB_REPOSITORY}" --pattern '*.deb' --dir target/apt-debs
+          done <target/apt-previews.txt
+          ls -l target/apt-debs
+      - name: Build the repository
+        run: bash scripts/build-apt-repository.sh target/apt-site docs/RPM-GPG-KEY-nvstraps-rebar target/apt-debs/*.deb
+      - name: Sign the repository with the project key and check it with apt
+        # Only this step sees the key.
+        env:
+          NVSTRAPS_RPM_SIGNING_KEY: ${{ secrets.NVSTRAPS_RPM_SIGNING_KEY }}
+        run: bash scripts/sign-apt-repository.sh target/apt-site
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: target/apt-site
+
+  deploy:
+    name: Publish the repository on GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

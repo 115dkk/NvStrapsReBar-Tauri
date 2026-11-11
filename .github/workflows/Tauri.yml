@@ -179,7 +179,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends \
             libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libgtk-3-dev libsoup-3.0-dev \
-            librsvg2-dev libayatana-appindicator3-dev libxdo-dev libssl-dev rpm gnupg xvfb
+            librsvg2-dev libayatana-appindicator3-dev libxdo-dev libssl-dev rpm gnupg apt-utils xvfb
       - name: Install dependencies
         run: npm ci
       - name: Build the UEFI resources required by the Tauri manifest
@@ -196,6 +196,9 @@ jobs:
         # The Linux preview signs with the project key, which a pull request never sees. This
         # proves the same scripts on the image the preview is built on.
         run: bash scripts/test-rpm-signing.sh
+      - name: Build an apt repository from the deb, sign it with a key made for this run and check it with apt
+        # The same reason as above, for the repository that LinuxRepository.yml publishes.
+        run: bash scripts/test-apt-repository.sh
 
   # Drives the real application, not the browser preview, through the guided deployment with retail
   # vendor BIOS images. Only the machine's hardware, firmware variables, reboots and nvidia-smi are

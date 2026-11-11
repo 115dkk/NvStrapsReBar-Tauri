@@ -30,7 +30,9 @@ Windows 10에는 WebView2가 이미 들어 있습니다. 릴리스의 `SHA256SUM
 **Linux(프리뷰).** Linux 빌드는 [릴리스 목록](https://github.com/115dkk/NvStrapsReBar-Tauri/releases)에
 `linux-preview-<버전>`이라는 프리릴리스로 따로 올라갑니다. 배포판에 맞는 패키지를 받아 Ubuntu
 22.04 이상과 Debian 12 이상에서는 `sudo apt install ./nvstraps-rebar_<버전>_amd64.deb`로,
-Fedora에서는 `sudo dnf install ./nvstraps-rebar-<버전>-1.x86_64.rpm`으로 설치하세요. 게임마다
+Fedora에서는 `sudo dnf install ./nvstraps-rebar-<버전>-1.x86_64.rpm`으로 설치하세요. Debian과
+Ubuntu에서는 [apt 저장소](https://115dkk.github.io/NvStrapsReBar-Tauri/)를 추가해 두면 새 프리뷰를
+시스템의 다른 업데이트와 함께 받습니다. 게임마다
 켜기와 BIOS를 고치지 않는 방식을 뺀 나머지는 Windows 앱과 같습니다. 동작 방식, 지금까지 확인한
 것, `.rpm` 서명을 확인하는 법은 [docs/LINUX.md](docs/LINUX.md)(영어)에 있습니다.
 

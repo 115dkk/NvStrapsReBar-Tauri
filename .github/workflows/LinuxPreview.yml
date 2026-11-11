@@ -5,7 +5,8 @@ name: Linux preview
 # .deb and starting the application), and publishes them as a GitHub pre-release of their own,
 # with the public key beside them. The stable release stays the Windows build that Release.yml
 # publishes: a preview never becomes Latest, and its tag does not start with "v", so the release
-# planner does not take it for a release.
+# planner does not take it for a release. After the pre-release is out, the apt repository is
+# published again with the new .deb in it (LinuxRepository.yml).
 on:
   workflow_dispatch:
 
@@ -68,3 +69,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node tools/publish-linux-preview.mjs
+
+  repository:
+    name: Publish the apt repository with the new preview
+    needs: publish
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/LinuxRepository.yml
+    secrets:
+      NVSTRAPS_RPM_SIGNING_KEY: ${{ secrets.NVSTRAPS_RPM_SIGNING_KEY }}

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NvStrapsReBar apt repository</title>
+<style>
+  body { max-width: 46rem; margin: 3rem auto; padding: 0 1rem; font: 16px/1.6 system-ui, sans-serif; color: #1c2430; background: #fff; }
+  pre { overflow-x: auto; padding: 0.9rem 1rem; border-radius: 6px; background: #11161d; color: #edf2f7; font: 14px/1.5 ui-monospace, monospace; }
+  code { font: 0.92em ui-monospace, monospace; }
+  @media (prefers-color-scheme: dark) { body { color: #edf2f7; background: #11161d; } pre { background: #1b222c; } a { color: #8ab4f8; } }
+</style>
+</head>
+<body>
+<h1>NvStrapsReBar apt repository</h1>
+<p>The Linux preview of <a href="https://github.com/115dkk/NvStrapsReBar-Tauri">NvStrapsReBar</a> for Debian, Ubuntu and their relatives (amd64). Add the repository once; <code>apt</code> then installs the app and offers each new preview with the system's other updates.</p>
+<pre>sudo install -d -m 755 /etc/apt/keyrings
+curl -fsSL https://115dkk.github.io/NvStrapsReBar-Tauri/apt/nvstraps-rebar.asc | sudo tee /etc/apt/keyrings/nvstraps-rebar.asc &gt;/dev/null
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/nvstraps-rebar.asc] https://115dkk.github.io/NvStrapsReBar-Tauri/apt preview main" | sudo tee /etc/apt/sources.list.d/nvstraps-rebar.list
+sudo apt update
+sudo apt install nvstraps-rebar</pre>
+<p>The repository is signed with the project's package key, fingerprint <code>F71D B90B 8FF8 4EC4 54D4 2763 FBA1 2447 1095 0726</code>. To check the key before you trust it:</p>
+<pre>gpg --show-keys --fingerprint /etc/apt/keyrings/nvstraps-rebar.asc</pre>
+<p>To remove the repository again, delete <code>/etc/apt/sources.list.d/nvstraps-rebar.list</code> and <code>/etc/apt/keyrings/nvstraps-rebar.asc</code>.</p>
+<p>What the Linux build does and what has been checked: <a href="https://github.com/115dkk/NvStrapsReBar-Tauri/blob/master/docs/LINUX.md">docs/LINUX.md</a>.</p>
+</body>
+</html>
