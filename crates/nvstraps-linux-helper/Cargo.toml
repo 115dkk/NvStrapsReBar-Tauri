@@ -1,6 +1,6 @@
 [package]
 name = "nvstraps-linux-helper"
-version = "1.1.7"
+version = "1.1.8"
 description = "Root helper that writes the NvStrapsReBar EFI variable on Linux"
 edition.workspace = true
 rust-version.workspace = true
