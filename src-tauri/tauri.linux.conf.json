@@ -27,6 +27,7 @@
           "polkit"
         ],
         "desktopTemplate": "linux/nvstraps-rebar.desktop",
+        "postRemoveScript": "linux/rpm-post-remove.sh",
         "files": {
           "/usr/lib/nvstraps-rebar/nvstraps-rebar-helper": "../target/x86_64-unknown-linux-musl/release/nvstraps-rebar-helper",
           "/usr/share/polkit-1/actions/io.github.nvstrapsrebar.helper.policy": "linux/io.github.nvstrapsrebar.helper.policy"
