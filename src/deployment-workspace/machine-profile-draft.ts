@@ -6,6 +6,11 @@ import type { DeploymentWorkspaceView } from "./session-contract";
 
 const fileName = (path: string) => path.split(/[\\/]/).at(-1) || "firmware.bin";
 
+export const instructionsUrlAcceptable = (value: string): boolean => {
+        const address = value.trim();
+        return address === "" || address.startsWith("https://");
+};
+
 export const isBootIndependentRecoveryMethod = (method: RecoveryMethod) =>
         method === "usbFlashback" || method === "externalSpiProgrammer";
 
@@ -27,6 +32,12 @@ export const buildMachineProfileRequest = (
                 );
         }
 
+        if (!instructionsUrlAcceptable(view.instructionsUrl)) {
+                throw Object.assign(new Error("The manual address must start with https://."), {
+                        code: "invalid_instructions_url",
+                });
+        }
+
         return {
                 displayName: view.displayName,
                 boardPath: view.boardPath,
@@ -42,7 +53,7 @@ export const buildMachineProfileRequest = (
                         method: view.installMethod,
                         artifactFileName: fileName(view.firmwarePath),
                         testedOrDocumented: view.routeConfirmed,
-                        officialInstructionsUrl: view.instructionsUrl,
+                        officialInstructionsUrl: view.instructionsUrl.trim(),
                         note: view.installNote,
                 },
                 legacyPatches:

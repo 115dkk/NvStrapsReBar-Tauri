@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { presentMotherboardSupport } from "./hardware-support";
+import { presentMotherboardSupport, setupUtilityName } from "./hardware-support";
 import type { SystemSnapshot } from "./types";
 
 const snapshot = (state: "supported" | "unknown"): SystemSnapshot => ({
@@ -79,5 +79,23 @@ describe("motherboard support presenter", () => {
                         boardProduct: "PRO Z690-A DDR4(MS-7D25)",
                 });
                 expect(result.statusId).not.toBe("ui.unsupported");
+        });
+});
+
+describe("BIOS setup utility names", () => {
+        it.each([
+                ["Micro-Star International Co., Ltd.", "M-FLASH"],
+                ["MSI", "M-FLASH"],
+                ["msi computer corp.", "M-FLASH"],
+                ["ASUSTeK COMPUTER INC.", "EZ Flash"],
+                ["ASUS", "EZ Flash"],
+                ["Gigabyte Technology Co., Ltd.", "Q-Flash"],
+                ["ASRock", "Instant Flash"],
+                ["  ASROCK  ", "Instant Flash"],
+                ["Dell Inc.", null],
+                ["", null],
+                [undefined, null],
+        ])("maps %s to %s", (manufacturer, name) => {
+                expect(setupUtilityName(manufacturer)).toBe(name);
         });
 });

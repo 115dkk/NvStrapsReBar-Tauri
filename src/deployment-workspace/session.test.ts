@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MessageDescriptor } from "../i18n-catalog";
 import type {
         ApiError,
@@ -189,8 +189,174 @@ const adapter = (overrides: Partial<DeploymentAdapter>): DeploymentAdapter =>
                 },
         });
 
+describe("deleting preparation records", () => {
+        const removeItem = vi.fn();
+        beforeEach(() => {
+                removeItem.mockClear();
+                vi.stubGlobal("localStorage", { removeItem });
+        });
+        afterEach(() => vi.unstubAllGlobals());
+
+        const setup = async (ids: string[], selected: string) => {
+                let records = ids.map(profile);
+                const deleteMachineProfile = vi.fn(async (id: string) => {
+                        records = records.filter((record) => record.profileId !== id);
+                });
+                const listMachineProfiles = vi.fn(async () => records);
+                const getDeploymentPlan = vi.fn(async (id: string) => plan(profile(id), 0));
+                const session = createDeploymentWorkspaceSession(snapshot, adapter({
+                        deleteMachineProfile, listMachineProfiles, getDeploymentPlan,
+                }), selected);
+                await tick();
+                return { session, deleteMachineProfile, listMachineProfiles, getDeploymentPlan };
+        };
+
+        it("reloads records without changing the selected plan when another record is deleted", async () => {
+                const { session, deleteMachineProfile, listMachineProfiles, getDeploymentPlan } = await setup(["b", "a"], "a");
+                const before = session.view().plan;
+                await session.dispatch({ type: "deleteProfile", profileId: "b" });
+                expect(deleteMachineProfile).toHaveBeenCalledWith("b");
+                expect(listMachineProfiles).toHaveBeenCalledTimes(2);
+                expect(getDeploymentPlan).toHaveBeenCalledTimes(1);
+                expect(session.view()).toMatchObject({ selectedProfileId: "a", busyAction: "", activity: null });
+                expect(session.view().plan).toBe(before);
+                expect(session.view().profiles.map((record) => record.profileId)).toEqual(["a"]);
+                expect(removeItem).toHaveBeenCalledWith("nvstraps-rebar.export.b");
+                session.dispose();
+        });
+
+        it("selects the first remaining record and stays busy until its plan loads", async () => {
+                // listMachineProfiles must supply newest-first order; profiles have no creation timestamp.
+                const { session, getDeploymentPlan } = await setup(["b", "c", "a"], "a");
+                const pending = deferred<DeploymentPlan>();
+                getDeploymentPlan.mockImplementationOnce(() => pending.promise);
+                const deletion = session.dispatch({ type: "deleteProfile", profileId: "a" });
+                expect(session.view().busyAction).toBe("deleteProfile");
+                await tick();
+                expect(session.view()).toMatchObject({ selectedProfileId: "b", plan: null, profilesLoaded: false, busyAction: "deleteProfile" });
+                expect(getDeploymentPlan).toHaveBeenLastCalledWith("b");
+                pending.resolve(plan(profile("b"), 0));
+                await deletion;
+                expect(session.view()).toMatchObject({ selectedProfileId: "b", profilesLoaded: true, busyAction: "", plan: { profileId: "b" } });
+                session.dispose();
+        });
+
+        it("returns to the fresh state after deleting the last record", async () => {
+                const { session } = await setup(["a"], "a");
+                await session.dispatch({ type: "setFirmwarePath", value: "/home/user/bios.bin" });
+                await session.dispatch({ type: "setDisplayName", value: "Old record" });
+                await session.dispatch({ type: "setInstructionsUrl", value: "https://example.test/manual" });
+                await session.dispatch({ type: "setDestination", value: "/media/USB" });
+                await session.dispatch({ type: "deleteProfile", profileId: "a" });
+                const fresh = createDeploymentWorkspaceSession(snapshot, adapter({ listMachineProfiles: async () => [] }));
+                await tick();
+                expect(session.view()).toEqual(fresh.view());
+                expect(removeItem).toHaveBeenCalledWith("nvstraps-rebar.export.a");
+                session.dispose();
+                fresh.dispose();
+        });
+
+        it("keeps the record and export memory on failure and reports the API error", async () => {
+                const { session, deleteMachineProfile, listMachineProfiles } = await setup(["a"], "a");
+                const error: ApiError = { code: "deployment_failed", message: "Cannot remove the record", recoverable: true };
+                deleteMachineProfile.mockRejectedValueOnce(error);
+                await session.dispatch({ type: "deleteProfile", profileId: "a" });
+                expect(session.view()).toMatchObject({
+                        selectedProfileId: "a", plan: { profileId: "a" }, busyAction: "",
+                        activity: { tone: "error", message: formatDeploymentError(error) },
+                });
+                expect(session.view().profiles).toHaveLength(1);
+                expect(listMachineProfiles).toHaveBeenCalledTimes(1);
+                expect(removeItem).not.toHaveBeenCalled();
+                session.dispose();
+        });
+
+        it.each([false, true])("ignores late recommendation errors after deletion (remaining record: %s)", async (remaining) => {
+                let records = remaining ? [profile("a"), profile("b")] : [profile("a")];
+                const pending = deferred<never>();
+                const session = createDeploymentWorkspaceSession(snapshot, adapter({
+                        listMachineProfiles: async () => records,
+                        getDeploymentPlan: async (id) => plan(profile(id), id === "a" ? 1 : 0),
+                        getRecommendedDeploymentConfig: () => pending.promise,
+                        deleteMachineProfile: async (id) => {
+                                records = records.filter((record) => record.profileId !== id);
+                        },
+                }));
+                await tick();
+                expect(session.view().recommendationStatus).toBe("pending");
+                await session.dispatch({ type: "deleteProfile", profileId: "a" });
+                pending.reject(new Error("Old recommendation failed"));
+                await tick();
+                expect(session.view()).toMatchObject({ activity: null, recommendationStatus: "idle", busyAction: "" });
+                session.dispose();
+        });
+
+        it("does not replace a newer selection with a deletion fallback", async () => {
+                const { session, deleteMachineProfile } = await setup(["a", "b"], "a");
+                const pending = deferred<void>();
+                deleteMachineProfile.mockImplementationOnce(() => pending.promise);
+                const deletion = session.dispatch({ type: "deleteProfile", profileId: "a" });
+                await session.dispatch({ type: "setSelectedProfile", value: "b" });
+                pending.resolve();
+                await deletion;
+                expect(session.view()).toMatchObject({ selectedProfileId: "b", plan: { profileId: "b" } });
+                expect(removeItem).toHaveBeenCalledWith("nvstraps-rebar.export.a");
+                session.dispose();
+        });
+});
+
 describe("DeploymentWorkspaceSession", () => {
         beforeEach(() => vi.restoreAllMocks());
+
+        it("forwards file-drop subscriptions to the session adapter", async () => {
+                const stop = vi.fn();
+                const watchFileDrops = vi.fn(() => stop);
+                const session = createDeploymentWorkspaceSession(snapshot, adapter({
+                        listMachineProfiles: async () => [], watchFileDrops,
+                }));
+                await tick();
+                const listener = vi.fn();
+                const unsubscribe = session.watchFileDrops(listener);
+                expect(watchFileDrops).toHaveBeenCalledWith(listener);
+                unsubscribe();
+                expect(stop).toHaveBeenCalledTimes(1);
+                session.dispose();
+        });
+
+        it("passes dialog labels through the session without translating them", async () => {
+                const selectFirmwareImage = vi.fn(async () => "/bios.bin");
+                const selectDestinationDirectory = vi.fn(async () => null);
+                const session = createDeploymentWorkspaceSession(snapshot, adapter({
+                        listMachineProfiles: async () => [], selectFirmwareImage, selectDestinationDirectory,
+                        inspectFirmwareImage: async () => profile("a").originalFirmware,
+                }));
+                await tick();
+                const labels = { title: "BIOS 파일을 고르세요", biosFiles: "BIOS 파일", allFiles: "모든 파일" };
+                await session.dispatch({ type: "chooseFirmware", labels });
+                expect(selectFirmwareImage).toHaveBeenCalledWith(labels);
+                const title = "USB 드라이브를 고르세요";
+                await session.dispatch({ type: "chooseDestination", title });
+                expect(selectDestinationDirectory).toHaveBeenLastCalledWith(title);
+                await session.dispatch({ type: "saveToUsb", title });
+                expect(selectDestinationDirectory).toHaveBeenLastCalledWith(title);
+                session.dispose();
+        });
+
+        it("reports an invalid manual address without sending the draft", async () => {
+                const createMachineProfile = vi.fn();
+                const session = createDeploymentWorkspaceSession(snapshot, adapter({
+                        listMachineProfiles: async () => [], createMachineProfile,
+                        inspectFirmwareImage: async () => profile("a").originalFirmware,
+                }));
+                await tick();
+                await session.dispatch({ type: "setFirmwarePath", value: "/bios.bin" });
+                await session.dispatch({ type: "inspectFirmware" });
+                await session.dispatch({ type: "setInstructionsUrl", value: "http://example.test/manual" });
+                await session.dispatch({ type: "createProfile" });
+                expect(createMachineProfile).not.toHaveBeenCalled();
+                expect(session.view().activity).toEqual({ tone: "error", message: { id: "ui.manualAddressInvalid" } });
+                session.dispose();
+        });
 
         it.each(["chooseFirmware", "inspectFirmware"] as const)(
                 "%s publishes the signed-update warning after fingerprinting",

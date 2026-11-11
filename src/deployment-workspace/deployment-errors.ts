@@ -26,6 +26,9 @@ export const formatDeploymentError = (error: unknown): MessageDescriptor => {
         // Outputs are immutable, so saving the same package to the same place is refused.
         if (errorText(error).includes("a deployment package already exists"))
                 return message("ui.packageAlreadyExists");
+        if (typeof error === "object" && error !== null &&
+                "code" in error && error.code === "invalid_instructions_url")
+                return message("ui.manualAddressInvalid");
         const diagnostic = firmwareInjectionDiagnostic(error);
         if (!diagnostic) return fallback();
 

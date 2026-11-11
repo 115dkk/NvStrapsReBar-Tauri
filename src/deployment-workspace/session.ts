@@ -1,4 +1,5 @@
-import { message, type MessageDescriptor } from "../i18n-catalog";
+import { forgetExport } from "../guided/export-memory";
+import { type MessageDescriptor } from "../i18n-catalog";
 import type { SystemSnapshot } from "../types";
 import { formatDeploymentError } from "./deployment-errors";
 import type { DeploymentAdapter } from "./adapter";
@@ -59,6 +60,7 @@ class Session implements DeploymentWorkspaceSession {
                         run: (action, work) => this.run(action, work),
                         selectProfile: (profileId) =>
                                 this.selectProfile(profileId),
+                        deleteProfile: (profileId) => this.deleteProfile(profileId),
                         loadRecommendation: () => this.loadRecommendation(),
                 });
                 void this.initialize();
@@ -89,6 +91,9 @@ class Session implements DeploymentWorkspaceSession {
                 this.listeners.add(listener);
                 return () => this.listeners.delete(listener);
         };
+
+        watchFileDrops: DeploymentAdapter["watchFileDrops"] = (listener) =>
+                this.adapter.watchFileDrops(listener);
 
         dispose = () => {
                 this.disposed = true;
@@ -146,16 +151,42 @@ class Session implements DeploymentWorkspaceSession {
                 }
         }
 
-        private async selectProfile(profileId: string) {
+        private async selectProfile(profileId: string, duringAction = false) {
                 const generation = ++this.generation;
-                this.inflight = null;
+                if (!duringAction) this.inflight = null;
                 this.patch({
                         ...resetProfileProjection(profileId),
+                        busyAction: duringAction ? this.state.busyAction : "",
                         profilesLoaded: false,
                 });
                 await this.loadPlan(profileId, generation);
                 if (generation === this.generation)
                         this.patch({ profilesLoaded: true });
+        }
+
+        private deleteProfile(profileId: string) {
+                if (!this.state.profilesLoaded) return Promise.resolve();
+                return this.run("deleteProfile", async (tx) => {
+                        await this.adapter.deleteMachineProfile(profileId);
+                        forgetExport(profileId);
+                        if (!tx.current()) return;
+                        const profiles = await this.adapter.listMachineProfiles();
+                        if (!tx.current()) return;
+                        tx.patch({ profiles });
+                        if (this.state.selectedProfileId !== profileId) return;
+                        const selected = profiles[0];
+                        if (selected) {
+                                await this.selectProfile(selected.profileId, true);
+                        } else {
+                                tx.patch({
+                                        ...createInitialDeploymentState(this.state.snapshot),
+                                        profilesLoaded: true,
+                                        busyAction: "deleteProfile",
+                                });
+                                // Ignore recommendation replies for the removed record.
+                                this.generation += 1;
+                        }
+                });
         }
 
         private async loadPlan(

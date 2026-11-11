@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import { useI18n } from "../i18n";
 import { usesMsiProZ690Route } from "../hardware-support";
 import type { SystemSnapshot } from "../types";
 import type {
@@ -18,6 +19,7 @@ import {
 } from "./session";
 
 export const useDeploymentWorkspace = (snapshot: SystemSnapshot) => {
+        const { t } = useI18n();
         const session = useMemo(
                 () =>
                         createDeploymentWorkspaceSession(
@@ -143,13 +145,21 @@ export const useDeploymentWorkspace = (snapshot: SystemSnapshot) => {
                 setShowReboot: closeModal,
                 setShowManual: closeModal,
                 setShowConfigurationReboot: closeModal,
-                chooseFirmware: () => send({ type: "chooseFirmware" }),
+                chooseFirmware: () => send({
+                        type: "chooseFirmware",
+                        labels: {
+                                title: t("ui.dialogChooseBiosFile"),
+                                biosFiles: t("ui.dialogFilterBios"),
+                                allFiles: t("ui.dialogFilterAll"),
+                        },
+                }),
                 inspectManualPath: () => send({ type: "inspectFirmware" }),
                 analyzeLegacy: () => send({ type: "analyzeLegacy" }),
                 createProfile: () => send({ type: "createProfile" }),
+                deleteProfile: (profileId: string) => send({ type: "deleteProfile", profileId }),
                 compare: () => send({ type: "compare" }),
                 prepare: () => send({ type: "prepare" }),
-                chooseDestination: () => send({ type: "chooseDestination" }),
+                chooseDestination: () => send({ type: "chooseDestination", title: t("ui.dialogChooseUsbFolder") }),
                 exportPackage: () => send({ type: "exportPackage" }),
                 previewReboot: () => {
                         rememberOpener();
@@ -172,7 +182,7 @@ export const useDeploymentWorkspace = (snapshot: SystemSnapshot) => {
                         }),
                 autoCheck: () => send({ type: "autoCheck" }),
                 retryRecommendation: () => send({ type: "retryRecommendation" }),
-                saveToUsb: () => send({ type: "saveToUsb" }),
+                saveToUsb: () => send({ type: "saveToUsb", title: t("ui.dialogChooseUsbFolder") }),
                 saveRecommendedConfig: () =>
                         send({ type: "saveRecommendedConfig" }),
                 verifyDriver: () => send({ type: "verifyDriver" }),
@@ -193,6 +203,8 @@ export const useDeploymentWorkspace = (snapshot: SystemSnapshot) => {
 
         return {
                 view,
+                getView: session.view,
+                watchFileDrops: session.watchFileDrops,
                 commands,
                 snapshot,
                 msi: usesMsiProZ690Route(snapshot),

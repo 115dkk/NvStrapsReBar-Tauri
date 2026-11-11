@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebview, type Webview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
+import { messages } from "../i18n-catalog";
 import type { DeploymentAdapter } from "./adapter";
 
 type Invoke = <T>(
@@ -11,15 +13,53 @@ type Open = typeof open;
 export const createTauriDeploymentAdapter = (
         invokeCommand: Invoke = invoke,
         openDialog: Open = open,
+        watchDragDrop: Webview["onDragDropEvent"] = (listener) =>
+                getCurrentWebview().onDragDropEvent(listener),
 ): DeploymentAdapter => ({
-        selectFirmwareImage: async () => {
+        watchFileDrops: (listener) => {
+                let stopped = false;
+                let unlisten: (() => void) | undefined;
+                void watchDragDrop(({ payload }) => {
+                        if (stopped) return;
+                        switch (payload.type) {
+                                case "enter":
+                                case "over":
+                                        listener({ kind: "over" });
+                                        break;
+                                case "leave":
+                                        listener({ kind: "leave" });
+                                        break;
+                                case "drop":
+                                        listener({ kind: "drop", paths: payload.paths });
+                                        break;
+                        }
+                }).then((stop) => {
+                        if (stopped) stop();
+                        else unlisten = stop;
+                }).catch(() => {
+                        // The file picker remains available if native events are unavailable.
+                        if (!stopped) listener({ kind: "leave" });
+                });
+                return () => {
+                        if (stopped) return;
+                        stopped = true;
+                        unlisten?.();
+                };
+        },
+        deleteMachineProfile: (profileId) =>
+                invokeCommand("delete_machine_profile", { profileId }),
+        selectFirmwareImage: async (labels = {
+                title: messages["ui.dialogChooseBiosFile"].en,
+                biosFiles: messages["ui.dialogFilterBios"].en,
+                allFiles: messages["ui.dialogFilterAll"].en,
+        }) => {
                 const selection = await openDialog({
                         multiple: false,
                         directory: false,
-                        title: "Select the vendor firmware image",
+                        title: labels.title,
                         filters: [
                                 {
-                                        name: "Firmware images",
+                                        name: labels.biosFiles,
                                         extensions: [
                                                 "bin",
                                                 "rom",
@@ -29,16 +69,16 @@ export const createTauriDeploymentAdapter = (
                                                 "1n0",
                                         ],
                                 },
-                                { name: "All files", extensions: ["*"] },
+                                { name: labels.allFiles, extensions: ["*"] },
                         ],
                 });
                 return typeof selection === "string" ? selection : null;
         },
-        selectDestinationDirectory: async () => {
+        selectDestinationDirectory: async (title = messages["ui.dialogChooseUsbFolder"].en) => {
                 const selection = await openDialog({
                         multiple: false,
                         directory: true,
-                        title: "Select an empty deployment package destination",
+                        title,
                 });
                 return typeof selection === "string" ? selection : null;
         },

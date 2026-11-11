@@ -3,6 +3,8 @@ import { previewDeploymentAdapter } from "./preview-adapter";
 import { createTauriDeploymentAdapter } from "./tauri-adapter";
 
 const deploymentSeam = [
+        "deleteMachineProfile",
+        "watchFileDrops",
         "selectFirmwareImage",
         "selectDestinationDirectory",
         "inspectFirmwareImage",

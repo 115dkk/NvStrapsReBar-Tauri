@@ -51,6 +51,30 @@ describe("browser preview deployment fixture ledger", () => {
                 vi.stubGlobal("sessionStorage", new MemoryStorage());
         });
 
+        it("deletes only the chosen record and its preview state", async () => {
+                const first = (await createProfile()).profile.profileId;
+                const second = (await createProfile("patchEveryDxeDomain")).profile.profileId;
+                const perRecordKeys = ["nvstraps-preview-fixture-cursor:", "nvstraps-preview-config-time:", "nvstraps-preview-config-restarted:"];
+                for (const prefix of perRecordKeys) {
+                        sessionStorage.setItem(prefix + first, "first");
+                        sessionStorage.setItem(prefix + second, "second");
+                }
+                await previewDeploymentAdapter.deleteMachineProfile(first);
+                expect((await previewDeploymentAdapter.listMachineProfiles()).map((record) => record.profileId)).toEqual([second]);
+                for (const prefix of perRecordKeys) {
+                        expect(sessionStorage.getItem(prefix + first)).toBeNull();
+                        expect(sessionStorage.getItem(prefix + second)).toBe("second");
+                }
+                await expect(previewDeploymentAdapter.getDeploymentPlan(first)).rejects.toThrow("unavailable");
+        });
+
+        it("provides an inert file-drop subscription in browser previews", () => {
+                const listener = vi.fn();
+                const unsubscribe = previewDeploymentAdapter.watchFileDrops(listener);
+                unsubscribe();
+                expect(listener).not.toHaveBeenCalled();
+        });
+
         it("keeps the signed firmware warning off in browser previews", async () => {
                 await expect(
                         previewDeploymentAdapter.inspectSignedFirmwareUpdate(

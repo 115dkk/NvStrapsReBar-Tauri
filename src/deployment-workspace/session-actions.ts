@@ -23,8 +23,10 @@ export class DeploymentSessionActions {
                         case "setSelectedProfile":
                                 this.firmwareDeployment.resetProfileBinding();
                                 return this.runtime.selectProfile(intent.value);
+                        case "deleteProfile":
+                                return this.runtime.deleteProfile(intent.profileId);
                         case "chooseFirmware":
-                                return this.profileSource.chooseFirmware();
+                                return this.profileSource.chooseFirmware(intent.labels);
                         case "inspectFirmware":
                                 return this.profileSource.inspectFirmware();
                         case "analyzeLegacy":
@@ -36,11 +38,11 @@ export class DeploymentSessionActions {
                         case "prepare":
                                 return this.firmwareDeployment.prepare();
                         case "chooseDestination":
-                                return this.firmwareDeployment.chooseDestination();
+                                return this.firmwareDeployment.chooseDestination(intent.title);
                         case "exportPackage":
                                 return this.firmwareDeployment.exportPackage();
                         case "saveToUsb":
-                                return this.firmwareDeployment.saveToDestination();
+                                return this.firmwareDeployment.saveToDestination(intent.title);
                         case "previewFirmwareReboot":
                                 return this.firmwareDeployment.previewFirmwareReboot();
                         case "requestFirmwareReboot":

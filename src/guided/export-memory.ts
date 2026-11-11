@@ -30,6 +30,14 @@ export const rememberExport = (profileId: string, receipt: DeploymentPackageRece
         }
 };
 
+export const forgetExport = (profileId: string): void => {
+        try {
+                localStorage.removeItem(key(profileId));
+        } catch {
+                // Storage can be unavailable; deleting a record must still work.
+        }
+};
+
 export const recallExport = (profileId: string): RememberedExport | null => {
         if (!profileId) return null;
         try {
