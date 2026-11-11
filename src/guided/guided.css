@@ -247,6 +247,7 @@
 .nv-app .nv-dialog-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
 .nv-app .nv-dialog-list > span { position: relative; padding-left: 16px; }
 .nv-app .nv-dialog-list > span::before { content: ""; position: absolute; left: 2px; top: 0.6em; width: 5px; height: 5px; border-radius: var(--radius-pill); background: var(--muted); }
+.nv-app .nv-dialog-remedy { display: flex; flex-direction: column; gap: 4px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
 .nv-app .nv-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .nv-app .nv-field > span { font-size: 13px; line-height: 18px; font-weight: 550; color: var(--muted); }
 .nv-app .nv-field > .nv-field-error { color: var(--bad); }

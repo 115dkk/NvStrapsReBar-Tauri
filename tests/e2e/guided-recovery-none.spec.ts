@@ -36,8 +36,13 @@ for (const os of systems) {
                 // The first press only opens the confirmation; closing it leaves the question as it was.
                 await make.click();
                 await expect(dialog(page)).toBeVisible();
-                await expect(dialog(page).getByRole("listitem")).toHaveCount(4);
+                // Three things that can go wrong, then, below a line, what there is to do when one has.
+                await expect(dialog(page).getByRole("listitem")).toHaveCount(3);
                 await expect(dialog(page).getByRole("listitem").first()).toContainText("the PC no longer starts");
+                await expect(dialog(page).getByRole("listitem").last()).toHaveText("A board with a changed BIOS may be refused warranty service.");
+                const remedy = dialog(page).locator(".nv-dialog-remedy");
+                await expect(remedy).toContainText("What to do then");
+                await expect(remedy).toContainText("takes a repair shop or an SPI programmer");
                 await button(page, "Close").click();
                 await expect(dialog(page)).toBeHidden();
                 await expect(page.getByRole("heading", { name: "Choose how to recover if the BIOS install fails" })).toBeVisible();
@@ -72,7 +77,10 @@ test("Korean: the confirmation fits the 900 px minimum window", async ({ page })
         await button(page, "확인 완료 · 파일 만들기").click();
         const korean = page.getByRole("dialog", { name: "복구 수단 없이 진행" });
         await expect(korean).toBeVisible();
-        await expect(korean.getByRole("listitem")).toHaveCount(4);
+        await expect(korean.getByRole("listitem")).toHaveCount(3);
+        await expect(korean.getByRole("listitem").last()).toHaveText("BIOS를 바꾼 보드는 보증 수리를 거절당할 수 있습니다.");
+        await expect(korean.locator(".nv-dialog-remedy")).toContainText("대응법");
+        await expect(korean.locator(".nv-dialog-remedy")).toContainText("그때 원본 BIOS를 되돌리려면");
         await expect(button(page, "그래도 만들기")).toBeVisible();
         expect(await noHorizontalOverflow(page)).toBe(true);
         expect(await missingMessages(page)).toEqual([]);

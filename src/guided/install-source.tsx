@@ -404,7 +404,6 @@ export const InstallQuestion = ({ ctx }: { ctx: InstallContext }) => {
 const RECOVERY_NONE_RISKS: readonly StaticMessageId[] = [
         "ui.recoveryNoneRiskInterrupted",
         "ui.recoveryNoneRiskNoStart",
-        "ui.recoveryNoneRiskRepair",
         "ui.recoveryNoneRiskWarranty",
 ];
 
@@ -453,6 +452,11 @@ export const RecoveryQuestion = ({ ctx }: { ctx: InstallContext }) => {
                                         {t("ui.recoveryNoneConfirmLead")}
                                         <span className="nv-dialog-list" role="list">
                                                 {RECOVERY_NONE_RISKS.map((id) => <span key={id} role="listitem">{t(id)}</span>)}
+                                        </span>
+                                        {/* Below the line: not one more thing that can go wrong, but what there is to do when it has. */}
+                                        <span className="nv-dialog-remedy">
+                                                <span className="nv-strong">{t("ui.recoveryNoneRemedyLabel")}</span>
+                                                <span>{t("ui.recoveryNoneRemedy")}</span>
                                         </span>
                                 </ConfirmDialog>
                         )}
