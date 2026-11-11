@@ -7,8 +7,8 @@ home, the four install steps, and the pages used after installation.
 > These captures come from the production build running the repository's browser-preview
 > fixtures, so every screen carries the "PREVIEW DATA" bar. They do not show native WebView2
 > behaviour, native dialogs, firmware reads or writes, flashing, restarts, or results from NVIDIA
-> hardware. They were taken in headless Chromium on Linux: Korean text uses the bundled Pretendard
-> exactly as on Windows, while English text falls back to Pretendard where Windows shows Segoe UI.
+> hardware. They were taken in headless Chromium on Windows, so Korean text uses the bundled
+> Pretendard and English text Segoe UI, as in the Windows app.
 
 The 900 px captures show the smallest supported desktop window. Every image is captured at device
 scale 2.
@@ -47,6 +47,7 @@ experimental route that leaves the BIOS alone.
 ### 3. Choose the motherboard BIOS file · English, 1180 × 760
 
 Step 1 of four. The screen shows the detected board and which file in the vendor download to choose.
+The empty box opens the file chooser when pressed and takes a file dropped on it.
 
 ![English step 1 asking for the motherboard BIOS file](03-install-choose-file-en-1180x760.png)
 
@@ -117,6 +118,19 @@ setting.
 
 ![한국어 'BIOS 수정 없이' 화면](12-external-ko-1180x760.png)
 
+## The home screens in the other language
+
+The repository's two README files show the first screen and the home screen in their own language.
+These are the two that the series above has only in the other one.
+
+### 13. The first screen · English, 1180 × 760
+
+![English first screen: 256 MiB now, 8 GiB when on, with the steps and what you need](13-home-start-en-1180x760.png)
+
+### 14. Resizable BAR 켜짐 · 한국어, 1180 × 760
+
+![한국어 홈 화면: Resizable BAR가 켜져 있고 GPU가 8 GiB인 화면](14-home-on-ko-1180x760.png)
+
 ## Earlier captures
 
 Captures of earlier interfaces were removed when this gallery was replaced. They remain in the
@@ -124,5 +138,5 @@ repository history: [the gallery as of v1.1.2](https://github.com/115dkk/NvStrap
 
 ---
 
-Captured from v1.1.2 in headless Chromium 153.0.8010.12 on Linux, at device scale 2 with reduced
+Captured from v1.1.7 in headless Chromium 151.0.7922.34 on Windows, at device scale 2 with reduced
 motion.

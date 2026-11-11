@@ -127,6 +127,10 @@ const SHOTS = [
   ["10-bar-settings-en", WIDE, (page) => toBarSettings(page, "en")],
   ["11-games-en", WIDE, (page) => toGames(page, "en")],
   ["12-external-ko", WIDE, (page) => toExternal(page, "ko")],
+  // The two home screens in the other language. The repository's README files show the first
+  // screen and the home screen in their own language.
+  ["13-home-start-en", WIDE, (page) => open(page, { state: "not-observed", locale: "en" })],
+  ["14-home-on-ko", WIDE, (page) => open(page, { state: "expanded", locale: "ko" })],
 ];
 
 async function main() {
