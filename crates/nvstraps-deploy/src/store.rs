@@ -203,6 +203,34 @@ impl DeploymentStore {
         Ok(profile)
     }
 
+    pub fn delete_profile(&self, profile_id: &str) -> Result<(), StoreError> {
+        validate_profile_id(profile_id)?;
+        let profile_path = self
+            .root
+            .join("profiles")
+            .join(format!("{profile_id}.json"));
+        let plan_directory = self.root.join("plans").join(profile_id);
+        let artifact_directory = self.root.join("artifacts").join(profile_id);
+
+        fs::remove_file(&profile_path).map_err(|source| StoreError::Io {
+            path: profile_path,
+            source,
+        })?;
+        for directory in [plan_directory, artifact_directory] {
+            match fs::remove_dir_all(&directory) {
+                Ok(()) => {}
+                Err(source) if source.kind() == io::ErrorKind::NotFound => {}
+                Err(source) => {
+                    return Err(StoreError::Io {
+                        path: directory,
+                        source,
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub fn list_profiles(&self) -> Result<Vec<MachineProfile>, StoreError> {
         let directory = self.root.join("profiles");
         if !directory.exists() {
@@ -687,7 +715,7 @@ fn manual_gates(profile: &MachineProfile) -> Vec<String> {
                 "In firmware setup, enable Above 4G decoding and disable CSM.".into()
             }
         },
-        "Do not interrupt power. Treat the vendor flash completion and the first successful reboot as physical confirmations.".into(),
+        "Do not interrupt power. After the install the PC may restart several times, and some restarts take longer than usual. Wait until it starts normally. Treat the vendor flash completion and the first successful reboot as physical confirmations.".into(),
     ]
 }
 
@@ -697,8 +725,10 @@ fn operator_instructions(
     manual_gates: &[String],
     recovery_shortcut_file_name: Option<&str>,
 ) -> String {
+    use std::fmt::Write as _;
+
     let mut output = format!(
-        "NvStrapsReBar verified deployment package\n\nProfile: {}\nBoard: {} {}\nBIOS: {} {} ({})\nPatched image: flash/{}\nInstall method: {:?}\nOfficial instructions: {}\nInstall note: {}\nRecovery method: {:?}\nRecovery image: recovery/original-firmware.bin\nRecovery note: {}\n\nVerify every file with SHA256SUMS.txt before use.\n\nManual gates:\n",
+        "NvStrapsReBar verified deployment package\n\nProfile: {}\nBoard: {} {}\nBIOS: {} {} ({})\nPatched image: flash/{}\nInstall method: {:?}\n",
         profile.profile_id,
         profile.identity.board_manufacturer,
         profile.identity.board_product,
@@ -707,13 +737,22 @@ fn operator_instructions(
         profile.identity.bios_release_date,
         firmware_install.artifact_file_name,
         firmware_install.method,
-        firmware_install.official_instructions_url,
-        firmware_install.note,
-        profile.recovery.method,
-        profile.recovery.note,
     );
+    if !firmware_install.official_instructions_url.is_empty() {
+        writeln!(
+            output,
+            "Official instructions: {}",
+            firmware_install.official_instructions_url
+        )
+        .expect("writing instructions to a string cannot fail");
+    }
+    write!(
+        output,
+        "Install note: {}\nRecovery method: {:?}\nRecovery image: recovery/original-firmware.bin\nRecovery note: {}\n\nVerify every file with SHA256SUMS.txt before use.\n\nManual gates:\n",
+        firmware_install.note, profile.recovery.method, profile.recovery.note,
+    )
+    .expect("writing instructions to a string cannot fail");
     if let Some(file_name) = recovery_shortcut_file_name {
-        use std::fmt::Write as _;
         writeln!(
             output,
             "Recovery copy: ../{file_name} (same bytes as recovery/original-firmware.bin)\n"
@@ -721,7 +760,6 @@ fn operator_instructions(
         .expect("writing instructions to a string cannot fail");
     }
     for (index, gate) in manual_gates.iter().enumerate() {
-        use std::fmt::Write as _;
         writeln!(output, "{}. {gate}", index + 1)
             .expect("writing instructions to a string cannot fail");
     }
@@ -789,10 +827,12 @@ fn korean_operator_instructions(
         "설치 방법: {}",
         korean_install_method(firmware_install.method)
     ));
-    line(format!(
-        "제조사 안내서: {}",
-        firmware_install.official_instructions_url
-    ));
+    if !firmware_install.official_instructions_url.is_empty() {
+        line(format!(
+            "제조사 안내서: {}",
+            firmware_install.official_instructions_url
+        ));
+    }
     line(format!("설치 메모: {}", firmware_install.note));
     line(format!(
         "복구 방법: {}",
@@ -812,7 +852,7 @@ fn korean_operator_instructions(
         "3. 설치 방법({})에 따라 flash 폴더의 BIOS 파일({artifact})을 설치하세요. 제조사 도구가 서명이나 무결성 검사에서 이 파일을 거부하면 설치를 멈추세요.",
         korean_install_method(firmware_install.method)
     ));
-    line("4. 설치가 끝날 때까지 전원을 끄지 마세요.".into());
+    line("4. 설치가 끝날 때까지 전원을 끄지 마세요. 설치 뒤에 PC가 여러 번 다시 시작될 수 있고, 평소보다 오래 걸릴 때도 있습니다. 정상적으로 켜질 때까지 기다리세요.".into());
     line(match profile.board_path {
         BoardPath::NativeResizableBar => {
             "5. BIOS 설정에서 Above 4G Decoding과 Re-Size BAR를 켜고 CSM을 끈 뒤 저장하세요.".into()
@@ -821,9 +861,7 @@ fn korean_operator_instructions(
             "5. BIOS 설정에서 Above 4G Decoding을 켜고 CSM을 끈 뒤 저장하세요.".into()
         }
     });
-    line(
-        "6. Windows로 돌아오면 NvStrapsReBar 앱을 다시 여세요. 앱이 설치 결과를 확인합니다.".into(),
-    );
+    line("6. PC가 다시 켜지면 NvStrapsReBar 앱을 다시 여세요. 앱이 설치 결과를 확인합니다.".into());
     output
 }
 
@@ -1181,6 +1219,13 @@ mod tests {
     }
 
     fn profile(firmware: FirmwareFingerprint) -> MachineProfile {
+        profile_with_official_instructions(firmware, "https://vendor.invalid/manual")
+    }
+
+    fn profile_with_official_instructions(
+        firmware: FirmwareFingerprint,
+        official_instructions_url: &str,
+    ) -> MachineProfile {
         MachineProfile::create(
             "test machine",
             BoardPath::NativeResizableBar,
@@ -1220,11 +1265,50 @@ mod tests {
                 method: FirmwareInstallMethod::FirmwareSetupUtility,
                 artifact_file_name: "vendor-bios.bin".into(),
                 tested_or_documented: true,
-                official_instructions_url: "https://vendor.invalid/manual".into(),
+                official_instructions_url: official_instructions_url.into(),
                 note: "Select the pinned image in firmware setup".into(),
             },
         )
         .unwrap()
+    }
+
+    #[test]
+    fn instruction_texts_include_only_present_official_addresses_and_restart_guidance() {
+        let firmware = FirmwareFingerprint {
+            file_name: "vendor-bios.bin".into(),
+            byte_length: 4,
+            sha256: Sha256Digest::from_bytes(b"test"),
+        };
+        let with_address = profile(firmware.clone());
+        let with_route = with_address.firmware_install.as_ref().unwrap();
+        let english = operator_instructions(
+            &with_address,
+            with_route,
+            &manual_gates(&with_address),
+            None,
+        );
+        let korean = korean_operator_instructions(&with_address, with_route, None);
+        assert!(english.contains("Official instructions: https://vendor.invalid/manual\n"));
+        assert!(korean.contains("제조사 안내서: https://vendor.invalid/manual\n"));
+        assert!(english.contains(
+            "Do not interrupt power. After the install the PC may restart several times, and some restarts take longer than usual. Wait until it starts normally."
+        ));
+        assert!(korean.contains("4. 설치가 끝날 때까지 전원을 끄지 마세요. 설치 뒤에 PC가 여러 번 다시 시작될 수 있고, 평소보다 오래 걸릴 때도 있습니다. 정상적으로 켜질 때까지 기다리세요."));
+        assert!(korean.contains(
+            "6. PC가 다시 켜지면 NvStrapsReBar 앱을 다시 여세요. 앱이 설치 결과를 확인합니다."
+        ));
+
+        let without_address = profile_with_official_instructions(firmware, "  \t");
+        let without_route = without_address.firmware_install.as_ref().unwrap();
+        let english = operator_instructions(
+            &without_address,
+            without_route,
+            &manual_gates(&without_address),
+            None,
+        );
+        let korean = korean_operator_instructions(&without_address, without_route, None);
+        assert!(!english.contains("Official instructions:"));
+        assert!(!korean.contains("제조사 안내서:"));
     }
 
     #[test]
@@ -1256,6 +1340,126 @@ mod tests {
             .unwrap()
             .count();
         assert_eq!(snapshots, 4);
+    }
+
+    #[test]
+    fn deleting_profile_removes_its_record_plans_and_artifacts_only() {
+        let directory = TestDirectory::new();
+        let first_source = directory.0.join("first.bin");
+        let second_source = directory.0.join("second.bin");
+        fs::write(&first_source, b"first known firmware").unwrap();
+        fs::write(&second_source, b"second known firmware").unwrap();
+        let first = profile(FirmwareFingerprint::inspect(&first_source).unwrap());
+        let second = profile(FirmwareFingerprint::inspect(&second_source).unwrap());
+        let store = DeploymentStore::new(directory.0.join("store"));
+        let first_plan = store.provision_profile(&first, &first_source).unwrap().plan;
+        let second_plan = store
+            .provision_profile(&second, &second_source)
+            .unwrap()
+            .plan;
+        store
+            .preserve_artifact(&first, ArtifactKind::RustDriverFfs, b"first driver")
+            .unwrap();
+        let second_driver = store
+            .preserve_artifact(&second, ArtifactKind::RustDriverFfs, b"second driver")
+            .unwrap();
+
+        let first_profile_path = store.profile_path(&first.profile_id).unwrap();
+        let first_plan_directory = store.plan_directory(&first.profile_id).unwrap();
+        let first_artifact_directory = store
+            .original_firmware_path(&first.profile_id)
+            .unwrap()
+            .parent()
+            .unwrap()
+            .to_owned();
+        assert!(first_profile_path.is_file());
+        assert!(first_plan_directory.is_dir());
+        assert!(first_artifact_directory.is_dir());
+        assert_eq!(store.load_plan(&first).unwrap(), first_plan);
+
+        store.delete_profile(&first.profile_id).unwrap();
+
+        assert!(!first_profile_path.exists());
+        assert!(!first_plan_directory.exists());
+        assert!(!first_artifact_directory.exists());
+        assert_eq!(store.list_profiles().unwrap(), vec![second.clone()]);
+        assert_eq!(store.load_profile(&second.profile_id).unwrap(), second);
+        assert_eq!(store.load_plan(&second).unwrap(), second_plan);
+        assert_eq!(
+            store
+                .load_artifact(&second, ArtifactKind::RustDriverFfs)
+                .unwrap(),
+            (second_driver, b"second driver".to_vec())
+        );
+    }
+
+    #[test]
+    fn deleting_profile_accepts_missing_plan_and_artifact_directories() {
+        let directory = TestDirectory::new();
+        let firmware = FirmwareFingerprint {
+            file_name: "vendor-bios.bin".into(),
+            byte_length: 4,
+            sha256: Sha256Digest::from_bytes(b"test"),
+        };
+        let profile = profile(firmware);
+        let store = DeploymentStore::new(directory.0.join("store"));
+        store.save_profile(&profile).unwrap();
+
+        store.delete_profile(&profile.profile_id).unwrap();
+
+        assert!(store.list_profiles().unwrap().is_empty());
+    }
+
+    #[test]
+    fn deleting_an_unknown_profile_returns_the_load_profile_error_kind() {
+        let directory = TestDirectory::new();
+        let store = DeploymentStore::new(directory.0.join("store"));
+        let missing_id = "nvstraps-000000000000000000000000";
+
+        assert!(matches!(
+            store.load_profile(missing_id),
+            Err(StoreError::Io { source, .. })
+                if source.kind() == std::io::ErrorKind::NotFound
+        ));
+        assert!(matches!(
+            store.delete_profile(missing_id),
+            Err(StoreError::Io { source, .. })
+                if source.kind() == std::io::ErrorKind::NotFound
+        ));
+    }
+
+    #[test]
+    fn deleting_an_unsafe_profile_id_is_rejected_without_removing_files() {
+        let directory = TestDirectory::new();
+        let source = directory.0.join("vendor-bios.bin");
+        fs::write(&source, b"known firmware").unwrap();
+        let profile = profile(FirmwareFingerprint::inspect(&source).unwrap());
+        let store = DeploymentStore::new(directory.0.join("store"));
+        let provisioned = store.provision_profile(&profile, &source).unwrap();
+        let profile_path = store.profile_path(&profile.profile_id).unwrap();
+        let plan_directory = store.plan_directory(&profile.profile_id).unwrap();
+        let artifact_directory = provisioned
+            .original_firmware_path
+            .parent()
+            .unwrap()
+            .to_owned();
+        let unsafe_ids = [
+            "..".to_owned(),
+            format!("{}/..", profile.profile_id),
+            format!("{}\\..", profile.profile_id),
+        ];
+
+        for unsafe_id in unsafe_ids {
+            assert!(matches!(
+                store.delete_profile(&unsafe_id),
+                Err(StoreError::InvalidProfileId)
+            ));
+        }
+
+        assert!(profile_path.is_file());
+        assert!(plan_directory.is_dir());
+        assert!(artifact_directory.is_dir());
+        assert_eq!(store.list_profiles().unwrap(), vec![profile]);
     }
 
     #[test]

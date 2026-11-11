@@ -22,10 +22,23 @@ import type {
         SignedFirmwareUpdate,
 } from "./contract";
 
+export type FirmwareDialogLabels = {
+        title: string;
+        biosFiles: string;
+        allFiles: string;
+};
+
+export type FileDropEvent =
+        | { kind: "over" }
+        | { kind: "leave" }
+        | { kind: "drop"; paths: string[] };
+
 /** Privileged deployment seam. Only the Session consumes this interface. */
 export interface DeploymentAdapter {
-        selectFirmwareImage(): Promise<string | null>;
-        selectDestinationDirectory(): Promise<string | null>;
+        selectFirmwareImage(labels?: FirmwareDialogLabels): Promise<string | null>;
+        selectDestinationDirectory(title?: string): Promise<string | null>;
+        watchFileDrops(listener: (event: FileDropEvent) => void): () => void;
+        deleteMachineProfile(profileId: string): Promise<void>;
         inspectFirmwareImage(path: string): Promise<FirmwareFingerprint>;
         inspectSignedFirmwareUpdate(path: string): Promise<SignedFirmwareUpdate>;
         analyzeLegacyFirmware(path: string): Promise<LegacyFirmwareAnalysis>;

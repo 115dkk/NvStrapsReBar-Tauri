@@ -36,10 +36,10 @@ export class FirmwareDeploymentActions {
                 });
         }
 
-        chooseDestination() {
+        chooseDestination(title?: string) {
                 return this.runtime.run("destination", async (tx) => {
                         const value =
-                                await this.runtime.adapter.selectDestinationDirectory();
+                                await this.runtime.adapter.selectDestinationDirectory(title);
                         if (!value)
                                 throw new Error(
                                         "Destination selection was cancelled.",
@@ -72,10 +72,10 @@ export class FirmwareDeploymentActions {
          * Asks for the destination and exports to it in one step. Closing the
          * folder picker leaves everything as it was.
          */
-        saveToDestination() {
+        saveToDestination(title?: string) {
                 return this.runtime.run("export", async (tx) => {
                         const value =
-                                await this.runtime.adapter.selectDestinationDirectory();
+                                await this.runtime.adapter.selectDestinationDirectory(title);
                         if (!value || !tx.current()) return;
                         tx.patch({ destination: value });
                         const packageReceipt =

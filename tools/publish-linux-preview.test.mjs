@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import test from "node:test";
 
 import { checksumLines, previewIdentity, previewNotes, previewPackages, releaseArguments } from "./publish-linux-preview.mjs";
@@ -34,9 +35,11 @@ test("the preview tag stays invisible to the release planner", () => {
 });
 
 test("exactly one package of each kind is published", () => {
-  const listing = { "target/release/bundle/deb": ["a.deb", "notes.txt"], "target/release/bundle/rpm": ["a.rpm"] };
-  assert.deepEqual(previewPackages((path) => listing[path]),
-    ["target/release/bundle/deb/a.deb", "target/release/bundle/rpm/a.rpm"]);
+  // Joined here as the tool joins them, so the test also runs where the separator is a backslash.
+  const deb = join("target", "release", "bundle", "deb");
+  const rpm = join("target", "release", "bundle", "rpm");
+  const listing = { [deb]: ["a.deb", "notes.txt"], [rpm]: ["a.rpm"] };
+  assert.deepEqual(previewPackages((path) => listing[path]), [join(deb, "a.deb"), join(rpm, "a.rpm")]);
   assert.throws(() => previewPackages((path) => (path.endsWith("deb") ? ["a.deb", "b.deb"] : ["a.rpm"])), /exactly one \.deb/);
   assert.throws(() => previewPackages((path) => (path.endsWith("deb") ? ["a.deb"] : [])), /exactly one \.rpm/);
 });

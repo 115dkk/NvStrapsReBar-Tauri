@@ -8,6 +8,15 @@ export const usesMsiProZ690Route = (snapshot: SystemSnapshot) =>
         snapshot.hardwareSupport.motherboardNativeResizableBar.catalogId ===
         MSI_PRO_Z690_A_DDR4_CATALOG_ID;
 
+export const setupUtilityName = (boardManufacturer: string | undefined): string | null => {
+        const maker = boardManufacturer?.trim().toLowerCase() ?? "";
+        if (maker.includes("micro-star") || maker.startsWith("msi")) return "M-FLASH";
+        if (maker.includes("asustek") || maker.includes("asus")) return "EZ Flash";
+        if (maker.includes("gigabyte")) return "Q-Flash";
+        if (maker.includes("asrock")) return "Instant Flash";
+        return null;
+};
+
 export type MotherboardSupportPresentation = {
         statusId: StaticMessageId;
         symbol: "O" | "X" | "?";

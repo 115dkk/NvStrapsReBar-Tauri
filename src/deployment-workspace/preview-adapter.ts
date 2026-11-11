@@ -649,6 +649,13 @@ const legacyAnalysis: LegacyFirmwareAnalysis = {
         ],
 };
 export const previewDeploymentAdapter: DeploymentAdapter = {
+        watchFileDrops: () => () => {},
+        deleteMachineProfile: async (profileId) => {
+                saveProfiles(loadProfiles().filter((profile) => profile.profileId !== profileId));
+                sessionStorage.removeItem(cursorKey(profileId));
+                sessionStorage.removeItem(savedConfigKey(profileId));
+                sessionStorage.removeItem(restartedKey(profileId));
+        },
         selectFirmwareImage: async () => "C:\\Firmware\\E7D25IMS.1N0",
         selectDestinationDirectory: async () => "C:\\NVSTRAPS-USB",
         inspectFirmwareImage: async (path) => clone(firmwareFor(path)),

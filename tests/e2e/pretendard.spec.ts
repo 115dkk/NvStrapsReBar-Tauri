@@ -419,7 +419,8 @@ test("Korean uses the bundled Pretendard variable font without external requests
                         bodyWeight: style("body").fontWeight,
                         supportingWeight: style(".nv-gpu .nv-supporting").fontWeight,
                         labelWeight: style(".nv-gpu .nv-label").fontWeight,
-                        buttonWeight: style("button").fontWeight,
+                        // The brand is a button with its own weight in both languages; measure a plain button.
+                        buttonWeight: style("button:not(.nv-brand)").fontWeight,
                         sectionWeight: style("h2.nv-section").fontWeight,
                         pageWeight: style("h1").fontWeight,
                         technicalToken: getComputedStyle(document.documentElement).getPropertyValue("--font-technical"),

@@ -36,7 +36,11 @@ jobs:
     name: Validate Rust DXE port
     needs: scope
     if: needs.scope.outputs.run-heavy == 'true'
-    runs-on: ubuntu-latest
+    # Pinned: the QEMU proofs start from OVMF's built-in UEFI shell. The OVMF of ubuntu-26.04
+    # (ubuntu-latest since 2026-11-11) does not fall through to it, so the first boot stops at
+    # "No bootable option or device was found" and times out. The same commit passes with the
+    # OVMF of 24.04 and of Debian 13.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
 
     steps:

@@ -81,6 +81,9 @@ grep -Fq "pkexec | policykit-1" <<<"${deb_depends}" || fail ".deb does not depen
 grep -Fq "libwebkit2gtk-4.1-0" <<<"${deb_depends}" || fail ".deb does not depend on WebKitGTK: ${deb_depends}"
 rpm_requires="$(rpm --query --requires --package "${RPM}")"
 grep -Fxq "polkit" <<<"${rpm_requires}" || fail ".rpm does not require polkit: ${rpm_requires}"
+# rpm does not own /usr/lib/nvstraps-rebar/external, so removal needs the script that clears it.
+rpm --query --scripts --package "${RPM}" | grep -Fq "rmdir /usr/lib/nvstraps-rebar/external /usr/lib/nvstraps-rebar" \
+  || fail ".rpm has no post-remove script for its own directories"
 
 # The helper inside each package: static, and it greets when started with no input.
 readonly WORK="$(mktemp -d)"

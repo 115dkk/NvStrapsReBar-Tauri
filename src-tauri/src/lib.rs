@@ -27,16 +27,35 @@ mod simulated_machine;
 mod status;
 
 pub fn run() {
+    // First of all: on Linux this may start the program again (see the function).
+    #[cfg(target_os = "linux")]
+    linux::desktop::prefer_desktop_file_chooser();
     #[cfg_attr(not(feature = "simulated-machine"), allow(unused_mut))]
     let mut context = tauri::generate_context!();
     #[cfg(feature = "simulated-machine")]
     simulated_machine::open_devtools_port(&mut context);
-    tauri::Builder::default()
-        .plugin(tauri_plugin_dialog::init())
+    let builder = tauri::Builder::default().plugin(tauri_plugin_dialog::init());
+    // The window opens where and as large as it was left. The simulated machine always starts
+    // from the configured size, so its screenshots do not depend on an earlier run.
+    #[cfg(not(feature = "simulated-machine"))]
+    let builder = builder.plugin(
+        tauri_plugin_window_state::Builder::default()
+            .with_state_flags(
+                tauri_plugin_window_state::StateFlags::SIZE
+                    | tauri_plugin_window_state::StateFlags::POSITION
+                    | tauri_plugin_window_state::StateFlags::MAXIMIZED,
+            )
+            .build(),
+    );
+    builder
         .setup(|app| {
             match app.path().app_local_data_dir() {
                 Ok(root) => nvidia_profiles::install_panic_log(root.join("logs").join("panic.log")),
                 Err(error) => eprintln!("NvStrapsReBar panic log is unavailable: {error}"),
+            }
+            #[cfg(target_os = "linux")]
+            if let Some(window) = app.get_webview_window("main") {
+                linux::desktop::blend_title_bar(&window);
             }
             #[cfg(feature = "simulated-machine")]
             {
@@ -72,6 +91,7 @@ pub fn run() {
             deployment::analyze_legacy_firmware,
             deployment::create_machine_profile,
             deployment::list_machine_profiles,
+            deployment::delete_machine_profile,
             deployment::get_deployment_plan,
             deployment::compare_machine_profile,
             deployment::prepare_firmware_artifact,

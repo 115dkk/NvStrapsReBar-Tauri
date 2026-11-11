@@ -1,9 +1,9 @@
-import type { DeploymentAdapter } from "./adapter";
+import type { DeploymentAdapter, FirmwareDialogLabels } from "./adapter";
 import type { FirmwareFingerprint, SignedFirmwareUpdate } from "./contract";
 import { firmwareFingerprintsMatch, legacyRuleKey } from "./session-projection";
 
-export const selectAndInspectFirmware = async (adapter: DeploymentAdapter) => {
-        const path = await adapter.selectFirmwareImage();
+export const selectAndInspectFirmware = async (adapter: DeploymentAdapter, labels?: FirmwareDialogLabels) => {
+        const path = await adapter.selectFirmwareImage(labels);
         if (!path) throw new Error("Firmware selection was cancelled.");
         return inspectFirmware(adapter, path);
 };

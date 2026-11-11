@@ -1,4 +1,4 @@
-import type { ReactNode, Ref } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode, type Ref, type RefObject } from "react";
 import { useConfigurationWorkspaceController } from "../configuration-workspace/context";
 import { useDeploymentWorkspaceController } from "../deployment-workspace/context";
 import { stepKindIds, stepStateIds, stepTitleIds } from "../deployment-workspace/messages";
@@ -8,7 +8,7 @@ import { recallExport } from "./export-memory";
 import { Icon } from "./icons";
 import { initialInstallUi, useGuidedNavigation } from "./navigation";
 import { OPTIONAL_FINAL_STEP, listedSteps } from "./routing";
-import { ActionBar, type ActionBarProps, Crumb, Fact, Facts, FileCard, Notice, Result, Step, Steps, TaskHead } from "./ui";
+import { ActionBar, type ActionBarProps, ConfirmDialog, Crumb, Fact, Facts, FileCard, Notice, Result, Step, Steps, TaskHead } from "./ui";
 
 const SubPage = ({ here, title, lead, titleRef, children, bar, wide = false, testId }: {
         here: ReactNode;
@@ -108,36 +108,102 @@ export const RecordPage = ({ titleRef }: { titleRef: Ref<HTMLHeadingElement> }) 
         );
 };
 
+/** The record a delete is about, and where its row is in the list. */
+type DeleteTarget = { profileId: string; displayName: string; fileName: string; index: number; selected: boolean };
+
 export const ProfilesPage = ({ titleRef }: { titleRef: Ref<HTMLHeadingElement> }) => {
-        const { t } = useI18n();
+        const { t, locale, os } = useI18n();
         const { view, commands } = useDeploymentWorkspaceController();
         const { go, setInstallUi } = useGuidedNavigation();
+        const id = useId();
+        const rows = useRef<HTMLUListElement>(null);
+        const busy = Boolean(view.busyAction);
+        // The record the open dialog asks about, then the record whose delete is running.
+        const [asking, setAsking] = useState<DeleteTarget | null>(null);
+        const [deleting, setDeleting] = useState<DeleteTarget | null>(null);
+        // An error left by another page is not shown here; only a delete made on this page reports its failure.
+        const [attempted, setAttempted] = useState(false);
+
+        // When the delete ends, focus goes to the delete button of the row now in that place, or to the title when no row is left.
+        useEffect(() => {
+                if (!deleting || view.busyAction) return;
+                setDeleting(null);
+                const kept = view.profiles.findIndex((profile) => profile.profileId === deleting.profileId);
+                // The open record is gone: the install screens start over, as they do when a record is opened from this list.
+                if (kept < 0 && deleting.selected) setInstallUi({ ...initialInstallUi });
+                // One frame later, after the closed dialog has returned focus to the button that opened it.
+                requestAnimationFrame(() => {
+                        const buttons = rows.current?.querySelectorAll<HTMLButtonElement>(".nv-row-delete");
+                        const next = buttons?.[kept >= 0 ? kept : Math.min(deleting.index, buttons.length - 1)];
+                        (next ?? (titleRef as RefObject<HTMLHeadingElement> | null)?.current)?.focus();
+                });
+        }, [deleting, view.busyAction, view.profiles, setInstallUi, titleRef]);
+
         return (
-                <SubPage here={t("ui.menuOpenPreparation")} title={t("ui.profilesTitle")} lead={t("ui.profilesLead")} titleRef={titleRef} testId="profiles-page">
-                        <ul className="nv-rows">
-                                {view.profiles.map((profile) => (
-                                        <li key={profile.profileId}>
-                                                <button
-                                                        type="button"
-                                                        className="nv-row"
-                                                        aria-current={profile.profileId === view.selectedProfileId || undefined}
-                                                        disabled={Boolean(view.busyAction)}
-                                                        onClick={() => {
-                                                                if (profile.profileId !== view.selectedProfileId) commands.setSelectedProfileId(profile.profileId);
-                                                                setInstallUi({ ...initialInstallUi });
-                                                                go("install");
-                                                        }}
-                                                >
-                                                        <Icon name="file" />
-                                                        <span className="nv-row-text">
-                                                                <span className="nv-strong">{profile.displayName}</span>
-                                                                <span className="nv-supporting">{profile.originalFirmware.fileName}{profile.profileId === view.selectedProfileId ? ` · ${t("ui.profileCurrent")}` : ""}</span>
-                                                        </span>
-                                                        <span className="nv-row-chevron"><Icon name="chevron" /></span>
-                                                </button>
-                                        </li>
-                                ))}
-                        </ul>
-                </SubPage>
+                <>
+                        <SubPage here={t("ui.menuOpenPreparation")} title={t("ui.profilesTitle")} lead={t("ui.profilesLead")} titleRef={titleRef} testId="profiles-page">
+                                {attempted && view.activity?.tone === "error" && <Notice title={t("ui.taskDidNotFinish")}>{translateMessage(locale, view.activity.message, os)}</Notice>}
+                                {view.profiles.length > 0 && (
+                                        <ul ref={rows} className="nv-rows">
+                                                {view.profiles.map((profile, index) => {
+                                                        const selected = profile.profileId === view.selectedProfileId;
+                                                        return (
+                                                                <li key={profile.profileId} className="nv-row-split">
+                                                                        <button
+                                                                                type="button"
+                                                                                className="nv-row"
+                                                                                aria-current={selected || undefined}
+                                                                                disabled={busy}
+                                                                                onClick={() => {
+                                                                                        if (!selected) commands.setSelectedProfileId(profile.profileId);
+                                                                                        setInstallUi({ ...initialInstallUi });
+                                                                                        go("install");
+                                                                                }}
+                                                                        >
+                                                                                <Icon name="file" />
+                                                                                <span className="nv-row-text" id={`${id}-${index}`}>
+                                                                                        <span className="nv-strong">{profile.displayName}</span>
+                                                                                        <span className="nv-supporting">{profile.originalFirmware.fileName}{selected ? ` · ${t("ui.profileCurrent")}` : ""}</span>
+                                                                                </span>
+                                                                                <span className="nv-row-chevron"><Icon name="chevron" /></span>
+                                                                        </button>
+                                                                        <button
+                                                                                type="button"
+                                                                                className="nv-iconbtn nv-row-delete"
+                                                                                aria-label={t("ui.deleteProfile")}
+                                                                                aria-describedby={`${id}-${index}`}
+                                                                                title={t("ui.deleteProfile")}
+                                                                                disabled={busy}
+                                                                                onClick={() => setAsking({ profileId: profile.profileId, displayName: profile.displayName, fileName: profile.originalFirmware.fileName, index, selected })}
+                                                                        >
+                                                                                <Icon name="trash" />
+                                                                        </button>
+                                                                </li>
+                                                        );
+                                                })}
+                                        </ul>
+                                )}
+                                {view.profiles.length === 0 && view.profilesLoaded && <p className="nv-body">{t("ui.profilesEmpty")}</p>}
+                        </SubPage>
+                        {asking && (
+                                <ConfirmDialog
+                                        title={t("ui.deleteProfileConfirmTitle")}
+                                        confirmLabel={t("ui.deleteProfileConfirmAction")}
+                                        onClose={() => setAsking(null)}
+                                        onConfirm={() => {
+                                                setAsking(null);
+                                                setAttempted(true);
+                                                setDeleting(asking);
+                                                commands.deleteProfile(asking.profileId);
+                                        }}
+                                >
+                                        <span className="nv-dialog-subject">
+                                                <span className="nv-strong">{asking.displayName}</span>
+                                                <span className="nv-supporting">{asking.fileName}</span>
+                                        </span>
+                                        {t("ui.deleteProfileConfirmBody")}
+                                </ConfirmDialog>
+                        )}
+                </>
         );
 };

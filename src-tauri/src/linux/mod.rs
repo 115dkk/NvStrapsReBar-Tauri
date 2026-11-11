@@ -22,6 +22,7 @@ impl SystemRoots {
     }
 }
 
+pub(crate) mod desktop;
 pub(crate) mod dmi;
 pub(crate) mod efivars;
 pub(crate) mod helper;

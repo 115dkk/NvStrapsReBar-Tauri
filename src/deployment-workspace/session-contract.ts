@@ -1,4 +1,5 @@
 import type { SystemSnapshot } from "../types";
+import type { FileDropEvent, FirmwareDialogLabels } from "./adapter";
 import type { MessageDescriptor, StaticMessageId } from "../i18n-catalog";
 import type {
         BoardPath,
@@ -147,15 +148,16 @@ type FieldIntent =
 
 export type DeploymentWorkspaceIntent =
         | FieldIntent
+        | { type: "deleteProfile"; profileId: string }
+        | { type: "chooseFirmware"; labels?: FirmwareDialogLabels }
+        | { type: "chooseDestination" | "saveToUsb"; title?: string }
         | {
                   type:
-                          | "chooseFirmware"
                           | "inspectFirmware"
                           | "analyzeLegacy"
                           | "createProfile"
                           | "compare"
                           | "prepare"
-                          | "chooseDestination"
                           | "exportPackage"
                           | "previewFirmwareReboot"
                           | "requestFirmwareReboot"
@@ -168,7 +170,6 @@ export type DeploymentWorkspaceIntent =
                           | "verifyConfigurationBoot"
                           | "collectBar"
                           | "autoCheck"
-                          | "saveToUsb"
                           | "saveRecommendedConfig"
                           | "closeModals";
           };
@@ -177,6 +178,7 @@ export interface DeploymentWorkspaceSession {
         view(): DeploymentWorkspaceView;
         dispatch(intent: DeploymentWorkspaceIntent): Promise<void>;
         subscribe(listener: () => void): () => void;
+        watchFileDrops(listener: (event: FileDropEvent) => void): () => void;
         dispose(): void;
 }
 

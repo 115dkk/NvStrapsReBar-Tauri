@@ -34,9 +34,12 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2.11.5", features = [] }
 tauri-plugin-dialog = "2.7.2"
+tauri-plugin-window-state = "2"
 thiserror = "2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
+# The version Tauri itself uses; `WebviewWindow::gtk_window` hands out its types.
+gtk = "0.18"
 nvstraps-linux-helper = { path = "../crates/nvstraps-linux-helper" }
 
 [target.'cfg(windows)'.dependencies]

@@ -79,7 +79,7 @@ for (const image of images) {
       await page.getByRole("radio", { name: /^Has Re-Size BAR/ }).check();
       await button(page, "Next").click();
       await expect(heading(page, "Choose how to install the BIOS")).toBeVisible();
-      await page.getByRole("textbox", { name: /^Manual address \(https:\/\/\)/ }).fill(image.url);
+      await page.getByRole("textbox", { name: /^Manual address \(optional\)/ }).fill(image.url);
       await button(page, "Next").click();
       await expect(heading(page, recoveryHeading)).toBeVisible();
       await expect(page.getByRole("radio", { name: /^Maker's recovery feature/ })).toBeChecked();

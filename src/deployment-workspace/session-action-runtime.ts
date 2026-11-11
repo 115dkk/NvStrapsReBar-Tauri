@@ -21,5 +21,6 @@ export interface DeploymentSessionRuntime {
                 work: (transaction: SessionActionTransaction) => Promise<void>,
         ): Promise<void>;
         selectProfile(profileId: string): Promise<void>;
+        deleteProfile(profileId: string): Promise<void>;
         loadRecommendation(): Promise<void>;
 }
