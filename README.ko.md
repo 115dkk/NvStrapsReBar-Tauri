@@ -79,18 +79,13 @@ GTX 1000(Pascal) 이하는 지원하지 않습니다. BAR가 바뀌면 Windows�
 
 ## 지금 상태
 
-드라이버를 실제 보드에 플래시해 돌린 결과가 있습니다. MSI MAG B660 TOMAHAWK WIFI DDR5(MS-7D41,
-BIOS 7D41vAO)와 RTX 2060 12GB에서, 이 프로젝트의 주입 도구로 만든 이미지가 MSI의 M-FLASH로
-그대로 들어갔고, 앱으로 드라이버를 설정한 뒤 앱과 GPU-Z 모두 BAR1 16 GiB를 보고했습니다
-([하드웨어 보고](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/39)). 게임마다 켜기
-스위치는 유지 관리자의 PC(RTX 2080 SUPER, 드라이버 616.64)에서 실제 NVIDIA 드라이버로
-확인했습니다. 넓어진 BAR를 유지한 채 절전에서 깨어나는 것은 실제 보드에서 아직 보고되지
-않았습니다.
-
-Linux에서는 사용자 한 명이 1.1.5 프리뷰를 실제 PC(Ubuntu 26.10, MSI Z390-A PRO, RTX 2080 Ti)에서
-끝까지 돌린 결과를 보고했습니다. 앱에서 BIOS 파일을 만드는 데서 시작해 Resizable BAR 16 GiB까지
-갔습니다([보고](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/63#issuecomment-6783051817)).
-유지 관리자는 Linux 빌드를 실제 PC에서 돌려 보지 못했습니다.
+드라이버를 실제 보드에 플래시해 돌린 보고가 세 건 있습니다. 두 건은 BAR1 16 GiB까지 갔고(Windows
+한 건, Linux 한 건), 한 건은 보드의 플래시 도구가 고친 BIOS 파일을 받지 않았습니다.
+[시험된 하드웨어](docs/TESTED_HARDWARE.md)(영어)에 보고마다 보드, GPU, 운영체제, 결과가 있고,
+근거가 된 이슈로 가는 링크가 붙어 있습니다. 아직 아무도 보고하지 않은 항목도 거기에 있습니다. 직접
+시험한 결과는
+[하드웨어 보고](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/new?template=1-hardware-report.yml)로
+알려 주세요.
 
 다른 보드는 여전히 각자의 첫 시도입니다. BIOS 플래시가 잘못되면 보드가 안 켜질 수 있으니, 복구
 방법이 실제로 되는지 확인한 다음에만 진행하세요. MSI PRO Z690-A DDR4(MS-7D25)는 문서에 있는
@@ -177,6 +172,8 @@ OVMF 사본으로 부팅해 드라이버를 설정하고, 가상 머신을 ACPI 
 - [Rust UEFI 구현 상태](docs/RUST_UEFI_PORT.md)
 - [Tauri 백엔드 계약](docs/TAURI_BACKEND.md)
 - [Linux 지원 (진행 중)](docs/LINUX.md)
+- [시험된 하드웨어](docs/TESTED_HARDWARE.md)
+- [DSDT 패치와 Above 4G Decoding이 없는 보드](docs/DSDT_PATCHING.md)
 - [RIIR와 원클릭 배포의 경계](docs/RIIR_AND_ONE_CLICK.md)
 - [도메인 용어](CONTEXT.md)
 - [앱 화면 모음(영어·한국어)](docs/frontend-gallery/README.md)

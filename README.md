@@ -85,18 +85,11 @@ changes, so the app does not offer them.
 
 ## Current status
 
-The driver has been flashed and run on a physical board. On an MSI MAG B660 TOMAHAWK WIFI DDR5
-(MS-7D41, BIOS 7D41vAO) with an RTX 2060 12GB, the image prepared with this project's injector went
-in through MSI's own M-FLASH, the app configured the driver, and both the app and GPU-Z then
-reported a 16 GiB BAR1 ([hardware report](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/39)).
-The per-game switches have been verified against the NVIDIA driver on the maintainer's PC (RTX
-2080 SUPER, driver 616.64). Sleep and resume with the expanded BAR has not been reported from a
-physical board yet.
-
-On Linux, one user has reported a complete run of the 1.1.5 preview on a physical PC (Ubuntu 26.10,
-MSI Z390-A PRO, RTX 2080 Ti), from making the BIOS file in the app to Resizable BAR at 16 GiB
-([report](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/63#issuecomment-6783051817)). The
-maintainers have not run the Linux build on a physical PC themselves.
+The driver has been flashed and run on physical boards. Two reports reached a 16 GiB BAR1, one on
+Windows and one on Linux, and one board's flasher refused the changed BIOS file.
+[Tested hardware](docs/TESTED_HARDWARE.md) lists each report with its board, GPU, system and
+result, links it to its evidence, and says what nobody has reported yet. To add your PC, open a
+[hardware report](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/new?template=1-hardware-report.yml).
 
 Every other board is still your own trial. A bad BIOS flash can leave a board unbootable; continue
 only after confirming your recovery route works. For the MSI PRO Z690-A DDR4 (MS-7D25) the app
@@ -188,6 +181,8 @@ Deeper documentation:
 - [Rust UEFI implementation status](docs/RUST_UEFI_PORT.md)
 - [Tauri backend contract](docs/TAURI_BACKEND.md)
 - [Linux support (in progress)](docs/LINUX.md)
+- [Tested hardware](docs/TESTED_HARDWARE.md)
+- [DSDT patching and boards without Above 4G Decoding](docs/DSDT_PATCHING.md)
 - [RIIR and one-click deployment boundaries](docs/RIIR_AND_ONE_CLICK.md)
 - [Domain language](CONTEXT.md)
 - [Screens of the app, in English and Korean](docs/frontend-gallery/README.md)
