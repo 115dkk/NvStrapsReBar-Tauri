@@ -703,10 +703,13 @@ fn manual_gates(profile: &MachineProfile) -> Vec<String> {
     vec![
         "Confirm that the live board, BIOS, GPU topology, and source image still match the machine profile before flashing.".into(),
         "Use only the pinned vendor install route; never bypass capsule signatures or vendor integrity checks.".into(),
-        format!(
-            "Keep the documented recovery route ready before flashing: {}",
-            profile.recovery.note
-        ),
+        match profile.recovery.method {
+            RecoveryMethod::None => "This board has no way to put the original BIOS back if the install fails. Keep recovery/original-firmware.bin: a repair shop or an SPI programmer needs it.".into(),
+            _ => format!(
+                "Keep the documented recovery route ready before flashing: {}",
+                profile.recovery.note
+            ),
+        },
         match profile.board_path {
             BoardPath::NativeResizableBar => {
                 "In firmware setup, enable native Resizable BAR and Above 4G decoding, and disable CSM.".into()
@@ -841,11 +844,12 @@ fn korean_operator_instructions(
     line(format!("복구 메모: {}", profile.recovery.note));
     line(String::new());
     line("순서".into());
-    line(match recovery_shortcut_file_name {
-        Some(file_name) => format!(
+    line(match (profile.recovery.method, recovery_shortcut_file_name) {
+        (RecoveryMethod::None, _) => "1. 이 보드에는 설치가 실패했을 때 원본 BIOS를 되돌릴 방법이 없습니다. recovery/original-firmware.bin은 지우지 마세요. 수리점이나 SPI 프로그래머로 되돌릴 때 필요합니다.".into(),
+        (_, Some(file_name)) => format!(
             "1. 복구 수단을 먼저 준비하세요. {file_name} 파일이 USB 맨 위에 있는지 확인하세요."
         ),
-        None => "1. 복구 수단을 먼저 준비하세요. 복구 메모에 따라 recovery/original-firmware.bin을 준비하세요.".into(),
+        (_, None) => "1. 복구 수단을 먼저 준비하세요. 복구 메모에 따라 recovery/original-firmware.bin을 준비하세요.".into(),
     });
     line("2. 이 PC의 메인보드와 BIOS가 위에 적힌 것과 같은지 확인하세요.".into());
     line(format!(
@@ -1309,6 +1313,42 @@ mod tests {
         let korean = korean_operator_instructions(&without_address, without_route, None);
         assert!(!english.contains("Official instructions:"));
         assert!(!korean.contains("제조사 안내서:"));
+    }
+
+    #[test]
+    fn instruction_texts_say_so_when_the_board_has_no_way_to_recover() {
+        let firmware = FirmwareFingerprint {
+            file_name: "vendor-bios.bin".into(),
+            byte_length: 4,
+            sha256: Sha256Digest::from_bytes(b"test"),
+        };
+        let with_recovery = profile(firmware);
+        let mut without_recovery = with_recovery.clone();
+        without_recovery.recovery.method = RecoveryMethod::None;
+        let route = without_recovery.firmware_install.as_ref().unwrap();
+
+        let english = operator_instructions(
+            &without_recovery,
+            route,
+            &manual_gates(&without_recovery),
+            None,
+        );
+        let korean = korean_operator_instructions(&without_recovery, route, None);
+        assert!(english.contains("Recovery method: None\n"));
+        assert!(english.contains(
+            "This board has no way to put the original BIOS back if the install fails. Keep recovery/original-firmware.bin"
+        ));
+        assert!(!english.contains("Keep the documented recovery route ready"));
+        assert!(korean.contains("복구 방법: 없음\n"));
+        assert!(
+            korean
+                .contains("1. 이 보드에는 설치가 실패했을 때 원본 BIOS를 되돌릴 방법이 없습니다.")
+        );
+        assert!(!korean.contains("복구 수단을 먼저 준비하세요"));
+
+        // A board with a recovery method keeps the old first step.
+        let korean = korean_operator_instructions(&with_recovery, route, None);
+        assert!(korean.contains("1. 복구 수단을 먼저 준비하세요."));
     }
 
     #[test]

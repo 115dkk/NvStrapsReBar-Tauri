@@ -139,7 +139,7 @@ const RecoveryCaution = ({ ctx }: { ctx: InstallContext }) => {
                                   dualBios: "ui.cautionDualBios",
                                   vendorRecovery: "ui.cautionVendorRecovery",
                                   externalSpiProgrammer: "ui.cautionSpi",
-                                  none: "ui.cautionVendorRecovery",
+                                  none: "ui.cautionNone",
                           } as const)[method]);
         return <Caution title={t("ui.cautionTitle")}>{text}</Caution>;
 };
