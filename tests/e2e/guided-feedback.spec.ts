@@ -10,7 +10,7 @@ const systems: Os[] = ["windows", "linux"];
 
 const brand = (page: Page) => button(page, "NvStrapsReBar");
 const records = (page: Page) => page.getByTestId("profiles-page").getByRole("listitem");
-const deleteDialog = (page: Page) => page.getByRole("dialog", { name: "Delete this preparation record?" });
+const deleteDialog = (page: Page) => page.getByRole("dialog", { name: "Delete this preparation record" });
 
 /** From the start screen to the saved-file screen of a new record. */
 async function makeRecord(page: Page) {
@@ -305,7 +305,7 @@ test("Korean: the changed screens carry their text and fit the 900 px minimum wi
         await page.getByRole("button", { name: "메뉴" }).click();
         await page.getByRole("menuitem", { name: "이전 준비 기록 열기" }).click();
         await records(page).first().getByRole("button", { name: "이 기록 지우기" }).click();
-        const dialog = page.getByRole("dialog", { name: "이 준비 기록을 지울까요?" });
+        const dialog = page.getByRole("dialog", { name: "이 준비 기록 지우기" });
         await expect(dialog).toContainText("기록과 이 PC에 보관한 원본 BIOS 사본이 지워집니다. USB에 이미 저장한 파일은 그대로 남습니다.");
         expect(await noHorizontalOverflow(page)).toBe(true);
         await dialog.getByRole("button", { name: "지우기", exact: true }).click();

@@ -386,7 +386,7 @@ export const messages = {
         "ui.readFile": { en: "Read file", ko: "파일 읽기" },
         "ui.backToCurrentPreparation": { en: "Back to the current preparation", ko: "지금 준비로 돌아가기" },
         "ui.deleteProfile": { en: "Delete this record", ko: "이 기록 지우기" },
-        "ui.deleteProfileConfirmTitle": { en: "Delete this preparation record?", ko: "이 준비 기록을 지울까요?" },
+        "ui.deleteProfileConfirmTitle": { en: "Delete this preparation record", ko: "이 준비 기록 지우기" },
         "ui.deleteProfileConfirmBody": { en: "The record and the copy of the original BIOS kept on this PC are removed. Files already saved to a USB drive stay.", ko: "기록과 이 PC에 보관한 원본 BIOS 사본이 지워집니다. USB에 이미 저장한 파일은 그대로 남습니다." },
         "ui.deleteProfileConfirmAction": { en: "Delete", ko: "지우기" },
         "ui.profilesEmpty": { en: "No preparation records on this PC.", ko: "이 PC에 준비 기록이 없습니다." },
