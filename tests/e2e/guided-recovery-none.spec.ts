@@ -42,7 +42,7 @@ for (const os of systems) {
                 await expect(dialog(page).getByRole("listitem").last()).toHaveText("A board with a changed BIOS may be refused warranty service.");
                 const remedy = dialog(page).locator(".nv-dialog-remedy");
                 await expect(remedy).toContainText("What to do then");
-                await expect(remedy).toContainText("takes a repair shop or an SPI programmer");
+                await expect(remedy).toContainText("A repair shop or an SPI programmer has to write the original BIOS back.");
                 await button(page, "Close").click();
                 await expect(dialog(page)).toBeHidden();
                 await expect(page.getByRole("heading", { name: "Choose how to recover if the BIOS install fails" })).toBeVisible();
@@ -80,7 +80,7 @@ test("Korean: the confirmation fits the 900 px minimum window", async ({ page })
         await expect(korean.getByRole("listitem")).toHaveCount(3);
         await expect(korean.getByRole("listitem").last()).toHaveText("BIOS를 바꾼 보드는 보증 수리를 거절당할 수 있습니다.");
         await expect(korean.locator(".nv-dialog-remedy")).toContainText("대응법");
-        await expect(korean.locator(".nv-dialog-remedy")).toContainText("그때 원본 BIOS를 되돌리려면");
+        await expect(korean.locator(".nv-dialog-remedy")).toContainText("수리점에 맡기거나 SPI 프로그래머로 원본 BIOS를 다시 써야 합니다.");
         await expect(button(page, "그래도 만들기")).toBeVisible();
         expect(await noHorizontalOverflow(page)).toBe(true);
         expect(await missingMessages(page)).toEqual([]);

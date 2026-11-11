@@ -456,7 +456,7 @@ export const messages = {
         "ui.recoveryNoneRiskNoStart": { en: "The install finishes, but the changed BIOS does not start on this board and the screen stays black.", ko: "설치는 끝났지만 바뀐 BIOS가 이 보드에서 켜지지 않아 화면이 나오지 않습니다." },
         "ui.recoveryNoneRiskWarranty": { en: "A board with a changed BIOS may be refused warranty service.", ko: "BIOS를 바꾼 보드는 보증 수리를 거절당할 수 있습니다." },
         "ui.recoveryNoneRemedyLabel": { en: "What to do then", ko: "대응법" },
-        "ui.recoveryNoneRemedy": { en: "Putting the original BIOS back then takes a repair shop or an SPI programmer, which costs money and time.", ko: "그때 원본 BIOS를 되돌리려면 수리점이나 SPI 프로그래머가 필요하고, 돈과 시간이 듭니다." },
+        "ui.recoveryNoneRemedy": { en: "A repair shop or an SPI programmer has to write the original BIOS back. That costs money and time.", ko: "수리점에 맡기거나 SPI 프로그래머로 원본 BIOS를 다시 써야 합니다. 돈과 시간이 듭니다." },
         "ui.recoveryNoneConfirmAction": { en: "Make the file anyway", ko: "그래도 만들기" },
         "ui.makingTitle": { en: "Making the install BIOS file", ko: "설치용 BIOS 파일을 만들고 있습니다" },
         "ui.makingHint": { en: "When it is done, the next screen saves it to USB.", ko: "끝나면 USB에 저장하는 화면으로 넘어갑니다." },
