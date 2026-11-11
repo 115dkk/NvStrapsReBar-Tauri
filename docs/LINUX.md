@@ -155,13 +155,22 @@ installed from a `.deb` or `.rpm`.
   `GTK_USE_PORTAL=1` is set. With the variable set and no portal behind it, choosing a file shows
   nothing. So the app asks the portal for its file chooser first (version 3 or later, which GTK
   needs for folders) and, if it answers, starts itself again with the variable set. Without a
-  portal the GTK dialog stays.
+  portal the GTK dialog stays. The app opens the chooser itself (`choose_path`), as a modal child
+  of its window: the desktop keeps it on top of the app and gives it no minimize or maximize
+  button. The dialog plugin, which Windows uses, gives the chooser no parent window on Linux. The
+  chooser gets no file type filter. On the Ubuntu 26.10 desktop of issue #63 it listed no file at
+  all under a pattern filter, "*.*" included, and the cause was not found; BIOS files also have
+  no fixed extension (MSI names them after the version, such as `E7B98IMS.1F0`).
 - **Title bar.** On Wayland the window draws its own title bar, in the desktop theme's colour.
   The app gives it the colour of the app bar below. Where the window manager draws the title bar
   (X11), nothing changes.
 - **Window size.** The window opens with the size, position and maximized state it was closed
-  with (`tauri-plugin-window-state`, on Windows too). Wayland does not let a program place its
-  own window, so there only the size and the maximized state come back.
+  with. Wayland does not let a program place its own window, so there only the size and the
+  maximized state come back. On Windows `tauri-plugin-window-state` keeps all three. On Linux it
+  keeps the position, and `src-tauri/src/linux/window_size.rs` keeps the size and the maximized
+  state in `window-size.json`: with the plugin, a window that started maximized and was then
+  un-maximized did not return to its earlier size, and the next run opened it as large as the
+  screen. The module gives such a window its last normal size back.
 
 The stable release stays the Windows build. The Linux packages go out through the `Linux preview`
 workflow, which a maintainer starts by hand from `master`. It builds on Ubuntu 22.04, the oldest
@@ -202,6 +211,13 @@ system without systemd the app says so; restart by hand.
   staying with GTK when no portal answers, the title bar took the app bar's colour under a
   Wayland compositor, and a window closed at 1000x700 opened at 1000x700. The published 1.1.5
   never asked the portal on the same system.
+- **The chooser and the window size, on Fedora 45 in WSL**, with a build of the source after
+  1.1.7. Pressing the empty file box sent `OpenFile` to the portal with the app window as the
+  parent (`x11:` and the window's id), `modal` true and an empty filter list. A window resized
+  to 1000x700 opened at 1000x700; maximized, it opened maximized; un-maximized after that, it
+  returned to 1000x700 under X11 (openbox) and under Wayland (weston), and opened at 1000x700
+  again. Not shown: GNOME's own chooser and window manager. Nautilus as the chooser did not
+  show a window in WSL, so the empty file list of issue #63 was not reproduced.
 - **The rpm signature, on Fedora 45 in WSL.** The published 1.1.7 preview: `rpm -i` refused the
   `.rpm` until the key was imported from the same release (`rpm --import` with the release's
   address, and the imported key had the fingerprint above). After that `rpm --checksig` reported

@@ -73,29 +73,19 @@ describe("Tauri deployment adapter", () => {
                 ]);
         });
 
-        it.each(["en", "ko"] as const)("uses the supplied %s dialog labels", async (locale) => {
-                const open = vi.fn()
-                        .mockResolvedValueOnce("/home/user/bios.bin")
+        it.each(["en", "ko"] as const)("asks for the BIOS file and the USB folder under the supplied %s titles, with no file type filter", async (locale) => {
+                const choose = vi.fn()
+                        .mockResolvedValueOnce("/home/user/E7B98IMS.1F0")
                         .mockResolvedValueOnce("/media/user/USB");
-                const adapter = createTauriDeploymentAdapter(vi.fn(), open);
-                const labels = {
-                        title: translate(locale, "ui.dialogChooseBiosFile"),
-                        biosFiles: translate(locale, "ui.dialogFilterBios"),
-                        allFiles: translate(locale, "ui.dialogFilterAll"),
-                };
-                const title = translate(locale, "ui.dialogChooseUsbFolder");
-                await expect(adapter.selectFirmwareImage(labels)).resolves.toBe("/home/user/bios.bin");
-                await expect(adapter.selectDestinationDirectory(title)).resolves.toBe("/media/user/USB");
-                expect(open.mock.calls[0]?.[0]).toEqual({
-                        directory: false,
-                        multiple: false,
-                        title: labels.title,
-                        filters: [
-                                { name: labels.biosFiles, extensions: ["bin", "rom", "cap", "fd", "bio", "1n0"] },
-                                { name: labels.allFiles, extensions: ["*"] },
-                        ],
-                });
-                expect(open.mock.calls[1]?.[0]).toEqual({ directory: true, multiple: false, title });
+                const adapter = createTauriDeploymentAdapter(vi.fn(), choose);
+                const biosTitle = translate(locale, "ui.dialogChooseBiosFile");
+                const usbTitle = translate(locale, "ui.dialogChooseUsbFolder");
+                await expect(adapter.selectFirmwareImage(biosTitle)).resolves.toBe("/home/user/E7B98IMS.1F0");
+                await expect(adapter.selectDestinationDirectory(usbTitle)).resolves.toBe("/media/user/USB");
+                expect(choose.mock.calls).toEqual([
+                        [{ kind: "file", title: biosTitle }],
+                        [{ kind: "folder", title: usbTitle }],
+                ]);
         });
 
         it("propagates native deletion errors unchanged", async () => {

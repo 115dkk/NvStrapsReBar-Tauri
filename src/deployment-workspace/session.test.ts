@@ -323,7 +323,7 @@ describe("DeploymentWorkspaceSession", () => {
                 session.dispose();
         });
 
-        it("passes dialog labels through the session without translating them", async () => {
+        it("passes dialog titles through the session without translating them", async () => {
                 const selectFirmwareImage = vi.fn(async () => "/bios.bin");
                 const selectDestinationDirectory = vi.fn(async () => null);
                 const session = createDeploymentWorkspaceSession(snapshot, adapter({
@@ -331,9 +331,9 @@ describe("DeploymentWorkspaceSession", () => {
                         inspectFirmwareImage: async () => profile("a").originalFirmware,
                 }));
                 await tick();
-                const labels = { title: "BIOS 파일을 고르세요", biosFiles: "BIOS 파일", allFiles: "모든 파일" };
-                await session.dispatch({ type: "chooseFirmware", labels });
-                expect(selectFirmwareImage).toHaveBeenCalledWith(labels);
+                const biosTitle = "BIOS 파일을 고르세요";
+                await session.dispatch({ type: "chooseFirmware", title: biosTitle });
+                expect(selectFirmwareImage).toHaveBeenCalledWith(biosTitle);
                 const title = "USB 드라이브를 고르세요";
                 await session.dispatch({ type: "chooseDestination", title });
                 expect(selectDestinationDirectory).toHaveBeenLastCalledWith(title);

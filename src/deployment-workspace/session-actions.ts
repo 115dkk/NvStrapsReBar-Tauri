@@ -26,7 +26,7 @@ export class DeploymentSessionActions {
                         case "deleteProfile":
                                 return this.runtime.deleteProfile(intent.profileId);
                         case "chooseFirmware":
-                                return this.profileSource.chooseFirmware(intent.labels);
+                                return this.profileSource.chooseFirmware(intent.title);
                         case "inspectFirmware":
                                 return this.profileSource.inspectFirmware();
                         case "analyzeLegacy":

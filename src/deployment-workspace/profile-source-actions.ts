@@ -1,5 +1,4 @@
 import { message } from "../i18n-catalog";
-import type { FirmwareDialogLabels } from "./adapter";
 import {
         analyzeLegacyFirmware,
         inspectFirmware,
@@ -12,11 +11,11 @@ import type { DeploymentSessionRuntime } from "./session-action-runtime";
 export class ProfileSourceActions {
         constructor(private runtime: DeploymentSessionRuntime) {}
 
-        chooseFirmware(labels?: FirmwareDialogLabels) {
+        chooseFirmware(title?: string) {
                 return this.runtime.run("firmware", async (tx) => {
                         const inspected = await selectAndInspectFirmware(
                                 this.runtime.adapter,
-                                labels,
+                                title,
                         );
                         tx.patch({
                                 firmwarePath: inspected.path,

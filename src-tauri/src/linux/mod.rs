@@ -32,6 +32,8 @@ pub(crate) mod pci;
 pub(crate) mod process;
 pub(crate) mod restart;
 pub(crate) mod trusted;
+#[cfg(not(feature = "simulated-machine"))]
+pub(crate) mod window_size;
 
 #[cfg(test)]
 pub(super) mod tests {

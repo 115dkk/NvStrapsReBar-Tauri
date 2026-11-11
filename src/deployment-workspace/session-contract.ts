@@ -1,5 +1,5 @@
 import type { SystemSnapshot } from "../types";
-import type { FileDropEvent, FirmwareDialogLabels } from "./adapter";
+import type { FileDropEvent } from "./adapter";
 import type { MessageDescriptor, StaticMessageId } from "../i18n-catalog";
 import type {
         BoardPath,
@@ -149,7 +149,7 @@ type FieldIntent =
 export type DeploymentWorkspaceIntent =
         | FieldIntent
         | { type: "deleteProfile"; profileId: string }
-        | { type: "chooseFirmware"; labels?: FirmwareDialogLabels }
+        | { type: "chooseFirmware"; title?: string }
         | { type: "chooseDestination" | "saveToUsb"; title?: string }
         | {
                   type:
