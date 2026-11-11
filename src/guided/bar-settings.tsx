@@ -320,9 +320,13 @@ export const BarSettingsPage = ({ titleRef }: { titleRef: Ref<HTMLHeadingElement
                                                                         <section className="nv-group" aria-labelledby="gpu-sizes">
                                                                                 <h2 className="nv-section" id="gpu-sizes">{t("ui.gpuSizesTitle")}</h2>
                                                                                 {turing.length ? (
-                                                                                        turing.map((gpu) => (
-                                                                                                <GpuSizeRow key={gpu.id} gpu={gpu} draft={draft} devices={turing} disabled={disabled} onChoose={(choice) => setDraft(applyGpuChoice(draft, gpu, choice, snap.devices))} />
-                                                                                        ))
+                                                                                        <>
+                                                                                                {turing.map((gpu) => (
+                                                                                                        <GpuSizeRow key={gpu.id} gpu={gpu} draft={draft} devices={turing} disabled={disabled} onChoose={(choice) => setDraft(applyGpuChoice(draft, gpu, choice, snap.devices))} />
+                                                                                                ))}
+                                                                                                {/* Balanced lines keep a number and its unit together where the sentence wraps. */}
+                                                                                                <p className="nv-supporting" style={{ textWrap: "balance" }}>{t("ui.barSizeNotVram")}</p>
+                                                                                        </>
                                                                                 ) : (
                                                                                         <p className="nv-supporting">{t("ui.noTuringGpuFound")}</p>
                                                                                 )}

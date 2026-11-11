@@ -199,6 +199,7 @@ export const Guide = ({ ctx }: { ctx: InstallContext }) => {
                                 <Step title={t("ui.guideRestart")} detail={savedDetail} />
                                 {flashActive && <Step title={t(installStepFor(ctx), { file: artifactName })} detail={t(msi ? "ui.guideInstallDetailMsi" : "ui.guideInstallDetail")} />}
                                 {flashActive && <Step title={t("ui.guideKeepPower")} detail={t(msi ? "ui.guideKeepPowerDetailMsi" : "ui.guideKeepPowerDetail")} />}
+                                {flashActive && <Step title={t("ui.guideRestartsAfterInstall")} detail={t("ui.guideRestartsAfterInstallDetail")} />}
                                 <Step title={t("ui.guideSettings")}><BiosSettingsList ctx={ctx} /></Step>
                                 <Step title={t("ui.guideReopen")} />
                         </Steps>

@@ -1,9 +1,11 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { FirmwareInstallMethod, RecoveryMethod } from "../deployment-workspace/contract";
-import { isBootIndependentRecoveryMethod } from "../deployment-workspace/machine-profile-draft";
+import { instructionsUrlAcceptable, isBootIndependentRecoveryMethod } from "../deployment-workspace/machine-profile-draft";
 import { catalogLabelIds, legacyRuleBlockedReasonId, legacyRuleDescriptionId, riskLabelIds } from "../deployment-workspace/messages";
 import { legacyRuleKey } from "../deployment-workspace/session-projection";
 import { MSI_MANUAL } from "../deployment-workspace/session-state";
+import { useFirmwareDrop } from "../deployment-workspace/use-firmware-drop";
+import { setupUtilityName } from "../hardware-support";
 import { messages, type StaticMessageId } from "../i18n-catalog";
 import { translateMessage } from "../i18n";
 import type { HostOs } from "../platform";
@@ -84,6 +86,8 @@ const SignedFirmwareWarning = ({ ctx }: { ctx: InstallContext }) => {
 export const PickFirmware = ({ ctx }: { ctx: InstallContext }) => {
         const { t, view, commands, busy, msi, boardName, navigation } = ctx;
         const manualId = useId();
+        // A file dropped anywhere on the window is read; the box says so while one is dragged over it.
+        const dropping = useFirmwareDrop(true).over && !busy;
         return (
                 <TaskPanel
                         label={stageLabel(ctx)}
@@ -103,10 +107,13 @@ export const PickFirmware = ({ ctx }: { ctx: InstallContext }) => {
                                 <Step title={t(msi ? "ui.pickFirmwareStepDownloadMsi" : "ui.pickFirmwareStepDownload")} detail={t(msi ? "ui.pickFirmwareStepDownloadDetailMsi" : "ui.pickFirmwareStepDownloadDetail")} />
                                 <Step title={t(msi ? "ui.pickFirmwareStepChooseMsi" : "ui.pickFirmwareStepChoose")} detail={t(msi ? "ui.pickFirmwareStepChooseDetailMsi" : "ui.pickFirmwareStepChooseDetail")} />
                         </Steps>
-                        <div className="nv-file nv-file-empty">
+                        <button type="button" className={dropping ? "nv-file nv-file-empty nv-file-pick over" : "nv-file nv-file-empty nv-file-pick"} disabled={busy} onClick={commands.chooseFirmware}>
                                 <Icon name="folder" />
-                                <div className="nv-file-body"><span className="nv-strong">{t("ui.noFileChosen")}</span><span className="nv-supporting">{t("ui.noFileChosenDetail")}</span></div>
-                        </div>
+                                <span className="nv-file-body">
+                                        <span className="nv-strong">{t(dropping ? "ui.dropFileHere" : "ui.noFileChosen")}</span>
+                                        {!dropping && <span className="nv-supporting">{t("ui.noFileChosenDetail")}</span>}
+                                </span>
+                        </button>
                         <details className="nv-disclosure">
                                 <summary><Icon name="chevron" />{t("ui.enterPathInstead")}</summary>
                                 <div className="nv-group" style={{ paddingTop: 8 }}>
@@ -326,9 +333,25 @@ export const Routes = ({ ctx }: { ctx: InstallContext }) => {
 };
 
 export const InstallQuestion = ({ ctx }: { ctx: InstallContext }) => {
-        const { t, os, view, commands, navigation, busy } = ctx;
+        const { t, os, view, commands, navigation, busy, snapshot } = ctx;
         const urlId = useId();
-        const urlValid = view.instructionsUrl.startsWith("https://");
+        const urlField = useRef<HTMLDivElement>(null);
+        const urlInput = useRef<HTMLInputElement>(null);
+        // Presses of Next that the address stopped. The message stays until the address is acceptable.
+        const [urlRefusals, setUrlRefusals] = useState(0);
+        const urlAcceptable = instructionsUrlAcceptable(view.instructionsUrl);
+        const urlError = urlRefusals > 0 && !urlAcceptable;
+        const tool = setupUtilityName(snapshot.machineIdentity?.boardManufacturer);
+        // Once the message is on the screen, focus goes to the field, and a short window scrolls until the message under it shows.
+        useEffect(() => {
+                if (!urlRefusals) return;
+                urlInput.current?.focus({ preventScroll: true });
+                urlField.current?.scrollIntoView({ block: "nearest" });
+        }, [urlRefusals]);
+        const next = () => {
+                if (urlAcceptable) navigation.setInstallUi({ question: 3 });
+                else setUrlRefusals((count) => count + 1);
+        };
         return (
                 <TaskPanel
                         label={stageLabel(ctx, 2)}
@@ -339,7 +362,7 @@ export const InstallQuestion = ({ ctx }: { ctx: InstallContext }) => {
                                 <ActionBar
                                         hint={t("ui.installQuestionHint")}
                                         secondary={[{ label: t("ui.previousQuestion"), onClick: () => navigation.setInstallUi({ question: 1 }) }]}
-                                        primary={{ label: t("ui.next"), icon: "arrow", disabled: busy || !urlValid, onClick: () => navigation.setInstallUi({ question: 3 }) }}
+                                        primary={{ label: t("ui.next"), icon: "arrow", disabled: busy, onClick: next }}
                                 />
                         }
                 >
@@ -348,13 +371,31 @@ export const InstallQuestion = ({ ctx }: { ctx: InstallContext }) => {
                                 legend={t("ui.installQuestionTitle")}
                                 value={view.installMethod}
                                 onChange={commands.setInstallMethod}
-                                choices={offeredInstallMethods(os).map((value) => ({ value, title: t(installMethodIds[value].title), detail: t(installMethodIds[value].detail) }))}
+                                choices={offeredInstallMethods(os).map((value) => ({
+                                        value,
+                                        title: t(installMethodIds[value].title),
+                                        detail: value === "firmwareSetupUtility" && tool ? t("ui.methodSetupUtilityDetailNamed", { tool }) : t(installMethodIds[value].detail),
+                                }))}
                         />
-                        <label className="nv-field" htmlFor={urlId}>
-                                <span>{t("ui.manualAddressLabel")}</span>
-                                <input id={urlId} className="nv-input" type="url" value={view.instructionsUrl} placeholder="https://" onChange={(event) => commands.setInstructionsUrl(event.target.value)} />
-                                <span className="nv-supporting">{t("ui.manualAddressDetail")}</span>
-                        </label>
+                        <div ref={urlField} className="nv-field">
+                                <label className="nv-label" htmlFor={urlId}>{t("ui.manualAddressLabel")}</label>
+                                <input
+                                        ref={urlInput}
+                                        id={urlId}
+                                        className="nv-input"
+                                        type="url"
+                                        value={view.instructionsUrl}
+                                        placeholder="https://"
+                                        aria-invalid={urlError || undefined}
+                                        aria-describedby={urlError ? `${urlId}-error ${urlId}-detail` : `${urlId}-detail`}
+                                        onChange={(event) => {
+                                                if (instructionsUrlAcceptable(event.target.value)) setUrlRefusals(0);
+                                                commands.setInstructionsUrl(event.target.value);
+                                        }}
+                                />
+                                {urlError && <span className="nv-field-error" id={`${urlId}-error`}>{t("ui.manualAddressInvalid")}</span>}
+                                <span className="nv-supporting" id={`${urlId}-detail`}>{t("ui.manualAddressDetail")}</span>
+                        </div>
                 </TaskPanel>
         );
 };
