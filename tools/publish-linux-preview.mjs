@@ -96,6 +96,12 @@ export function checksumLines(files) {
   return files.map(({ name, sha256 }) => `${sha256}  ${name}`).join("\n") + "\n";
 }
 
+/** Where GitHub Pages serves the apt repository of `owner/name` (LinuxRepository.yml). */
+export function repositoryAddress(repo) {
+  const [owner, name] = repo.split("/");
+  return `https://${owner.toLowerCase()}.github.io/${name}/`;
+}
+
 export function previewNotes({ version, tag, sha, repo, files, fingerprint }) {
   const deb = files.find(({ name }) => name.endsWith(".deb")).name;
   const rpm = files.find(({ name }) => name.endsWith(".rpm")).name;
@@ -109,6 +115,8 @@ Built from [\`${sha.slice(0, 7)}\`](https://github.com/${repo}/commit/${sha}), t
 | --- | --- |
 | Ubuntu 22.04 or later, Debian 12 or later | \`sudo apt install ./${deb}\` |
 | Fedora and other RPM systems | \`sudo dnf install ./${rpm}\` |
+
+On Debian and Ubuntu you can add the project's apt repository instead, and \`apt\` then offers each new preview with the system's other updates: ${repositoryAddress(repo)} shows the commands.
 
 The \`.rpm\` is signed with the project's key, \`RPM-GPG-KEY-nvstraps-rebar\` among the files below (fingerprint \`${fingerprint}\`). \`dnf\` installs a local file without checking its signature. To check it, or to install with \`rpm -i\` where rpm insists on a signature it knows (RPM 6), import the key first:
 

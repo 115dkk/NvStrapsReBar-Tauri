@@ -108,6 +108,35 @@ On Fedora, install the `.rpm` with `sudo dnf install ./nvstraps-rebar-<version>-
 `/usr/lib/nvstraps-rebar`: the `.rpm` carries a post-remove script for that, because it does not
 own the `external` directory inside.
 
+### The apt repository
+
+On Debian and Ubuntu the app can also come from the project's apt repository, and `apt` then
+offers each new preview with the system's other updates:
+
+```
+sudo install -d -m 755 /etc/apt/keyrings
+curl -fsSL https://115dkk.github.io/NvStrapsReBar-Tauri/apt/nvstraps-rebar.asc | sudo tee /etc/apt/keyrings/nvstraps-rebar.asc >/dev/null
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/nvstraps-rebar.asc] https://115dkk.github.io/NvStrapsReBar-Tauri/apt preview main" | sudo tee /etc/apt/sources.list.d/nvstraps-rebar.list
+sudo apt update
+sudo apt install nvstraps-rebar
+```
+
+The suite is called `preview` because that is what the Linux build is. The repository holds the
+`.deb` of every published preview and is signed with the key described under "The rpm signature"
+below; `signed-by` makes that key valid for this repository only.
+
+GitHub Pages serves it. The `Linux repository` workflow (`LinuxRepository.yml`) builds it from
+nothing each time: it downloads the `.deb` of every `linux-preview-*` release
+(`scripts/build-apt-repository.sh`), signs the `Release` file in the one step that sees the key
+(`scripts/sign-apt-repository.sh`) and runs `apt-get update` against the result with only that
+key trusted (`scripts/check-apt-repository.sh`) before it publishes. The Linux preview workflow
+runs it after each new preview, and a maintainer can start it by hand from `master`. Pull request
+builds run `scripts/test-apt-repository.sh`, which does the same with a key made for the run and
+also checks that an unsigned repository, a repository signed by another key and a package list
+changed after signing are refused.
+
+There is no dnf repository yet.
+
 ### The rpm signature
 
 Previews after 1.1.5 carry a signed `.rpm`. The preview workflow signs it with the project's
@@ -137,7 +166,8 @@ The private key is not in this repository; it exists only as the GitHub Actions 
 `scripts/test-rpm-signing.sh`, which proves the same scripts with keys made for that run. If the
 secret is ever lost, a new key replaces this one here and users import it once more.
 
-The `.deb` is not signed: `apt` checks the signatures of repositories, not of a local file.
+The `.deb` itself is not signed: `apt` checks the signatures of repositories, not of a local
+file. The apt repository above is signed with this key.
 
 There is no AppImage: root cannot read files inside an AppImage's mount, so `pkexec` could not
 start a helper from there.
