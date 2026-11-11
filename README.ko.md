@@ -10,8 +10,29 @@ Turing GPU는 하드웨어로는 Resizable BAR를 지원하지만 NVIDIA가 끝�
 때 Windows보다 먼저 실행되는 작은 UEFI 드라이버가 GPU의 BAR(CPU가 VRAM을 읽고 쓸 때
 거치는 주소 영역)를 기본 256 MiB에서 VRAM 전체 크기까지 넓혀 줍니다. 이 저장소는 원본
 C/C++ [NvStrapsReBar](https://github.com/terminatorul/NvStrapsReBar)를 안정판 Rust로 다시 만든
-것으로, BIOS 이미지를 준비하고 드라이버 설정을 고치는 Rust/Tauri Windows 앱까지 함께 들어
+것으로, BIOS 이미지를 준비하고 드라이버 설정을 고치는 Rust/Tauri 앱까지 함께 들어 있습니다.
+앱은 Windows용이고, Linux용은 프리뷰로 나와 있습니다.
+
+![Resizable BAR가 꺼진 PC에서 앱을 열면 나오는 첫 화면: 지금 256 MiB, 켜면 8 GiB, 할 일과 준비물](docs/frontend-gallery/02-home-start-ko-1180x760.png)
+
+*첫 화면입니다. 미리보기 빌드의 예시 데이터로 찍었고, 맨 위의 띠가 그 표시입니다.
+[다른 화면 보기](docs/frontend-gallery/README.md)*
+
+## 앱 받기
+
+**Windows.** [최신 릴리스](https://github.com/115dkk/NvStrapsReBar-Tauri/releases/latest)에서
+`NvStrapsReBar-windows-x64-setup.exe`를 받아 실행하세요. 설치하지 않고 쓰려면
+`NvStrapsReBar-windows-x64.zip`을 받아 풀고 `NvStrapsReBar.exe`와 `NvStrapsReBar.ffs`를 같은
+폴더에 두세요. 어느 쪽이든 WebView2가 있는 Windows x64가 필요합니다. Windows 11과 업데이트된
+Windows 10에는 WebView2가 이미 들어 있습니다. 릴리스의 `SHA256SUMS.txt`에 두 파일의 체크섬이
 있습니다.
+
+**Linux(프리뷰).** Linux 빌드는 [릴리스 목록](https://github.com/115dkk/NvStrapsReBar-Tauri/releases)에
+`linux-preview-<버전>`이라는 프리릴리스로 따로 올라갑니다. 배포판에 맞는 패키지를 받아 Ubuntu
+22.04 이상과 Debian 12 이상에서는 `sudo apt install ./nvstraps-rebar_<버전>_amd64.deb`로,
+Fedora에서는 `sudo dnf install ./nvstraps-rebar-<버전>-1.x86_64.rpm`으로 설치하세요. 게임마다
+켜기와 BIOS를 고치지 않는 방식을 뺀 나머지는 Windows 앱과 같습니다. 동작 방식, 지금까지 확인한
+것, `.rpm` 서명을 확인하는 법은 [docs/LINUX.md](docs/LINUX.md)(영어)에 있습니다.
 
 ## 앱이 안내하는 순서
 
@@ -38,6 +59,8 @@ C/C++ [NvStrapsReBar](https://github.com/terminatorul/NvStrapsReBar)를 안정�
 원본 NvStrapsReBar를 설치해 뒀더라도, 앱이 넓어진 BAR를 알아보고 같은 UEFI 변수를 그대로
 편집합니다.
 
+![설치 뒤의 홈: Resizable BAR가 켜져 있고 GPU가 8 GiB이며, 아래에 BAR 설정, 게임마다 켜기, 설정 백업이 있습니다](docs/frontend-gallery/14-home-on-ko-1180x760.png)
+
 ## 필요한 것
 
 - NVIDIA Turing GPU: GTX 1600 또는 RTX 2000 시리즈
@@ -46,7 +69,8 @@ C/C++ [NvStrapsReBar](https://github.com/terminatorul/NvStrapsReBar)를 안정�
 - 내 보드와 리비전에 맞는 공식 BIOS 이미지, 그리고 실제로 되는 플래시 방법과 복구
   방법(플래시백 버튼, 듀얼 BIOS, SPI 프로그래머 등)
 - 관리자 권한을 쓸 수 있는 Windows 계정 (UEFI 변수를 읽고 쓰는 데 필요합니다). 필요해지면
-  앱이 관리자 권한으로 다시 시작할지 물어봅니다.
+  앱에 '관리자 권한으로 다시 열기' 버튼이 나옵니다. Linux에서는 '관리자 권한 승인'을 누르면
+  시스템의 암호 창이 열리며, 관리자 암호가 필요합니다.
 
 GTX 1000(Pascal) 이하는 지원하지 않습니다. BAR가 바뀌면 Windows용 NVIDIA 드라이버가 죽기
 때문에, 앱에서도 아예 고를 수 없습니다.
@@ -61,6 +85,11 @@ BIOS 7D41vAO)와 RTX 2060 12GB에서, 이 프로젝트의 주입 도구로 만�
 확인했습니다. 넓어진 BAR를 유지한 채 절전에서 깨어나는 것은 실제 보드에서 아직 보고되지
 않았습니다.
 
+Linux에서는 사용자 한 명이 1.1.5 프리뷰를 실제 PC(Ubuntu 26.10, MSI Z390-A PRO, RTX 2080 Ti)에서
+끝까지 돌린 결과를 보고했습니다. 앱에서 BIOS 파일을 만드는 데서 시작해 Resizable BAR 16 GiB까지
+갔습니다([보고](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/63#issuecomment-6783051817)).
+유지 관리자는 Linux 빌드를 실제 PC에서 돌려 보지 못했습니다.
+
 다른 보드는 여전히 각자의 첫 시도입니다. BIOS 플래시가 잘못되면 보드가 안 켜질 수 있으니, 복구
 방법이 실제로 되는지 확인한 다음에만 진행하세요. MSI PRO Z690-A DDR4(MS-7D25)는 문서에 있는
 M-FLASH 설치와 Flash BIOS Button 복구 방법을 앱이 미리 채워 주고, 다른 보드에서는 직접 고릅니다.
@@ -73,9 +102,9 @@ M-FLASH 설치와 Flash BIOS Button 복구 방법을 앱이 미리 채워 주고
 쓸 수 있습니다(방법은 앱이 안내합니다). 부팅 화면을 출력하는 GPU는 옮기지 못하며, 아직 QEMU에서만
 돌려 봤습니다([자세히](docs/EXTERNAL_EFI.md)).
 
-앱은 Windows x64에서만 돕니다. NVIDIA 드라이버의 게임별 설정은 Windows 드라이버에만 있고, macOS에는
-Turing GPU용 NVIDIA 드라이버 자체가 없습니다. UEFI 드라이버는 그 뒤에 어떤 운영체제가 부팅되든
-상관하지 않습니다.
+앱은 Windows x64에서 돌고, Linux x86-64용은 프리뷰입니다([docs/LINUX.md](docs/LINUX.md)). 게임마다
+켜기는 NVIDIA의 Windows 드라이버 API를 쓰므로 Windows에만 있습니다. macOS에는 Turing GPU용 NVIDIA
+드라이버 자체가 없습니다. UEFI 드라이버는 그 뒤에 어떤 운영체제가 부팅되든 상관하지 않습니다.
 
 ## 결과 확인
 
@@ -148,6 +177,7 @@ OVMF 사본으로 부팅해 드라이버를 설정하고, 가상 머신을 ACPI 
 - [Linux 지원 (진행 중)](docs/LINUX.md)
 - [RIIR와 원클릭 배포의 경계](docs/RIIR_AND_ONE_CLICK.md)
 - [도메인 용어](CONTEXT.md)
+- [앱 화면 모음(영어·한국어)](docs/frontend-gallery/README.md)
 
 ## 만든 바탕
 
@@ -160,6 +190,10 @@ OVMF 사본으로 부팅해 드라이버를 설정하고, 가상 머신을 ACPI 
 이 프로젝트의 이미지를 처음으로 실제 보드에 플래시하고 설정한 뒤 16 GiB 결과를 해시와
 스크린샷까지 붙여 알려 주신 @lucianocerantonio2 님께 특별히 감사드립니다
 ([이슈 #39](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/39)).
+
+Linux 프리뷰를 실제 PC에서 처음부터 끝까지 돌리고 단계마다 겪은 일을 적어 주신 @FasteryXD 님께도
+감사드립니다. 1.1.6과 1.1.7은 그 보고에서 짚어 주신 곳을 고친 판입니다
+([이슈 #63](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/63)).
 
 ## 라이선스
 

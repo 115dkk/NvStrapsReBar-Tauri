@@ -10,8 +10,32 @@ motherboards have no ReBAR option in BIOS setup. NvStrapsReBar closes that gap w
 driver that runs at boot, before Windows, and widens the GPU's BAR — the memory window the CPU
 uses to reach VRAM — from the default 256 MiB up to the full VRAM size. This repository is a
 stable-Rust implementation of the original C/C++
-[NvStrapsReBar](https://github.com/terminatorul/NvStrapsReBar), together with a Rust/Tauri
-Windows app that prepares your BIOS image and edits the driver's settings.
+[NvStrapsReBar](https://github.com/terminatorul/NvStrapsReBar), together with a Rust/Tauri app that
+prepares your BIOS image and edits the driver's settings. The app is for Windows; a Linux build is
+published as a preview.
+
+![The app's first screen on a PC where Resizable BAR is off: 256 MiB now, 8 GiB when on, with your steps and what you need](docs/frontend-gallery/13-home-start-en-1180x760.png)
+
+*The first screen, here with the sample data of the app's preview build; the bar at the top marks
+it. [More screens](docs/frontend-gallery/README.md).*
+
+## Get the app
+
+**Windows.** Download `NvStrapsReBar-windows-x64-setup.exe` from the
+[latest release](https://github.com/115dkk/NvStrapsReBar-Tauri/releases/latest) and run it. To use
+the app without installing it, download `NvStrapsReBar-windows-x64.zip` instead, extract it and
+keep `NvStrapsReBar.exe` and `NvStrapsReBar.ffs` in the same folder. Either way you need Windows
+x64 with WebView2, which Windows 11 and an up-to-date Windows 10 already have. `SHA256SUMS.txt` in
+the release lists the checksums of both downloads.
+
+**Linux (preview).** The Linux build is published separately, as a pre-release tagged
+`linux-preview-<version>` on the
+[releases page](https://github.com/115dkk/NvStrapsReBar-Tauri/releases). Download the package for
+your system and install it with `sudo apt install ./nvstraps-rebar_<version>_amd64.deb` (Ubuntu
+22.04 or later, Debian 12 or later) or `sudo dnf install ./nvstraps-rebar-<version>-1.x86_64.rpm`
+(Fedora). It does what the Windows app does except the per-game switches and the route that leaves
+the BIOS alone. [docs/LINUX.md](docs/LINUX.md) says how it works, what has been proven, and how to
+check the signature of the `.rpm`.
 
 ## How the app guides you
 
@@ -40,6 +64,8 @@ boards that need one; saving there asks for one confirmation and takes effect at
 If you already installed the original NvStrapsReBar with other tools, the app recognizes the
 expanded aperture and edits the same UEFI variable.
 
+![Home after installation: Resizable BAR is on and the GPU is at 8 GiB, with BAR Settings, the per-game switches and the settings backup below](docs/frontend-gallery/01-home-on-en-1180x760.png)
+
 ## What you need
 
 - An NVIDIA Turing GPU: GTX 1600 or RTX 2000 series.
@@ -48,7 +74,8 @@ expanded aperture and edits the same UEFI variable.
 - The official BIOS image for your exact board and revision, plus a flash route and a recovery
   route that actually work (flashback button, dual BIOS, or an SPI programmer).
 - Windows with an administrator account — reading and writing the UEFI variable needs it. The app
-  offers to restart itself as administrator when required.
+  offers to restart itself as administrator when required. On Linux, the system's password dialog
+  asks for an administrator's password when the app saves settings.
 
 GTX 1000 (Pascal) and older cards are not supported: their Windows driver crashes when the BAR
 changes, so the app does not offer them.
@@ -63,6 +90,11 @@ The per-game switches have been verified against the NVIDIA driver on the mainta
 2080 SUPER, driver 616.64). Sleep and resume with the expanded BAR has not been reported from a
 physical board yet.
 
+On Linux, one user has reported a complete run of the 1.1.5 preview on a physical PC (Ubuntu 26.10,
+MSI Z390-A PRO, RTX 2080 Ti), from making the BIOS file in the app to Resizable BAR at 16 GiB
+([report](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/63#issuecomment-6783051817)). The
+maintainers have not run the Linux build on a physical PC themselves.
+
 Every other board is still your own trial. A bad BIOS flash can leave a board unbootable; continue
 only after confirming your recovery route works. For the MSI PRO Z690-A DDR4 (MS-7D25) the app
 prefills the documented M-FLASH install and Flash BIOS Button recovery routes; on other boards you
@@ -76,9 +108,10 @@ with its own boot entry, and moves the GPU's BAR1. Release builds are signed, so
 on once you add the project's certificate in BIOS setup (the app shows how). It cannot move a GPU that
 shows the boot picture, and has only run on QEMU so far ([details](docs/EXTERNAL_EFI.md)).
 
-The app runs on Windows x64 only. The NVIDIA driver's per-game settings exist only in the Windows
-driver, and macOS has no NVIDIA driver for Turing GPUs at all. The UEFI driver itself does not care
-which operating system boots afterwards.
+The app runs on Windows x64, and on Linux x86-64 as a preview ([docs/LINUX.md](docs/LINUX.md)). The
+per-game switches are on Windows only, because they go through NVIDIA's Windows driver API. macOS
+has no NVIDIA driver for Turing GPUs at all. The UEFI driver itself does not care which operating
+system boots afterwards.
 
 ## Checking the result
 
@@ -154,6 +187,7 @@ Deeper documentation:
 - [Linux support (in progress)](docs/LINUX.md)
 - [RIIR and one-click deployment boundaries](docs/RIIR_AND_ONE_CLICK.md)
 - [Domain language](CONTEXT.md)
+- [Screens of the app, in English and Korean](docs/frontend-gallery/README.md)
 
 ## Credits
 
@@ -166,6 +200,10 @@ patch catalogs retain their upstream provenance and hashes.
 Special thanks to @lucianocerantonio2, who flashed the first physical board with this project's
 image, configured it, and reported the 16 GiB result with hashes and screenshots
 ([issue #39](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/39)).
+
+Thanks also to @FasteryXD, who ran the Linux preview on a physical PC from start to finish and
+wrote down what happened at every step. Versions 1.1.6 and 1.1.7 changed what that report pointed
+at ([issue #63](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/63)).
 
 ## Licenses
 

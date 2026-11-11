@@ -202,10 +202,13 @@ system without systemd the app says so; restart by hand.
   staying with GTK when no portal answers, the title bar took the app bar's colour under a
   Wayland compositor, and a window closed at 1000x700 opened at 1000x700. The published 1.1.5
   never asked the portal on the same system.
-- **The rpm signature, on Fedora 45 in WSL.** A copy of the package was signed by
-  `scripts/sign-linux-rpm.sh` with a key made for the test. `rpm -i` refused it until that key was
-  imported, then installed it, and `rpm -V` found nothing wrong; `dnf install` of the local file
-  installed it with and without the key. `rpm -i` refused the unsigned package on the same system.
+- **The rpm signature, on Fedora 45 in WSL.** The published 1.1.7 preview: `rpm -i` refused the
+  `.rpm` until the key was imported from the same release (`rpm --import` with the release's
+  address, and the imported key had the fingerprint above). After that `rpm --checksig` reported
+  the package as OK, `rpm -i` installed it, `rpm -V` found nothing wrong and the app started.
+  Before the preview, with a copy signed by `scripts/sign-linux-rpm.sh` with a key made for the
+  test: `dnf install` of the local file installed it with and without the key, and `rpm -i`
+  refused an unsigned package on the same system.
 - **A physical PC, reported by a user.** See the top of this page. The report does not include
   the sysfs GPU inventory or the state of efivarfs on that board.
 - **Not shown.** QEMU has no NVIDIA GPU. The maintainers have not run a physical board. Nothing
