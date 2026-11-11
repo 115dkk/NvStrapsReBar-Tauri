@@ -1,10 +1,11 @@
 name: Linux preview
 
-# Started by hand, from master only. It builds the Linux packages from that commit, checks them
-# the way the pull request job does (including installing the .deb and starting the application),
-# and publishes them as a GitHub pre-release of their own. The stable release stays the Windows
-# build that Release.yml publishes: a preview never becomes Latest, and its tag does not start
-# with "v", so the release planner does not take it for a release.
+# Started by hand, from master only. It builds the Linux packages from that commit, signs the .rpm
+# with the project key, checks them the way the pull request job does (including installing the
+# .deb and starting the application), and publishes them as a GitHub pre-release of their own,
+# with the public key beside them. The stable release stays the Windows build that Release.yml
+# publishes: a preview never becomes Latest, and its tag does not start with "v", so the release
+# planner does not take it for a release.
 on:
   workflow_dispatch:
 
@@ -25,6 +26,16 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Require the rpm signing key
+        env:
+          NVSTRAPS_RPM_SIGNING_KEY: ${{ secrets.NVSTRAPS_RPM_SIGNING_KEY }}
+        run: |
+          # rpm on Fedora refuses a package without a signature, so an unsigned preview is not
+          # published. Asked for here, before the build spends its time.
+          if [ -z "${NVSTRAPS_RPM_SIGNING_KEY}" ]; then
+            echo "The NVSTRAPS_RPM_SIGNING_KEY secret is missing" >&2
+            exit 1
+          fi
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
@@ -41,11 +52,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends \
             libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libgtk-3-dev libsoup-3.0-dev \
-            librsvg2-dev libayatana-appindicator3-dev libxdo-dev libssl-dev rpm xvfb
+            librsvg2-dev libayatana-appindicator3-dev libxdo-dev libssl-dev rpm gnupg xvfb
       - name: Install dependencies
         run: npm ci
       - name: Build the application and its deb and rpm packages
         run: npm run build:linux-packages
+      - name: Sign the rpm with the project key and verify the signature
+        # Only this step sees the key: the build above runs other people's build scripts.
+        env:
+          NVSTRAPS_RPM_SIGNING_KEY: ${{ secrets.NVSTRAPS_RPM_SIGNING_KEY }}
+        run: bash scripts/sign-linux-rpm.sh
       - name: Check the packages, install the deb and start the application
         run: npm run check:linux-packages -- --install
       - name: Publish the pre-release

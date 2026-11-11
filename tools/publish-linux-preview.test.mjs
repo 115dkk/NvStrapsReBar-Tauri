@@ -3,7 +3,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 
-import { checksumLines, previewIdentity, previewNotes, previewPackages, releaseArguments } from "./publish-linux-preview.mjs";
+import {
+  checksumLines, keyFingerprint, previewIdentity, previewNotes, previewPackages, releaseArguments,
+} from "./publish-linux-preview.mjs";
 
 const sha = "0123456789abcdef0123456789abcdef01234567";
 const env = {
@@ -46,8 +48,9 @@ test("exactly one package of each kind is published", () => {
 
 test("the release is a pre-release that never becomes Latest", () => {
   const args = releaseArguments(previewIdentity(env, "1.2.3"),
-    { packages: ["x.deb", "x.rpm"], checksumFile: "SHA256SUMS.txt", notesFile: "notes.md" });
-  assert.deepEqual(args.slice(0, 6), ["release", "create", "linux-preview-1.2.3", "x.deb", "x.rpm", "SHA256SUMS.txt"]);
+    { packages: ["x.deb", "x.rpm"], checksumFile: "SHA256SUMS.txt", publicKey: "KEY", notesFile: "notes.md" });
+  assert.deepEqual(args.slice(0, 7),
+    ["release", "create", "linux-preview-1.2.3", "x.deb", "x.rpm", "SHA256SUMS.txt", "KEY"]);
   assert.ok(args.includes("--prerelease"));
   assert.ok(args.includes("--latest=false"));
   assert.ok(!args.includes("--latest"));
@@ -55,10 +58,14 @@ test("the release is a pre-release that never becomes Latest", () => {
 });
 
 test("the notes say what the build is, how to install it and what it does", () => {
-  const notes = previewNotes({ ...previewIdentity(env, "1.2.3"), files });
-  assert.match(notes, /has not run on a physical Linux PC yet/);
+  const fingerprint = "0123456789ABCDEF0123456789ABCDEF01234567";
+  const notes = previewNotes({ ...previewIdentity(env, "1.2.3"), files, fingerprint });
+  assert.match(notes, /the maintainers have not run it on one themselves/);
   assert.match(notes, /sudo apt install \.\/nvstraps-rebar_1\.2\.3_amd64\.deb/);
   assert.match(notes, /sudo dnf install \.\/nvstraps-rebar-1\.2\.3-1\.x86_64\.rpm/);
+  assert.ok(notes.includes("sudo rpm --import https://github.com/115dkk/NvStrapsReBar-Tauri/releases/download/"
+    + "linux-preview-1.2.3/RPM-GPG-KEY-nvstraps-rebar"), "the key is imported from this release's own files");
+  assert.ok(notes.includes(`fingerprint \`${fingerprint}\``));
   assert.match(notes, /never flashes a BIOS/);
   assert.match(notes, new RegExp(`${"a".repeat(64)}  nvstraps-rebar_1\\.2\\.3_amd64\\.deb`));
   assert.match(notes, new RegExp(`/blob/${sha}/docs/LINUX\\.md`));
@@ -74,4 +81,31 @@ test("the workflow that publishes the preview is manual and builds on the oldest
   const validation = readFileSync(new URL("../.github/workflows/Tauri.yml", import.meta.url), "utf8");
   assert.match(validation.split("native-linux:")[1].split("\n  real-app:")[0], /runs-on: ubuntu-22\.04/,
     "pull requests build the packages on the same Ubuntu as the preview");
+});
+
+test("the preview signs the rpm before it checks and publishes it, and pull requests never see the key", () => {
+  const workflow = readFileSync(new URL("../.github/workflows/LinuxPreview.yml", import.meta.url), "utf8");
+  const order = [
+    "Require the rpm signing key",
+    "npm run build:linux-packages",
+    "bash scripts/sign-linux-rpm.sh",
+    "npm run check:linux-packages -- --install",
+    "node tools/publish-linux-preview.mjs",
+  ].map((step) => workflow.indexOf(step));
+  assert.ok(order.every((at, index) => at >= 0 && (index === 0 || at > order[index - 1])),
+    `the key is asked for first and the rpm is signed between the build and the check: ${order}`);
+  const validation = readFileSync(new URL("../.github/workflows/Tauri.yml", import.meta.url), "utf8");
+  assert.match(validation.split("native-linux:")[1].split("\n  real-app:")[0], /bash scripts\/test-rpm-signing\.sh/,
+    "pull requests prove the signing scripts with a key made for the run");
+  assert.ok(!validation.includes("NVSTRAPS_RPM_SIGNING_KEY"), "pull request builds are not given the project key");
+});
+
+test("the published key is the project's key, and the documentation names it", () => {
+  const key = readFileSync(new URL("../docs/RPM-GPG-KEY-nvstraps-rebar", import.meta.url), "utf8");
+  // Users have imported this key, so replacing it is a decision and not a side effect.
+  assert.equal(keyFingerprint(key), "F71DB90B8FF84EC454D42763FBA1244710950726");
+  assert.equal(keyFingerprint(key.replaceAll("\r\n", "\n").replaceAll("\n", "\r\n")), keyFingerprint(key));
+  const linux = readFileSync(new URL("../docs/LINUX.md", import.meta.url), "utf8");
+  assert.ok(linux.includes(`\`${keyFingerprint(key)}\``), "docs/LINUX.md names the key by its fingerprint");
+  assert.throws(() => keyFingerprint("not a key"), /armoured OpenPGP public key/);
 });

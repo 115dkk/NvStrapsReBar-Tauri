@@ -19,7 +19,7 @@ packages installed in WSL, as stated for each item.
 | Saving the configuration | Works in the backend, through the root helper below |
 | Restarting, also into BIOS setup | Works in the backend, through systemd |
 | The screens | Worded for Linux; Games, the external EFI route and the vendor Windows utility are not offered there |
-| Packages | `.deb` and `.rpm`, published by hand as a pre-release of their own (`linux-preview-<version>`), never as the Latest release. No AppImage, Snap or Flatpak |
+| Packages | `.deb` and a signed `.rpm`, published by hand as a pre-release of their own (`linux-preview-<version>`), never as the Latest release. No AppImage, Snap or Flatpak |
 | Turning it on without changing the BIOS (external EFI route) | Not ported yet |
 | Per-game settings | Not planned: they need NVAPI |
 
@@ -104,9 +104,40 @@ installs the `.deb` on the runner, starts the installed helper as root with no i
 the installed application running under a virtual display.
 
 On Fedora, install the `.rpm` with `sudo dnf install ./nvstraps-rebar-<version>-1.x86_64.rpm`.
-The package is not signed. `dnf` accepts a local file without a signature; `rpm -i` on RPM 6
-(Fedora 45) refuses it. Removing the package also removes `/usr/lib/nvstraps-rebar`: the `.rpm`
-carries a post-remove script for that, because it does not own the `external` directory inside.
+`dnf` installs a local file without checking its signature. Removing the package also removes
+`/usr/lib/nvstraps-rebar`: the `.rpm` carries a post-remove script for that, because it does not
+own the `external` directory inside.
+
+### The rpm signature
+
+Previews after 1.1.5 carry a signed `.rpm`. The preview workflow signs it with the project's
+OpenPGP key and publishes the public key,
+[`RPM-GPG-KEY-nvstraps-rebar`](RPM-GPG-KEY-nvstraps-rebar), beside the packages.
+
+- RSA-4096, signing only, made 2026-11-11, no expiry
+- Fingerprint: `F71DB90B8FF84EC454D42763FBA1244710950726`
+
+rpm on Fedora 45 (RPM 6) refuses a package that has no signature, and one whose key it has not
+imported. With the key imported, `rpm --checksig` reports the package as OK and `rpm -i` installs
+it:
+
+```
+sudo rpm --import https://github.com/115dkk/NvStrapsReBar-Tauri/releases/download/linux-preview-<version>/RPM-GPG-KEY-nvstraps-rebar
+rpm --checksig nvstraps-rebar-<version>-1.x86_64.rpm
+```
+
+The key comes from the same place as the package, so compare the fingerprint above when importing
+it for the first time: `rpmkeys --list` (RPM 6) or `gpg --show-keys` on the file prints it.
+
+The private key is not in this repository; it exists only as the GitHub Actions secret
+`NVSTRAPS_RPM_SIGNING_KEY`. The preview workflow gives it to one step,
+`scripts/sign-linux-rpm.sh`, which signs only if the secret is the key above, and
+`tools/publish-linux-preview.mjs` publishes an `.rpm` only if it verifies against the public key
+(`scripts/check-rpm-signature.sh`). Pull request builds are not given the key; they run
+`scripts/test-rpm-signing.sh`, which proves the same scripts with keys made for that run. If the
+secret is ever lost, a new key replaces this one here and users import it once more.
+
+The `.deb` is not signed: `apt` checks the signatures of repositories, not of a local file.
 
 There is no AppImage: root cannot read files inside an AppImage's mount, so `pkexec` could not
 start a helper from there.
@@ -171,6 +202,10 @@ system without systemd the app says so; restart by hand.
   staying with GTK when no portal answers, the title bar took the app bar's colour under a
   Wayland compositor, and a window closed at 1000x700 opened at 1000x700. The published 1.1.5
   never asked the portal on the same system.
+- **The rpm signature, on Fedora 45 in WSL.** A copy of the package was signed by
+  `scripts/sign-linux-rpm.sh` with a key made for the test. `rpm -i` refused it until that key was
+  imported, then installed it, and `rpm -V` found nothing wrong; `dnf install` of the local file
+  installed it with and without the key. `rpm -i` refused the unsigned package on the same system.
 - **A physical PC, reported by a user.** See the top of this page. The report does not include
   the sysfs GPU inventory or the state of efivarfs on that board.
 - **Not shown.** QEMU has no NVIDIA GPU. The maintainers have not run a physical board. Nothing
