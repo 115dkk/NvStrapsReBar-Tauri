@@ -22,12 +22,6 @@ import type {
         SignedFirmwareUpdate,
 } from "./contract";
 
-export type FirmwareDialogLabels = {
-        title: string;
-        biosFiles: string;
-        allFiles: string;
-};
-
 export type FileDropEvent =
         | { kind: "over" }
         | { kind: "leave" }
@@ -35,7 +29,7 @@ export type FileDropEvent =
 
 /** Privileged deployment seam. Only the Session consumes this interface. */
 export interface DeploymentAdapter {
-        selectFirmwareImage(labels?: FirmwareDialogLabels): Promise<string | null>;
+        selectFirmwareImage(title?: string): Promise<string | null>;
         selectDestinationDirectory(title?: string): Promise<string | null>;
         watchFileDrops(listener: (event: FileDropEvent) => void): () => void;
         deleteMachineProfile(profileId: string): Promise<void>;

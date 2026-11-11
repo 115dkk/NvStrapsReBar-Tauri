@@ -258,6 +258,7 @@ export const messages = {
         "ui.record": { en: "Record", ko: "기록" },
         "ui.menu": { en: "Menu", ko: "메뉴" },
         "ui.menuRefresh": { en: "Check this PC again", ko: "PC 상태 다시 확인" },
+        "ui.menuVersion": { en: "Version {version}", ko: "버전 {version}" },
         "ui.menuInstallRecord": { en: "Installation record", ko: "설치 기록" },
         "ui.menuNewPreparation": { en: "Prepare another BIOS file", ko: "다른 BIOS 파일로 새로 준비" },
         "ui.menuOpenPreparation": { en: "Open an earlier preparation", ko: "이전 준비 기록 열기" },
@@ -380,8 +381,6 @@ export const messages = {
         "ui.noFileChosenDetail": { en: "Choose the file, or drop it here.", ko: "파일을 고르거나 여기에 끌어다 놓으세요." },
         "ui.dropFileHere": { en: "Drop the BIOS file here", ko: "여기에 BIOS 파일을 놓으세요" },
         "ui.dialogChooseBiosFile": { en: "Choose the BIOS file", ko: "BIOS 파일을 고르세요" },
-        "ui.dialogFilterBios": { en: "BIOS files", ko: "BIOS 파일" },
-        "ui.dialogFilterAll": { en: "All files", ko: "모든 파일" },
         "ui.enterPathInstead": { en: "Type the file location instead", ko: "파일 위치를 직접 입력" },
         "ui.readFile": { en: "Read file", ko: "파일 읽기" },
         "ui.backToCurrentPreparation": { en: "Back to the current preparation", ko: "지금 준비로 돌아가기" },
@@ -959,6 +958,7 @@ export type MessageParameters = {
         "ui.homeStartLead": { size: string };
         "ui.homeContinueLead": { stage: string };
         "ui.homeMetaDriver": { version: string };
+        "ui.menuVersion": { version: string };
         "ui.homeMixedLead": { gpu: string };
         "ui.homeCheckGpu": { gpu: string };
         "ui.pickFirmwareLeadBoard": { board: string };

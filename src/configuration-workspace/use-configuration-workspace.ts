@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { open as openFileDialog, save as saveFileDialog } from "@tauri-apps/plugin-dialog";
 import { bridge, previewMode } from "../bridge";
 import { barSettingsErrorMessageId } from "../bar-settings-errors";
 import { presentMotherboardSupport } from "../hardware-support";
 import { useI18n } from "../i18n";
 import { message, type MessageDescriptor } from "../i18n-catalog";
+import { choosePath } from "../native-dialogs";
 import {
         createRequestGenerationGuard,
         createResizableBarInspectionCoordinator,
@@ -368,8 +368,9 @@ export const useConfigurationWorkspace = () => {
                 try {
                         const path = previewMode
                                 ? "NvStrapsReBar-settings.json"
-                                : await saveFileDialog({
-                                          defaultPath:
+                                : await choosePath({
+                                          kind: "newFile",
+                                          suggestedName:
                                                   "NvStrapsReBar-settings.json",
                                           filters: settingsFileFilters,
                                   });
@@ -393,11 +394,11 @@ export const useConfigurationWorkspace = () => {
                 try {
                         const path = previewMode
                                 ? "NvStrapsReBar-settings.json"
-                                : await openFileDialog({
-                                          multiple: false,
+                                : await choosePath({
+                                          kind: "file",
                                           filters: settingsFileFilters,
                                   });
-                        if (!path || Array.isArray(path)) return;
+                        if (!path) return;
                         setBusy(true);
                         const inspection =
                                 await bridge.inspectSettingsSnapshot(path);

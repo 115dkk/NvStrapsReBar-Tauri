@@ -147,11 +147,7 @@ export const useDeploymentWorkspace = (snapshot: SystemSnapshot) => {
                 setShowConfigurationReboot: closeModal,
                 chooseFirmware: () => send({
                         type: "chooseFirmware",
-                        labels: {
-                                title: t("ui.dialogChooseBiosFile"),
-                                biosFiles: t("ui.dialogFilterBios"),
-                                allFiles: t("ui.dialogFilterAll"),
-                        },
+                        title: t("ui.dialogChooseBiosFile"),
                 }),
                 inspectManualPath: () => send({ type: "inspectFirmware" }),
                 analyzeLegacy: () => send({ type: "analyzeLegacy" }),

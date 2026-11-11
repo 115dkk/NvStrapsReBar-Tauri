@@ -1,18 +1,18 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebview, type Webview } from "@tauri-apps/api/webview";
-import { open } from "@tauri-apps/plugin-dialog";
 import { messages } from "../i18n-catalog";
+import { choosePath } from "../native-dialogs";
 import type { DeploymentAdapter } from "./adapter";
 
 type Invoke = <T>(
         command: string,
         args?: Record<string, unknown>,
 ) => Promise<T>;
-type Open = typeof open;
+type ChoosePath = typeof choosePath;
 
 export const createTauriDeploymentAdapter = (
         invokeCommand: Invoke = invoke,
-        openDialog: Open = open,
+        choose: ChoosePath = choosePath,
         watchDragDrop: Webview["onDragDropEvent"] = (listener) =>
                 getCurrentWebview().onDragDropEvent(listener),
 ): DeploymentAdapter => ({
@@ -48,40 +48,12 @@ export const createTauriDeploymentAdapter = (
         },
         deleteMachineProfile: (profileId) =>
                 invokeCommand("delete_machine_profile", { profileId }),
-        selectFirmwareImage: async (labels = {
-                title: messages["ui.dialogChooseBiosFile"].en,
-                biosFiles: messages["ui.dialogFilterBios"].en,
-                allFiles: messages["ui.dialogFilterAll"].en,
-        }) => {
-                const selection = await openDialog({
-                        multiple: false,
-                        directory: false,
-                        title: labels.title,
-                        filters: [
-                                {
-                                        name: labels.biosFiles,
-                                        extensions: [
-                                                "bin",
-                                                "rom",
-                                                "cap",
-                                                "fd",
-                                                "bio",
-                                                "1n0",
-                                        ],
-                                },
-                                { name: labels.allFiles, extensions: ["*"] },
-                        ],
-                });
-                return typeof selection === "string" ? selection : null;
-        },
-        selectDestinationDirectory: async (title = messages["ui.dialogChooseUsbFolder"].en) => {
-                const selection = await openDialog({
-                        multiple: false,
-                        directory: true,
-                        title,
-                });
-                return typeof selection === "string" ? selection : null;
-        },
+        // No file type filter: makers name BIOS files after the version (E7B98IMS.1F0,
+        // Z690AORUS.F20), so a list of extensions hides valid files.
+        selectFirmwareImage: (title = messages["ui.dialogChooseBiosFile"].en) =>
+                choose({ kind: "file", title }),
+        selectDestinationDirectory: (title = messages["ui.dialogChooseUsbFolder"].en) =>
+                choose({ kind: "folder", title }),
         inspectFirmwareImage: (path) =>
                 invokeCommand("inspect_firmware_image", { path }),
         inspectSignedFirmwareUpdate: (path) =>

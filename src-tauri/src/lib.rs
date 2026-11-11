@@ -18,6 +18,7 @@ mod hardware_support;
 mod linux;
 mod machine;
 mod nvidia_profiles;
+mod path_chooser;
 mod reboot;
 mod resizable_bar;
 mod resizable_bar_commands;
@@ -37,7 +38,7 @@ pub fn run() {
     let builder = tauri::Builder::default().plugin(tauri_plugin_dialog::init());
     // The window opens where and as large as it was left. The simulated machine always starts
     // from the configured size, so its screenshots do not depend on an earlier run.
-    #[cfg(not(feature = "simulated-machine"))]
+    #[cfg(all(not(feature = "simulated-machine"), not(target_os = "linux")))]
     let builder = builder.plugin(
         tauri_plugin_window_state::Builder::default()
             .with_state_flags(
@@ -45,6 +46,15 @@ pub fn run() {
                     | tauri_plugin_window_state::StateFlags::POSITION
                     | tauri_plugin_window_state::StateFlags::MAXIMIZED,
             )
+            .build(),
+    );
+    // On Linux the plugin keeps the position only, in a file of its own; `linux::window_size`
+    // keeps the size and the maximized state (see there for why).
+    #[cfg(all(not(feature = "simulated-machine"), target_os = "linux"))]
+    let builder = builder.plugin(
+        tauri_plugin_window_state::Builder::default()
+            .with_state_flags(tauri_plugin_window_state::StateFlags::POSITION)
+            .with_filename("window-position.json")
             .build(),
     );
     builder
@@ -56,6 +66,8 @@ pub fn run() {
             #[cfg(target_os = "linux")]
             if let Some(window) = app.get_webview_window("main") {
                 linux::desktop::blend_title_bar(&window);
+                #[cfg(not(feature = "simulated-machine"))]
+                linux::window_size::keep(&window, app.path().app_config_dir().ok());
             }
             #[cfg(feature = "simulated-machine")]
             {
@@ -112,6 +124,7 @@ pub fn run() {
             nvidia_profiles::set_nvidia_game_rebar,
             nvidia_profiles::set_nvidia_all_games_rebar,
             nvidia_profiles::undo_nvidia_game_changes,
+            path_chooser::choose_path,
         ])
         .run(context)
         .expect("failed to run NvStrapsReBar");

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { APP_VERSION } from "../app-version";
 import { useConfigurationWorkspaceController } from "../configuration-workspace/context";
 import { formatBytes } from "../configuration-workspace/model";
 import { useDeploymentWorkspaceController } from "../deployment-workspace/context";
@@ -120,6 +121,8 @@ export const AppBar = () => {
                                         </div>
                                         <hr />
                                         <button type="button" role="menuitem" onClick={() => choose(() => setShowLicenses(true))}><Icon name="doc" />{t("ui.licenses")}</button>
+                                        <hr />
+                                        <div className="nv-menu-label nv-menu-version">{t("ui.menuVersion", { version: APP_VERSION })}</div>
                                 </div>
                         )}
                 </header>
