@@ -3,15 +3,16 @@
 Issue #63 asked whether NvStrapsReBar could apply ReBarUEFI's DSDT workaround, so that an older
 board without Above 4G Decoding gets a BAR larger than 1 GiB
 ([the question](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/63#issuecomment-6807922767)).
-This page records what was found on 2026-11-12 and what follows from it. Nothing here was tried
-on hardware. What other projects and systems do is taken from the sources at the end.
+This page records what was found on 2026-11-12. Whether the app should do any of it has not
+been decided. Nothing here was tried on hardware. What other projects and systems do is taken
+from the sources at the end.
 
 **Bottom line.** A DSDT patch changes what the operating system is told about the board, not
 what the firmware can do. On a board whose firmware has no Above 4G Decoding, ReBarUEFI reports
 that it helps on Linux only, where the kernel resizes BARs by itself, and there an AMD or Intel
 GPU needs neither this project's driver nor a BIOS flash. For the Turing GPUs this project is
 for, the driver relies on the firmware to place the large BAR, which such a board cannot do. The
-app does not patch DSDTs, and that is not planned.
+app does not patch DSDTs today.
 
 ## What a DSDT patch changes
 
@@ -103,9 +104,9 @@ and PciBus modules with those of a similar board that has it, or adding code to 
    would also need the driver to program the straps and leave BAR1 at 256 MiB, and NVIDIA's
    Linux driver to do the resize afterwards. Nobody has reported that combination working.
 
-## Decision
+## Not decided
 
-Not planned, for three reasons.
+No decision has been taken. Three things speak against building it in.
 
 - On a board without Above 4G Decoding a DSDT patch can help Linux only, and a Linux user with
   an AMD or Intel GPU gets there with ReBarUEFI's instructions, without this driver, this app
@@ -116,8 +117,8 @@ Not planned, for three reasons.
   has no such board to check it on. Where ReBarUEFI's catalog says a DSDT change may be needed,
   the app already stops and says so.
 
-Two things would reopen it: a hardware report from an older board on which the manual DSDT step
-was what stood in the way, or someone with a Turing GPU, Linux and a board without Above 4G
+Two things would speak for it: a hardware report from an older board on which the manual DSDT
+step was what stood in the way, or someone with a Turing GPU, Linux and a board without Above 4G
 Decoding who is willing to try point 3 by hand first.
 
 ## For the PC in the question
