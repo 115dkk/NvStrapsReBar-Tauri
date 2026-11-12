@@ -1,0 +1,9 @@
+[nvstraps-rebar]
+name=NvStrapsReBar Linux preview
+baseurl=https://115dkk.github.io/NvStrapsReBar-Tauri/rpm
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://115dkk.github.io/NvStrapsReBar-Tauri/rpm/RPM-GPG-KEY-nvstraps-rebar
+metadata_expire=6h
+skip_if_unavailable=1

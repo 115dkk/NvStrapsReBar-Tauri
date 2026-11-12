@@ -45,7 +45,7 @@ for deb in "$@"; do
   cp "${deb}" "${APT}/pool/main/"
 done
 cp "${PUBLIC_KEY}" "${APT}/nvstraps-rebar.asc"
-cp "${SCRIPT_DIR}/apt-site/index.html" "${SITE}/index.html"
+cp "${SCRIPT_DIR}/repository-site/index.html" "${SITE}/index.html"
 
 # apt-ftparchive writes the paths it is given into the index, so it runs in the repository root.
 cd "${APT}"

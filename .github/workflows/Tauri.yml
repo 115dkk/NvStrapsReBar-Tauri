@@ -179,7 +179,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends \
             libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libgtk-3-dev libsoup-3.0-dev \
-            librsvg2-dev libayatana-appindicator3-dev libxdo-dev libssl-dev rpm gnupg apt-utils xvfb
+            librsvg2-dev libayatana-appindicator3-dev libxdo-dev libssl-dev rpm gnupg apt-utils \
+            createrepo-c dnf xvfb
       - name: Install dependencies
         run: npm ci
       - name: Build the UEFI resources required by the Tauri manifest
@@ -199,6 +200,9 @@ jobs:
       - name: Build an apt repository from the deb, sign it with a key made for this run and check it with apt
         # The same reason as above, for the repository that LinuxRepository.yml publishes.
         run: bash scripts/test-apt-repository.sh
+      - name: Build a dnf repository from the rpm, sign it with a key made for this run and check it with dnf
+        # And for the dnf repository beside it.
+        run: bash scripts/test-dnf-repository.sh
 
   # Drives the real application, not the browser preview, through the guided deployment with retail
   # vendor BIOS images. Only the machine's hardware, firmware variables, reboots and nvidia-smi are
