@@ -1,12 +1,12 @@
 name: Linux repository
 
-# Builds the apt repository from the .deb of every published Linux preview, signs it with the
-# project's package key and publishes it on GitHub Pages. The Linux preview workflow calls it
-# after it has published a preview; it can also be started by hand from master, which publishes
-# the repository again from the previews that exist.
+# Builds the apt repository from the .deb and the dnf repository from the .rpm of every published
+# Linux preview, signs both with the project's package key and publishes them on GitHub Pages.
+# The Linux preview workflow calls it after it has published a preview; it can also be started
+# by hand from master, which publishes the repositories again from the previews that exist.
 #
-# The repository is built from nothing each time: what it offers is exactly the previews on the
-# releases page, and nothing is kept between runs.
+# The repositories are built from nothing each time: what they offer is exactly the previews on
+# the releases page, and nothing is kept between runs.
 on:
   workflow_dispatch:
   workflow_call:
@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build and sign the apt repository
+    name: Build and sign the apt and dnf repositories
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-22.04
     timeout-minutes: 15
@@ -32,7 +32,7 @@ jobs:
         env:
           NVSTRAPS_RPM_SIGNING_KEY: ${{ secrets.NVSTRAPS_RPM_SIGNING_KEY }}
         run: |
-          # apt refuses a repository without a signature, so an unsigned one is not published.
+          # apt and dnf refuse a repository without a signature, so an unsigned one is not published.
           if [ -z "${NVSTRAPS_RPM_SIGNING_KEY}" ]; then
             echo "The NVSTRAPS_RPM_SIGNING_KEY secret is missing" >&2
             exit 1
@@ -41,31 +41,36 @@ jobs:
       - name: Install the repository tools
         run: |
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends apt-utils gnupg
-      - name: Download the deb of every published Linux preview
+          sudo apt-get install --yes --no-install-recommends apt-utils gnupg rpm createrepo-c dnf
+      - name: Download the packages of every published Linux preview
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p target/apt-debs
+          mkdir -p target/preview-packages
           gh release list --repo "${GITHUB_REPOSITORY}" --limit 200 --exclude-drafts \
-            --json tagName --jq '.[].tagName | select(startswith("linux-preview-"))' >target/apt-previews.txt
+            --json tagName --jq '.[].tagName | select(startswith("linux-preview-"))' >target/previews.txt
           while read -r tag; do
-            gh release download "${tag}" --repo "${GITHUB_REPOSITORY}" --pattern '*.deb' --dir target/apt-debs
-          done <target/apt-previews.txt
-          ls -l target/apt-debs
-      - name: Build the repository
-        run: bash scripts/build-apt-repository.sh target/apt-site docs/RPM-GPG-KEY-nvstraps-rebar target/apt-debs/*.deb
-      - name: Sign the repository with the project key and check it with apt
+            gh release download "${tag}" --repo "${GITHUB_REPOSITORY}" \
+              --pattern '*.deb' --pattern '*.rpm' --dir target/preview-packages
+          done <target/previews.txt
+          ls -l target/preview-packages
+      - name: Build the repositories
+        run: |
+          bash scripts/build-apt-repository.sh target/repository-site docs/RPM-GPG-KEY-nvstraps-rebar target/preview-packages/*.deb
+          bash scripts/build-dnf-repository.sh target/repository-site docs/RPM-GPG-KEY-nvstraps-rebar target/preview-packages/*.rpm
+      - name: Sign the repositories with the project key and check them with apt and dnf
         # Only this step sees the key.
         env:
           NVSTRAPS_RPM_SIGNING_KEY: ${{ secrets.NVSTRAPS_RPM_SIGNING_KEY }}
-        run: bash scripts/sign-apt-repository.sh target/apt-site
+        run: |
+          bash scripts/sign-apt-repository.sh target/repository-site
+          bash scripts/sign-dnf-repository.sh target/repository-site
       - uses: actions/upload-pages-artifact@v4
         with:
-          path: target/apt-site
+          path: target/repository-site
 
   deploy:
-    name: Publish the repository on GitHub Pages
+    name: Publish the repositories on GitHub Pages
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10

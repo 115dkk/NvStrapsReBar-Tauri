@@ -66,7 +66,8 @@ test("the notes say what the build is, how to install it and what it does", () =
   assert.ok(notes.includes("sudo rpm --import https://github.com/115dkk/NvStrapsReBar-Tauri/releases/download/"
     + "linux-preview-1.2.3/RPM-GPG-KEY-nvstraps-rebar"), "the key is imported from this release's own files");
   assert.ok(notes.includes(`fingerprint \`${fingerprint}\``));
-  assert.ok(notes.includes("https://115dkk.github.io/NvStrapsReBar-Tauri/ shows the commands"), "the notes point to the apt repository");
+  assert.ok(notes.includes("https://115dkk.github.io/NvStrapsReBar-Tauri/ shows the commands"), "the notes point to the repositories");
+  assert.match(notes, /for `apt` on Debian and Ubuntu or for `dnf` on Fedora/, "the notes name both repositories");
   assert.match(notes, /never flashes a BIOS/);
   assert.match(notes, new RegExp(`${"a".repeat(64)}  nvstraps-rebar_1\\.2\\.3_amd64\\.deb`));
   assert.match(notes, new RegExp(`/blob/${sha}/docs/LINUX\\.md`));
@@ -101,47 +102,68 @@ test("the preview signs the rpm before it checks and publishes it, and pull requ
   assert.ok(!validation.includes("NVSTRAPS_RPM_SIGNING_KEY"), "pull request builds are not given the project key");
 });
 
-test("the apt repository is signed in one step, checked by pull requests without the key, and published after the preview", () => {
+test("the apt and dnf repositories are signed in one step, checked by pull requests without the key, and published after the preview", () => {
   const read = (name) => readFileSync(new URL(`../${name}`, import.meta.url), "utf8").replaceAll("\r\n", "\n");
   const repository = read(".github/workflows/LinuxRepository.yml");
   const order = [
     "Require the package signing key",
     "gh release download",
-    "bash scripts/build-apt-repository.sh target/apt-site docs/RPM-GPG-KEY-nvstraps-rebar",
-    "bash scripts/sign-apt-repository.sh target/apt-site",
+    "bash scripts/build-apt-repository.sh target/repository-site docs/RPM-GPG-KEY-nvstraps-rebar",
+    "bash scripts/build-dnf-repository.sh target/repository-site docs/RPM-GPG-KEY-nvstraps-rebar",
+    "bash scripts/sign-apt-repository.sh target/repository-site",
+    "bash scripts/sign-dnf-repository.sh target/repository-site",
     "actions/upload-pages-artifact",
     "actions/deploy-pages",
   ].map((step) => repository.indexOf(step));
   assert.ok(order.every((at, index) => at >= 0 && (index === 0 || at > order[index - 1])),
-    `the repository is built from the published previews, signed, then published: ${order}`);
+    `the repositories are built from the published previews, signed, then published: ${order}`);
   const steps = repository.split("\n      - ");
   const withKey = steps.filter((step) => step.includes("secrets.NVSTRAPS_RPM_SIGNING_KEY"));
   assert.deepEqual(withKey.map((step) => step.split("\n")[0]), [
     "name: Require the package signing key",
-    "name: Sign the repository with the project key and check it with apt",
+    "name: Sign the repositories with the project key and check them with apt and dnf",
   ], "only the step that signs is given the key, after the step that asks for it");
-  assert.match(repository, /if: github\.ref == 'refs\/heads\/master'/, "only master publishes the repository");
+  assert.match(repository, /if: github\.ref == 'refs\/heads\/master'/, "only master publishes the repositories");
 
   const preview = read(".github/workflows/LinuxPreview.yml");
   assert.match(preview.split("\n  repository:")[1] ?? "", /needs: publish\n[\s\S]*uses: \.\/\.github\/workflows\/LinuxRepository\.yml/,
-    "a new preview is followed by a new repository");
-  const validation = read(".github/workflows/Tauri.yml");
-  assert.match(validation.split("native-linux:")[1].split("\n  real-app:")[0], /bash scripts\/test-apt-repository\.sh/,
-    "pull requests prove the repository scripts with a key made for the run");
+    "a new preview is followed by new repositories");
+  const linuxJob = read(".github/workflows/Tauri.yml").split("native-linux:")[1].split("\n  real-app:")[0];
+  for (const kind of ["apt", "dnf"]) {
+    assert.ok(linuxJob.includes(`bash scripts/test-${kind}-repository.sh`),
+      `pull requests prove the ${kind} repository scripts with a key made for the run`);
+  }
 
   // The page users copy the commands from names the same address and key as the documentation.
-  const page = read("scripts/apt-site/index.html");
+  const page = read("scripts/repository-site/index.html");
+  const linux = read("docs/LINUX.md");
   const address = repositoryAddress("115dkk/NvStrapsReBar-Tauri");
   assert.equal(address, "https://115dkk.github.io/NvStrapsReBar-Tauri/");
   const fingerprint = keyFingerprint(read("docs/RPM-GPG-KEY-nvstraps-rebar"));
   assert.ok(page.includes(fingerprint.match(/.{4}/g).join(" ")), "the page shows the key's fingerprint");
   const source = `deb [arch=amd64 signed-by=/etc/apt/keyrings/nvstraps-rebar.asc] ${address}apt preview main`;
-  for (const [name, text] of [["the page", page], ["docs/LINUX.md", read("docs/LINUX.md")]]) {
+  for (const [name, text] of [["the page", page], ["docs/LINUX.md", linux]]) {
     assert.ok(text.includes(source), `${name} gives the apt source line`);
     assert.ok(text.includes(`${address}apt/nvstraps-rebar.asc`), `${name} gives the key's address`);
   }
   for (const script of ["build", "sign", "check"]) {
     assert.match(read(`scripts/${script}-apt-repository.sh`), /readonly SUITE="preview"/, `${script} uses the suite the source line names`);
+  }
+
+  // The file dnf users download names that address, its own key, and asks for both signatures.
+  const repoFile = read("scripts/repository-site/nvstraps-rebar.repo").split("\n");
+  for (const line of [
+    "[nvstraps-rebar]",
+    `baseurl=${address}rpm`,
+    `gpgkey=${address}rpm/RPM-GPG-KEY-nvstraps-rebar`,
+    "gpgcheck=1",
+    "repo_gpgcheck=1",
+  ]) {
+    assert.ok(repoFile.includes(line), `nvstraps-rebar.repo says ${line}`);
+  }
+  const fetch = `sudo curl -fsSL -o /etc/yum.repos.d/nvstraps-rebar.repo ${address}rpm/nvstraps-rebar.repo`;
+  for (const [name, text] of [["the page", page], ["docs/LINUX.md", linux]]) {
+    assert.ok(text.includes(fetch), `${name} gives the command that adds the dnf repository`);
   }
 });
 

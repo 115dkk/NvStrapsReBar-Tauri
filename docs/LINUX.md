@@ -19,7 +19,7 @@ packages installed in WSL, as stated for each item.
 | Saving the configuration | Works in the backend, through the root helper below |
 | Restarting, also into BIOS setup | Works in the backend, through systemd |
 | The screens | Worded for Linux; Games, the external EFI route and the vendor Windows utility are not offered there |
-| Packages | `.deb` and a signed `.rpm`, published by hand as a pre-release of their own (`linux-preview-<version>`), never as the Latest release. No AppImage, Snap or Flatpak |
+| Packages | `.deb` and a signed `.rpm`, published by hand as a pre-release of their own (`linux-preview-<version>`), never as the Latest release, and offered as updates by an apt and a dnf repository. No AppImage, Snap or Flatpak |
 | Turning it on without changing the BIOS (external EFI route) | Not ported yet |
 | Per-game settings | Not planned: they need NVAPI |
 
@@ -135,7 +135,32 @@ builds run `scripts/test-apt-repository.sh`, which does the same with a key made
 also checks that an unsigned repository, a repository signed by another key and a package list
 changed after signing are refused.
 
-There is no dnf repository yet.
+### The dnf repository
+
+On Fedora the app can come from the project's dnf repository in the same way:
+
+```
+sudo curl -fsSL -o /etc/yum.repos.d/nvstraps-rebar.repo https://115dkk.github.io/NvStrapsReBar-Tauri/rpm/nvstraps-rebar.repo
+sudo dnf install nvstraps-rebar
+```
+
+The first time, `dnf` shows the key it is about to trust and asks. It is the key described under
+"The rpm signature" below, so compare the fingerprint. The `.repo` file asks for both checks,
+`gpgcheck` for the packages and `repo_gpgcheck` for the repository's metadata, so a package from
+the repository is installed only with a valid signature, unlike a local file.
+
+The repository holds the `.rpm` of every published preview that is signed with that key. The
+1.1.5 preview is not in it, because its `.rpm` was published before packages were signed.
+
+The same workflow builds it beside the apt repository. `scripts/build-dnf-repository.sh` takes
+the `.rpm` of every `linux-preview-*` release, leaves out a package without a signature, stops at
+one signed with another key, and writes the metadata with `createrepo_c`.
+`scripts/sign-dnf-repository.sh` signs `repomd.xml` in the step that sees the key, and
+`scripts/check-dnf-repository.sh` asks `dnf` which version it would install, in an install root
+made for the run and with only that key trusted. Pull request builds run
+`scripts/test-dnf-repository.sh` with keys made for the run; it also checks that an unsigned
+repository, a repository signed by another key, metadata changed after signing and a package
+signed with another key are refused.
 
 ### The rpm signature
 
@@ -167,7 +192,7 @@ The private key is not in this repository; it exists only as the GitHub Actions 
 secret is ever lost, a new key replaces this one here and users import it once more.
 
 The `.deb` itself is not signed: `apt` checks the signatures of repositories, not of a local
-file. The apt repository above is signed with this key.
+file. The apt and dnf repositories above are signed with this key.
 
 There is no AppImage: root cannot read files inside an AppImage's mount, so `pkexec` could not
 start a helper from there.
@@ -267,6 +292,12 @@ system without systemd the app says so; restart by hand.
   Before the preview, with a copy signed by `scripts/sign-linux-rpm.sh` with a key made for the
   test: `dnf install` of the local file installed it with and without the key, and `rpm -i`
   refused an unsigned package on the same system.
+- **The apt repository, on Debian 13 in WSL.** With the commands above, `apt` took the key (the
+  fingerprint above), offered the newest preview and upgraded an installed 1.1.5 to 1.1.8, and
+  later 1.1.8 to 1.1.9; `dpkg --verify` found nothing wrong after either.
+- **The dnf repository scripts, in WSL**, before the repository was first published:
+  `scripts/test-dnf-repository.sh` passed with dnf 4.23 and RPM 4.20 on Debian 13, and with dnf
+  5.4 and RPM 6.1 on Fedora 45. Not shown here: the published repository with a user's `dnf`.
 - **A physical PC, reported by a user.** See the top of this page. The report does not include
   the sysfs GPU inventory or the state of efivarfs on that board.
 - **Not shown.** QEMU has no NVIDIA GPU. The maintainers have not run a physical board. Nothing
