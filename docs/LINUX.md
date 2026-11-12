@@ -295,9 +295,13 @@ system without systemd the app says so; restart by hand.
 - **The apt repository, on Debian 13 in WSL.** With the commands above, `apt` took the key (the
   fingerprint above), offered the newest preview and upgraded an installed 1.1.5 to 1.1.8, and
   later 1.1.8 to 1.1.9; `dpkg --verify` found nothing wrong after either.
-- **The dnf repository scripts, in WSL**, before the repository was first published:
-  `scripts/test-dnf-repository.sh` passed with dnf 4.23 and RPM 4.20 on Debian 13, and with dnf
-  5.4 and RPM 6.1 on Fedora 45. Not shown here: the published repository with a user's `dnf`.
+- **The dnf repository.** Before it was first published, `scripts/test-dnf-repository.sh` passed
+  with dnf 4.23 and RPM 4.20 on Debian 13 in WSL, with dnf 5.4 and RPM 6.1 on Fedora 45 in WSL,
+  and with dnf 4.5 and RPM 4.17 on the Ubuntu 22.04 runner that builds the repository. The
+  published repository, on Fedora 45 in WSL with neither the package nor the key present: with
+  the two commands above, `dnf` imported the key (the fingerprint above) from the repository,
+  listed 1.1.7, 1.1.8 and 1.1.9, installed 1.1.7 and upgraded it to 1.1.9; `rpm -V` found
+  nothing wrong.
 - **A physical PC, reported by a user.** See the top of this page. The report does not include
   the sysfs GPU inventory or the state of efivarfs on that board.
 - **Not shown.** QEMU has no NVIDIA GPU. The maintainers have not run a physical board. Nothing
