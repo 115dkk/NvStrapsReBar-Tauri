@@ -200,7 +200,10 @@ installed from a `.deb` or `.rpm`.
   keeps the position, and `src-tauri/src/linux/window_size.rs` keeps the size and the maximized
   state in `window-size.json`: with the plugin, a window that started maximized and was then
   un-maximized did not return to its earlier size, and the next run opened it as large as the
-  screen. The module gives such a window its last normal size back.
+  screen. The module gives such a window its last normal size back. GNOME's window manager
+  reports a maximized window as tiled as well, so the module looks at the maximized state first;
+  1.1.8 skipped every tiled window and so never saved the maximized state on GNOME. A window
+  tiled to one side of the screen opens the next time at its last normal size.
 
 The stable release stays the Windows build. The Linux packages go out through the `Linux preview`
 workflow, which a maintainer starts by hand from `master`. It builds on Ubuntu 22.04, the oldest
@@ -248,6 +251,15 @@ system without systemd the app says so; restart by hand.
   returned to 1000x700 under X11 (openbox) and under Wayland (weston), and opened at 1000x700
   again. Not shown: GNOME's own chooser and window manager. Nautilus as the chooser did not
   show a window in WSL, so the empty file list of issue #63 was not reproduced.
+- **The maximized state under GNOME's window manager, on Fedora 45 in WSL**, with a build of the
+  source after 1.1.8. mutter 51 ran headless as the Wayland compositor and took key presses
+  through its remote desktop interface. It tells a GTK 3 window that the user maximized
+  `MAXIMIZED` together with `TILED`. With a build of the 1.1.8 code, `window-size.json` stayed at
+  `"maximized":false` after the window was maximized and closed. With the new build it became
+  `true`, the next run opened maximized, and un-maximizing returned the window to 1000x700 and
+  the file to `false`. A window tiled to the left half of the screen was saved as not maximized,
+  at 1000x700. Not shown: GNOME Shell with its extensions (Ubuntu adds a tiling extension of its
+  own), and GNOME on X11.
 - **The rpm signature, on Fedora 45 in WSL.** The published 1.1.7 preview: `rpm -i` refused the
   `.rpm` until the key was imported from the same release (`rpm --import` with the release's
   address, and the imported key had the fingerprint above). After that `rpm --checksig` reported
