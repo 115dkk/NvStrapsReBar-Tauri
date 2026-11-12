@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        A failed trial helps as much as a working one. [Issue #39](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/39) is a complete example.
+        A failed trial helps as much as a working one. [Issue #39](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/39) is a complete example. Every report is added to [Tested hardware](https://github.com/115dkk/NvStrapsReBar-Tauri/blob/master/docs/TESTED_HARDWARE.md) with a link.
 
         Do not attach BIOS images or dumps; the hashes are enough. 한국어로 작성해도 됩니다.
   - type: dropdown
@@ -54,10 +54,10 @@ body:
       label: NVIDIA driver version
       placeholder: "610.62"
   - type: input
-    id: windows
+    id: system
     attributes:
-      label: Windows version
-      placeholder: "Windows 11 24H2 (26100.4061)"
+      label: Operating system
+      placeholder: "Windows 11 24H2 (26100.4061), or Ubuntu 26.10 with kernel 7.3.0"
   - type: dropdown
     id: board-type
     attributes:
@@ -116,7 +116,7 @@ body:
         - Driver status before configuring:
         - BAR Settings saved:
         - Driver status after the restart:
-        - BAR1 size (app, GPU-Z or nvidia-smi):
+        - BAR1 size (app, GPU-Z, nvidia-smi or lspci):
     validations:
       required: true
   - type: dropdown
