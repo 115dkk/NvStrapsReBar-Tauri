@@ -85,7 +85,7 @@ changes, so the app does not offer them.
 
 ## Current status
 
-The driver has been flashed and run on physical boards. Two reports reached a 16 GiB BAR1, one on
+The driver has been flashed and run on physical boards. Three reports reached a larger BAR1, two on
 Windows and one on Linux, and one board's flasher refused the changed BIOS file.
 [Tested hardware](docs/TESTED_HARDWARE.md) lists each report with its board, GPU, system and
 result, links it to its evidence, and says what nobody has reported yet. To add your PC, open a
@@ -202,6 +202,11 @@ image, configured it, and reported the 16 GiB result with hashes and screenshots
 Thanks also to @FasteryXD, who ran the Linux preview on a physical PC from start to finish and
 wrote down what happened at every step. Versions 1.1.6 and 1.1.7 changed what that report pointed
 at ([issue #63](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/63)).
+
+Thanks also to @wwwljxw, who ran the Windows app's guided flow on a Colorful AMD board, the first
+board from a maker other than MSI, and reported an 8 GiB BAR1 on Windows and on macOS with hashes
+and the OpenCore settings that macOS needed
+([issue #80](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/80)).
 
 ## Licenses
 

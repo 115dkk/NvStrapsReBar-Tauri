@@ -79,8 +79,8 @@ GTX 1000(Pascal) 이하는 지원하지 않습니다. BAR가 바뀌면 Windows�
 
 ## 지금 상태
 
-드라이버를 실제 보드에 플래시해 돌린 보고가 세 건 있습니다. 두 건은 BAR1 16 GiB까지 갔고(Windows
-한 건, Linux 한 건), 한 건은 보드의 플래시 도구가 고친 BIOS 파일을 받지 않았습니다.
+드라이버를 실제 보드에 플래시해 돌린 보고가 네 건 있습니다. 세 건은 BAR1이 커졌고(Windows
+두 건, Linux 한 건), 한 건은 보드의 플래시 도구가 고친 BIOS 파일을 받지 않았습니다.
 [시험된 하드웨어](docs/TESTED_HARDWARE.md)(영어)에 보고마다 보드, GPU, 운영체제, 결과가 있고,
 근거가 된 이슈로 가는 링크가 붙어 있습니다. 아직 아무도 보고하지 않은 항목도 거기에 있습니다. 직접
 시험한 결과는
@@ -193,6 +193,11 @@ OVMF 사본으로 부팅해 드라이버를 설정하고, 가상 머신을 ACPI 
 Linux 프리뷰를 실제 PC에서 처음부터 끝까지 돌리고 단계마다 겪은 일을 적어 주신 @FasteryXD 님께도
 감사드립니다. 1.1.6과 1.1.7은 그 보고에서 짚어 주신 곳을 고친 판입니다
 ([이슈 #63](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/63)).
+
+Windows 앱의 안내 단계를 Colorful의 AMD 보드에서 돌려, MSI가 아닌 제조사의 보드로는 처음으로
+Windows와 macOS 모두에서 BAR1 8 GiB를 확인하고 해시와 macOS에 필요한 OpenCore 설정까지 알려
+주신 @wwwljxw 님께도 감사드립니다
+([이슈 #80](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/80)).
 
 ## 라이선스
 
