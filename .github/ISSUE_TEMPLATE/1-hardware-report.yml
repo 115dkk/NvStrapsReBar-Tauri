@@ -1,6 +1,7 @@
 name: Hardware report
 description: Report a trial on a real motherboard, whether it worked or not.
 title: "Hardware report: <motherboard> + <GPU>: <works / fails>"
+labels: ["hardware report"]
 body:
   - type: markdown
     attributes:
