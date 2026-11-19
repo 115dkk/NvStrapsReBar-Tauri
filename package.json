@@ -40,14 +40,14 @@
     "tauri:simulated": "tauri build --debug --no-bundle --features simulated-machine --config src-tauri/tauri.simulated.conf.json -- --config profile.dev.package.nvstraps-ffs.opt-level=3 --config profile.dev.package.lzma-sdk-rs.opt-level=3 --config profile.dev.package.oxiarc-lzma.opt-level=3 --config profile.dev.package.flate2.opt-level=3 --config profile.dev.package.zlib-rs.opt-level=3 --config profile.dev.package.sha2.opt-level=3"
   },
   "dependencies": {
-    "@tauri-apps/api": "2.11.1",
-    "@tauri-apps/plugin-dialog": "2.7.2",
+    "@tauri-apps/api": "2.12.5",
+    "@tauri-apps/plugin-dialog": "2.8.4",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1",
-    "@tauri-apps/cli": "2.11.4",
+    "@tauri-apps/cli": "2.12.6",
     "@types/node": "24.13.3",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
