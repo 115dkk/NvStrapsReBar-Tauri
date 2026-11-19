@@ -148,20 +148,23 @@ authoritative. Keep RIIR, deployment automation, and physical-machine proof as s
   pushed commit, the pushed tree to equal that pull request's head tree, and the head's
   pull_request runs of all three validation workflows to have passed. A direct push to `master`,
   or a pull request merged while `master` had moved past its head, therefore releases nothing:
-  merge `master` into a pull request before merging it. The Windows job then writes the planned
-  version into every manifest with `tools/apply-version.mjs`, builds the driver, the application
-  and the installer (`scripts/build-installer.ps1`, shared with pull request validation), and
-  `tools/publish-release.mjs` commits the bump as `github-actions[bot]`, pushes it to `master`, and
-  creates the Latest release with the build attached. Release files never go through the Actions
-  artifact store (its quota is tight); the only uploads left are small diagnostics with a
-  seven-day retention. A push made with the workflow token starts no workflow run, so the bump
-  commit does not release itself. There are no per-commit pre-releases any more.
-- The Linux packages are not part of that release. The `Linux preview` workflow is started by
-  hand from `master`: it builds the `.deb` and `.rpm` on the oldest supported Ubuntu, runs
-  `npm run check:linux-packages -- --install`, and `tools/publish-linux-preview.mjs` publishes
-  them as a pre-release tagged `linux-preview-<version>`, once per version. A preview never
-  becomes Latest, and its tag must not start with `v`: the release planner takes the newest
-  `v<version>` tag as its baseline. Start it only when the user asks for a preview.
+  merge `master` into a pull request before merging it. Two jobs then build side by side, each
+  after writing the planned version into every manifest with `tools/apply-version.mjs`: the
+  Windows job builds the driver, the application and the installer
+  (`scripts/build-installer.ps1`, shared with pull request validation), and the Linux job builds
+  the `.deb` and `.rpm` on the oldest supported Ubuntu, signs the `.rpm` and runs
+  `npm run check:linux-packages -- --install`. The publish job needs both: it receives their
+  files, and `tools/publish-release.mjs` commits the bump as `github-actions[bot]`, pushes it to
+  `master`, and creates the Latest release with the Windows files, the Linux packages, their
+  checksums and the package key attached. The apt and dnf repositories are then published again
+  (`LinuxRepository.yml`). The two builds reach the publish job through the Actions artifact
+  store, kept for one day; the other uploads are small diagnostics with a seven-day retention.
+  A push made with the workflow token starts no workflow run, so the bump commit does not
+  release itself. There are no per-commit pre-releases any more.
+- One release carries both systems. Up to 1.1.9 the Linux packages went out by hand as
+  pre-releases tagged `linux-preview-<version>`; those stay published, and the apt and dnf
+  repositories still take their packages from them. The apt suite keeps the name `preview` and
+  its label: `apt` stops updating from a repository it knows when either changes.
 
 Use the smallest relevant subset while iterating, then the full applicable floor before handoff:
 

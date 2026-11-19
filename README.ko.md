@@ -11,7 +11,7 @@ Turing GPU는 하드웨어로는 Resizable BAR를 지원하지만 NVIDIA가 끝�
 거치는 주소 영역)를 기본 256 MiB에서 VRAM 전체 크기까지 넓혀 줍니다. 이 저장소는 원본
 C/C++ [NvStrapsReBar](https://github.com/terminatorul/NvStrapsReBar)를 안정판 Rust로 다시 만든
 것으로, BIOS 이미지를 준비하고 드라이버 설정을 고치는 Rust/Tauri 앱까지 함께 들어 있습니다.
-앱은 Windows용이고, Linux용은 프리뷰로 나와 있습니다.
+앱은 Windows와 Linux에서 씁니다.
 
 ![Resizable BAR가 꺼진 PC에서 앱을 열면 나오는 첫 화면: 지금 256 MiB, 켜면 8 GiB, 할 일과 준비물](docs/frontend-gallery/02-home-start-ko-1180x760.png)
 
@@ -24,14 +24,14 @@ C/C++ [NvStrapsReBar](https://github.com/terminatorul/NvStrapsReBar)를 안정�
 `NvStrapsReBar-windows-x64-setup.exe`를 받아 실행하세요. 설치하지 않고 쓰려면
 `NvStrapsReBar-windows-x64.zip`을 받아 풀고 `NvStrapsReBar.exe`와 `NvStrapsReBar.ffs`를 같은
 폴더에 두세요. 어느 쪽이든 WebView2가 있는 Windows x64가 필요합니다. Windows 11과 업데이트된
-Windows 10에는 WebView2가 이미 들어 있습니다. 릴리스의 `SHA256SUMS.txt`에 두 파일의 체크섬이
+Windows 10에는 WebView2가 이미 들어 있습니다. 릴리스의 `SHA256SUMS.txt`에 모든 파일의 체크섬이
 있습니다.
 
-**Linux(프리뷰).** Linux 빌드는 [릴리스 목록](https://github.com/115dkk/NvStrapsReBar-Tauri/releases)에
-`linux-preview-<버전>`이라는 프리릴리스로 따로 올라갑니다. 배포판에 맞는 패키지를 받아 Ubuntu
+**Linux.** Linux 패키지도 같은 [최신 릴리스](https://github.com/115dkk/NvStrapsReBar-Tauri/releases/latest)에
+들어 있습니다. 배포판에 맞는 패키지를 받아 Ubuntu
 22.04 이상과 Debian 12 이상에서는 `sudo apt install ./nvstraps-rebar_<버전>_amd64.deb`로,
 Fedora에서는 `sudo dnf install ./nvstraps-rebar-<버전>-1.x86_64.rpm`으로 설치하세요.
-[apt 저장소나 dnf 저장소](https://115dkk.github.io/NvStrapsReBar-Tauri/)를 추가하면 새 프리뷰를
+[apt 저장소나 dnf 저장소](https://115dkk.github.io/NvStrapsReBar-Tauri/)를 추가하면 새 버전을
 시스템의 다른 업데이트와 함께 받습니다. 게임마다
 켜기와 BIOS를 고치지 않는 방식을 뺀 나머지는 Windows 앱과 같습니다. 동작 방식, 지금까지 확인한
 것, `.rpm` 서명을 확인하는 법은 [docs/LINUX.md](docs/LINUX.md)(영어)에 있습니다.
@@ -99,7 +99,7 @@ M-FLASH 설치와 Flash BIOS Button 복구 방법을 앱이 미리 채워 주고
 쓸 수 있습니다(방법은 앱이 안내합니다). 부팅 화면을 출력하는 GPU는 옮기지 못하며, 아직 QEMU에서만
 돌려 봤습니다([자세히](docs/EXTERNAL_EFI.md)).
 
-앱은 Windows x64에서 돌고, Linux x86-64용은 프리뷰입니다([docs/LINUX.md](docs/LINUX.md)). 게임마다
+앱은 Windows x64와 Linux x86-64에서 돕니다([docs/LINUX.md](docs/LINUX.md)). 게임마다
 켜기는 NVIDIA의 Windows 드라이버 API를 쓰므로 Windows에만 있습니다. macOS에는 Turing GPU용 NVIDIA
 드라이버 자체가 없습니다. UEFI 드라이버는 그 뒤에 어떤 운영체제가 부팅되든 상관하지 않습니다.
 

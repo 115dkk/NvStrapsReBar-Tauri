@@ -156,7 +156,7 @@ jobs:
     name: Rust backend and Linux shell
     needs: scope
     if: needs.scope.outputs.run-heavy == 'true'
-    # The oldest supported Ubuntu, the one the Linux preview is built on, so a package that
+    # The oldest supported Ubuntu, the one the release is built on, so a package that
     # builds, installs and starts here also runs on everything newer.
     runs-on: ubuntu-22.04
     timeout-minutes: 45
@@ -194,8 +194,8 @@ jobs:
       - name: Check the packages, install the deb and start the application
         run: npm run check:linux-packages -- --install
       - name: Sign a copy of the rpm with a key made for this run and verify it
-        # The Linux preview signs with the project key, which a pull request never sees. This
-        # proves the same scripts on the image the preview is built on.
+        # The release signs with the project key, which a pull request never sees. This
+        # proves the same scripts on the image the release is built on.
         run: bash scripts/test-rpm-signing.sh
       - name: Build an apt repository from the deb, sign it with a key made for this run and check it with apt
         # The same reason as above, for the repository that LinuxRepository.yml publishes.

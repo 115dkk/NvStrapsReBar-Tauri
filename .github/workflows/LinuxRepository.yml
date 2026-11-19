@@ -1,12 +1,15 @@
 name: Linux repository
 
 # Builds the apt repository from the .deb and the dnf repository from the .rpm of every published
-# Linux preview, signs both with the project's package key and publishes them on GitHub Pages.
-# The Linux preview workflow calls it after it has published a preview; it can also be started
-# by hand from master, which publishes the repositories again from the previews that exist.
+# release that carries them, signs both with the project's package key and publishes them on
+# GitHub Pages. The Release workflow calls it after it has published a release; it can also be
+# started by hand from master, which publishes the repositories again from the releases that
+# exist.
 #
-# The repositories are built from nothing each time: what they offer is exactly the previews on
-# the releases page, and nothing is kept between runs.
+# The packages come from the releases and from the pre-releases tagged
+# linux-preview-<version> that carried the Linux build up to 1.1.9. The repositories are built
+# from nothing each time: what they offer is exactly the packages on the releases page, and
+# nothing is kept between runs.
 on:
   workflow_dispatch:
   workflow_call:
@@ -42,22 +45,26 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends apt-utils gnupg rpm createrepo-c dnf
-      - name: Download the packages of every published Linux preview
+      - name: Download the packages of every published release that carries them
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p target/preview-packages
-          gh release list --repo "${GITHUB_REPOSITORY}" --limit 200 --exclude-drafts \
-            --json tagName --jq '.[].tagName | select(startswith("linux-preview-"))' >target/previews.txt
+          mkdir -p target/release-packages
+          # A draft has no tag yet, so it is left out; a release without a .deb is a Windows-only
+          # release from the time the Linux build went out as a pre-release.
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq '.[] | select(.draft | not) | select(any(.assets[]; .name | endswith(".deb"))) | .tag_name' \
+            >target/releases.txt
+          [ -s target/releases.txt ] || { echo "No release carries a .deb" >&2; exit 1; }
           while read -r tag; do
             gh release download "${tag}" --repo "${GITHUB_REPOSITORY}" \
-              --pattern '*.deb' --pattern '*.rpm' --dir target/preview-packages
-          done <target/previews.txt
-          ls -l target/preview-packages
+              --pattern '*.deb' --pattern '*.rpm' --dir target/release-packages --skip-existing
+          done <target/releases.txt
+          ls -l target/release-packages
       - name: Build the repositories
         run: |
-          bash scripts/build-apt-repository.sh target/repository-site docs/RPM-GPG-KEY-nvstraps-rebar target/preview-packages/*.deb
-          bash scripts/build-dnf-repository.sh target/repository-site docs/RPM-GPG-KEY-nvstraps-rebar target/preview-packages/*.rpm
+          bash scripts/build-apt-repository.sh target/repository-site docs/RPM-GPG-KEY-nvstraps-rebar target/release-packages/*.deb
+          bash scripts/build-dnf-repository.sh target/repository-site docs/RPM-GPG-KEY-nvstraps-rebar target/release-packages/*.rpm
       - name: Sign the repositories with the project key and check them with apt and dnf
         # Only this step sees the key.
         env:

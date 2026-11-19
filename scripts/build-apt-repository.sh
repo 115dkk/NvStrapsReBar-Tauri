@@ -15,6 +15,8 @@ set -euo pipefail
 
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly USAGE="usage: build-apt-repository.sh <site-directory> <public-key-file> <package.deb>..."
+# The suite and the label below keep the names of the first publication, when the Linux build
+# was a preview: apt stops updating from a repository it knows when either changes.
 readonly SUITE="preview"
 
 fail() {
