@@ -3,8 +3,8 @@
 Issue #63 asked whether NvStrapsReBar could apply ReBarUEFI's DSDT workaround, so that an older
 board without Above 4G Decoding gets a BAR larger than 1 GiB
 ([the question](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/63#issuecomment-6807922767)).
-This page records what was found on 2026-11-12. Whether the app should do any of it has not
-been decided. Nothing here was tried on hardware. What other projects and systems do is taken
+This page records what was found on 2026-11-12 and the decision of 2026-11-20: the app will not
+do it. Nothing here was tried on hardware. What other projects and systems do is taken
 from the sources at the end.
 
 **Bottom line.** A DSDT patch changes what the operating system is told about the board, not
@@ -104,9 +104,10 @@ and PciBus modules with those of a similar board that has it, or adding code to 
    would also need the driver to program the straps and leave BAR1 at 256 MiB, and NVIDIA's
    Linux driver to do the resize afterwards. Nobody has reported that combination working.
 
-## Not decided
+## Decision
 
-No decision has been taken. Three things speak against building it in.
+The app will not patch DSDTs, and a board whose firmware has no Above 4G Decoding stays
+unsupported (decided 2026-11-20). There are three reasons.
 
 - On a board without Above 4G Decoding a DSDT patch can help Linux only, and a Linux user with
   an AMD or Intel GPU gets there with ReBarUEFI's instructions, without this driver, this app
@@ -117,7 +118,7 @@ No decision has been taken. Three things speak against building it in.
   has no such board to check it on. Where ReBarUEFI's catalog says a DSDT change may be needed,
   the app already stops and says so.
 
-Two things would speak for it: a hardware report from an older board on which the manual DSDT
+Two things would reopen the question: a hardware report from an older board on which the manual DSDT
 step was what stood in the way, or someone with a Turing GPU, Linux and a board without Above 4G
 Decoding who is willing to try point 3 by hand first.
 
