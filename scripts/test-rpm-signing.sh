@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Proves the rpm signing scripts with keys made for this run, on a copy of the .rpm that
 # `npm run build:linux-packages` wrote. Pull request builds run it: they never see the project
-# key, and the Linux preview must not be the first place where signing is tried on that image.
+# key, and the release must not be the first place where signing is tried on that image.
 set -euo pipefail
 
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"

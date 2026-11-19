@@ -1,5 +1,5 @@
 [nvstraps-rebar]
-name=NvStrapsReBar Linux preview
+name=NvStrapsReBar
 baseurl=https://115dkk.github.io/NvStrapsReBar-Tauri/rpm
 enabled=1
 gpgcheck=1

@@ -1055,18 +1055,19 @@ fn certificate_exists(path: &Path) -> BackendError {
 }
 
 fn link_or_reparse(metadata: &fs::Metadata) -> bool {
-    if metadata.file_type().is_symlink() {
-        return true;
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::MetadataExt;
-        metadata.file_attributes() & 0x400 != 0
-    }
-    #[cfg(not(windows))]
-    {
-        false
-    }
+    metadata.file_type().is_symlink() || reparse_point(metadata)
+}
+
+/// Whether Windows marks the file as a reparse point (FILE_ATTRIBUTE_REPARSE_POINT).
+#[cfg(windows)]
+fn reparse_point(metadata: &fs::Metadata) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    metadata.file_attributes() & 0x400 != 0
+}
+
+#[cfg(not(windows))]
+fn reparse_point(_metadata: &fs::Metadata) -> bool {
+    false
 }
 
 fn read_successor(root: &Path) -> BackendResult<Vec<u8>> {

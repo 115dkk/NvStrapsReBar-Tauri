@@ -1,8 +1,9 @@
 # Linux support
 
-Linux support is being built in stages (issue #63). The goal is everything the Windows app does
-except the per-game Resizable BAR switches, which go through NVIDIA's Windows driver API and have
-no Linux counterpart.
+The app runs on Linux x86-64, and its packages are part of every release (the work is recorded in
+issue #63). The goal is everything the Windows app does except the per-game Resizable BAR
+switches, which go through NVIDIA's Windows driver API and have no Linux counterpart. Until 1.1.9
+the Linux build went out as a preview, in pre-releases of its own.
 
 One user has reported a complete run of the 1.1.5 preview on a physical PC (issue #63: Ubuntu
 26.10, MSI Z390-A PRO, RTX 2080 Ti), from making the BIOS file to Resizable BAR at 16 GiB. The
@@ -19,7 +20,7 @@ packages installed in WSL, as stated for each item.
 | Saving the configuration | Works in the backend, through the root helper below |
 | Restarting, also into BIOS setup | Works in the backend, through systemd |
 | The screens | Worded for Linux; Games, the external EFI route and the vendor Windows utility are not offered there |
-| Packages | `.deb` and a signed `.rpm`, published by hand as a pre-release of their own (`linux-preview-<version>`), never as the Latest release, and offered as updates by an apt and a dnf repository. No AppImage, Snap or Flatpak |
+| Packages | `.deb` and a signed `.rpm`, attached to every release beside the Windows files and offered as updates by an apt and a dnf repository. No AppImage, Snap or Flatpak |
 | Turning it on without changing the BIOS (external EFI route) | Not ported yet |
 | Per-game settings | Not planned: they need NVAPI |
 
@@ -111,7 +112,7 @@ own the `external` directory inside.
 ### The apt repository
 
 On Debian and Ubuntu the app can also come from the project's apt repository, and `apt` then
-offers each new preview with the system's other updates:
+offers each new version with the system's other updates:
 
 ```
 sudo install -d -m 755 /etc/apt/keyrings
@@ -121,16 +122,19 @@ sudo apt update
 sudo apt install nvstraps-rebar
 ```
 
-The suite is called `preview` because that is what the Linux build is. The repository holds the
-`.deb` of every published preview and is signed with the key described under "The rpm signature"
-below; `signed-by` makes that key valid for this repository only.
+The suite is called `preview` because the repository was first published while the Linux build
+was one. The name stays: `apt` stops updating from a repository it already knows when the suite
+or the label changes, until the user accepts the change by hand. The repository holds the `.deb`
+of every published version and is signed with the key described under "The rpm signature" below;
+`signed-by` makes that key valid for this repository only.
 
 GitHub Pages serves it. The `Linux repository` workflow (`LinuxRepository.yml`) builds it from
-nothing each time: it downloads the `.deb` of every `linux-preview-*` release
+nothing each time: it downloads the `.deb` of every published release that carries one, which
+includes the `linux-preview-*` pre-releases up to 1.1.9
 (`scripts/build-apt-repository.sh`), signs the `Release` file in the one step that sees the key
 (`scripts/sign-apt-repository.sh`) and runs `apt-get update` against the result with only that
-key trusted (`scripts/check-apt-repository.sh`) before it publishes. The Linux preview workflow
-runs it after each new preview, and a maintainer can start it by hand from `master`. Pull request
+key trusted (`scripts/check-apt-repository.sh`) before it publishes. The Release workflow
+runs it after each new release, and a maintainer can start it by hand from `master`. Pull request
 builds run `scripts/test-apt-repository.sh`, which does the same with a key made for the run and
 also checks that an unsigned repository, a repository signed by another key and a package list
 changed after signing are refused.
@@ -149,11 +153,11 @@ The first time, `dnf` shows the key it is about to trust and asks. It is the key
 `gpgcheck` for the packages and `repo_gpgcheck` for the repository's metadata, so a package from
 the repository is installed only with a valid signature, unlike a local file.
 
-The repository holds the `.rpm` of every published preview that is signed with that key. The
+The repository holds the `.rpm` of every published version that is signed with that key. The
 1.1.5 preview is not in it, because its `.rpm` was published before packages were signed.
 
 The same workflow builds it beside the apt repository. `scripts/build-dnf-repository.sh` takes
-the `.rpm` of every `linux-preview-*` release, leaves out a package without a signature, stops at
+the `.rpm` of every release that carries one, leaves out a package without a signature, stops at
 one signed with another key, and writes the metadata with `createrepo_c`.
 `scripts/sign-dnf-repository.sh` signs `repomd.xml` in the step that sees the key, and
 `scripts/check-dnf-repository.sh` asks `dnf` which version it would install, in an install root
@@ -164,8 +168,8 @@ signed with another key are refused.
 
 ### The rpm signature
 
-Previews after 1.1.5 carry a signed `.rpm`. The preview workflow signs it with the project's
-OpenPGP key and publishes the public key,
+Every version after 1.1.5 carries a signed `.rpm`. The Release workflow signs it with the
+project's OpenPGP key and publishes the public key,
 [`RPM-GPG-KEY-nvstraps-rebar`](RPM-GPG-KEY-nvstraps-rebar), beside the packages.
 
 - RSA-4096, signing only, made 2026-11-11, no expiry
@@ -176,7 +180,7 @@ imported. With the key imported, `rpm --checksig` reports the package as OK and 
 it:
 
 ```
-sudo rpm --import https://github.com/115dkk/NvStrapsReBar-Tauri/releases/download/linux-preview-<version>/RPM-GPG-KEY-nvstraps-rebar
+sudo rpm --import https://github.com/115dkk/NvStrapsReBar-Tauri/releases/download/v<version>/RPM-GPG-KEY-nvstraps-rebar
 rpm --checksig nvstraps-rebar-<version>-1.x86_64.rpm
 ```
 
@@ -184,9 +188,9 @@ The key comes from the same place as the package, so compare the fingerprint abo
 it for the first time: `rpmkeys --list` (RPM 6) or `gpg --show-keys` on the file prints it.
 
 The private key is not in this repository; it exists only as the GitHub Actions secret
-`NVSTRAPS_RPM_SIGNING_KEY`. The preview workflow gives it to one step,
+`NVSTRAPS_RPM_SIGNING_KEY`. The Release workflow's Linux job gives it to one step,
 `scripts/sign-linux-rpm.sh`, which signs only if the secret is the key above, and
-`tools/publish-linux-preview.mjs` publishes an `.rpm` only if it verifies against the public key
+`tools/publish-release.mjs` publishes an `.rpm` only if it verifies against the public key
 (`scripts/check-rpm-signature.sh`). Pull request builds are not given the key; they run
 `scripts/test-rpm-signing.sh`, which proves the same scripts with keys made for that run. If the
 secret is ever lost, a new key replaces this one here and users import it once more.
@@ -230,11 +234,11 @@ installed from a `.deb` or `.rpm`.
   1.1.8 skipped every tiled window and so never saved the maximized state on GNOME. A window
   tiled to one side of the screen opens the next time at its last normal size.
 
-The stable release stays the Windows build. The Linux packages go out through the `Linux preview`
-workflow, which a maintainer starts by hand from `master`. It builds on Ubuntu 22.04, the oldest
-supported release, runs the same check with `--install`, and publishes the two packages with
-their checksums as a GitHub pre-release tagged `linux-preview-<version>`. A preview is published
-once per version.
+The Linux packages go out with the Windows files, in one release. The Release workflow's Linux
+job builds them on Ubuntu 22.04, the oldest supported release, signs the `.rpm` and runs the same
+check with `--install`; the publish job creates the release only when that job and the Windows
+job both succeeded, and lists the checksums of all four downloads in `SHA256SUMS.txt`. Up to
+1.1.9 the packages were published by hand, as pre-releases tagged `linux-preview-<version>`.
 
 ## Restart
 

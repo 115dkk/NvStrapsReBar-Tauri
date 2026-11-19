@@ -11,8 +11,7 @@ driver that runs at boot, before Windows, and widens the GPU's BAR — the memor
 uses to reach VRAM — from the default 256 MiB up to the full VRAM size. This repository is a
 stable-Rust implementation of the original C/C++
 [NvStrapsReBar](https://github.com/terminatorul/NvStrapsReBar), together with a Rust/Tauri app that
-prepares your BIOS image and edits the driver's settings. The app is for Windows; a Linux build is
-published as a preview.
+prepares your BIOS image and edits the driver's settings. The app is for Windows and for Linux.
 
 ![The app's first screen on a PC where Resizable BAR is off: 256 MiB now, 8 GiB when on, with your steps and what you need](docs/frontend-gallery/13-home-start-en-1180x760.png)
 
@@ -26,17 +25,17 @@ it. [More screens](docs/frontend-gallery/README.md).*
 the app without installing it, download `NvStrapsReBar-windows-x64.zip` instead, extract it and
 keep `NvStrapsReBar.exe` and `NvStrapsReBar.ffs` in the same folder. Either way you need Windows
 x64 with WebView2, which Windows 11 and an up-to-date Windows 10 already have. `SHA256SUMS.txt` in
-the release lists the checksums of both downloads.
+the release lists the checksums of every download.
 
-**Linux (preview).** The Linux build is published separately, as a pre-release tagged
-`linux-preview-<version>` on the
-[releases page](https://github.com/115dkk/NvStrapsReBar-Tauri/releases). Download the package for
-your system and install it with `sudo apt install ./nvstraps-rebar_<version>_amd64.deb` (Ubuntu
-22.04 or later, Debian 12 or later) or `sudo dnf install ./nvstraps-rebar-<version>-1.x86_64.rpm`
-(Fedora). You can add the project's
-[apt or dnf repository](https://115dkk.github.io/NvStrapsReBar-Tauri/) instead, and the system's
-package manager then offers each new preview with its other updates. The Linux build does what the Windows app does
-except the per-game switches and the route that leaves the BIOS alone.
+**Linux.** The same
+[latest release](https://github.com/115dkk/NvStrapsReBar-Tauri/releases/latest) carries the Linux
+packages. Download the one for your system and install it with
+`sudo apt install ./nvstraps-rebar_<version>_amd64.deb` (Ubuntu 22.04 or later, Debian 12 or
+later) or `sudo dnf install ./nvstraps-rebar-<version>-1.x86_64.rpm` (Fedora). You can add the
+project's [apt or dnf repository](https://115dkk.github.io/NvStrapsReBar-Tauri/) instead, and the
+system's package manager then offers each new version with its other updates. The Linux build
+does what the Windows app does except the per-game switches and the route that leaves the BIOS
+alone.
 [docs/LINUX.md](docs/LINUX.md) says how it works, what has been proven, and how to check the
 signature of the `.rpm`.
 
@@ -104,7 +103,7 @@ with its own boot entry, and moves the GPU's BAR1. Release builds are signed, so
 on once you add the project's certificate in BIOS setup (the app shows how). It cannot move a GPU that
 shows the boot picture, and has only run on QEMU so far ([details](docs/EXTERNAL_EFI.md)).
 
-The app runs on Windows x64, and on Linux x86-64 as a preview ([docs/LINUX.md](docs/LINUX.md)). The
+The app runs on Windows x64 and on Linux x86-64 ([docs/LINUX.md](docs/LINUX.md)). The
 per-game switches are on Windows only, because they go through NVIDIA's Windows driver API. macOS
 has no NVIDIA driver for Turing GPUs at all. The UEFI driver itself does not care which operating
 system boots afterwards.
