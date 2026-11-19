@@ -192,7 +192,8 @@ This work builds on the original C/C++
 [NvStrapsReBar](https://github.com/terminatorul/NvStrapsReBar) by @terminatorul, the
 [ReBarUEFI](https://github.com/xCuri0/ReBarUEFI) project it grew from, and findings from
 [envytools](https://github.com/envytools/envytools), @mupuf, and @Xelafic. The pinned legacy
-patch catalogs retain their upstream provenance and hashes.
+patch catalogs retain their upstream provenance and hashes. The Rust and Tauri rewrite in this
+repository is written and maintained by @115dkk.
 
 Special thanks to @lucianocerantonio2, who flashed the first physical board with this project's
 image, configured it, and reported the 16 GiB result with hashes and screenshots

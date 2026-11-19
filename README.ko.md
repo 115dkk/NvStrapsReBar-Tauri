@@ -184,7 +184,8 @@ OVMF 사본으로 부팅해 드라이버를 설정하고, 가상 머신을 ACPI 
 [NvStrapsReBar](https://github.com/terminatorul/NvStrapsReBar), 그 뿌리인
 [ReBarUEFI](https://github.com/xCuri0/ReBarUEFI) 프로젝트, 그리고
 [envytools](https://github.com/envytools/envytools)와 @mupuf, @Xelafic의 연구 위에 서
-있습니다. 미리 준비해 둔 레거시 패치 목록은 출처와 해시를 그대로 지킵니다.
+있습니다. 미리 준비해 둔 레거시 패치 목록은 출처와 해시를 그대로 지킵니다. 이 저장소의 Rust와
+Tauri 재작성은 @115dkk가 만들고 유지보수합니다.
 
 이 프로젝트의 이미지를 처음으로 실제 보드에 플래시하고 설정한 뒤 16 GiB 결과를 해시와
 스크린샷까지 붙여 알려 주신 @lucianocerantonio2 님께 특별히 감사드립니다
