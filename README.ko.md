@@ -81,7 +81,7 @@ GTX 1000(Pascal) 이하는 지원하지 않습니다. BAR가 바뀌면 Windows�
 
 드라이버를 실제 보드에 플래시해 돌린 보고가 네 건 있습니다. 세 건은 BAR1이 커졌고(Windows
 두 건, Linux 한 건), 한 건은 보드의 플래시 도구가 고친 BIOS 파일을 받지 않았습니다.
-[시험된 하드웨어](docs/TESTED_HARDWARE.md)(영어)에 보고마다 보드, GPU, 운영체제, 결과가 있고,
+[시험된 하드웨어](docs/TESTED_HARDWARE.md)(영어)에 보고마다 보드, BIOS 버전, GPU, 운영체제, 결과가 있고,
 근거가 된 이슈로 가는 링크가 붙어 있습니다. 아직 아무도 보고하지 않은 항목도 거기에 있습니다. 직접
 시험한 결과는
 [하드웨어 보고](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/new?template=1-hardware-report.yml)로

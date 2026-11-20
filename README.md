@@ -86,8 +86,9 @@ changes, so the app does not offer them.
 
 The driver has been flashed and run on physical boards. Three reports reached a larger BAR1, two on
 Windows and one on Linux, and one board's flasher refused the changed BIOS file.
-[Tested hardware](docs/TESTED_HARDWARE.md) lists each report with its board, GPU, system and
-result, links it to its evidence, and says what nobody has reported yet. To add your PC, open a
+[Tested hardware](docs/TESTED_HARDWARE.md) lists each report with its board, BIOS version, GPU,
+operating system and result, links it to its evidence, and says what nobody has reported yet. To
+add your PC, open a
 [hardware report](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/new?template=1-hardware-report.yml).
 
 Every other board is still your own trial. A bad BIOS flash can leave a board unbootable; continue
