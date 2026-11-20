@@ -212,6 +212,10 @@ writer of the variable: it proves the write, the immutable-flag handling, the de
 driver acts on what Linux wrote. It does not involve polkit, the desktop application or a GPU.
 `npm run build:linux-packages` builds the `.deb` and `.rpm`, and `npm run check:linux-packages`
 checks them; with `--install` (CI only: it uses sudo and installs the `.deb`) it also starts the
-installed helper with no input and the installed application under a virtual display. The polkit
+installed helper with no input and the installed application under a virtual display.
+`sudo bash scripts/test-linux-rendering.sh <application>` (also `npm run test:linux-rendering`)
+starts the application once per desktop session on a stand-in NVIDIA GPU tree, inside a private
+mount namespace, and reads which WebKit rendering variable reaches WebKit's web process. It
+proves the choice of variable and nothing about a GPU, a driver or what is drawn. The polkit
 policy, the helper's install path in `src-tauri/src/linux/helper.rs` and the package file lists
 name the same path; change them together. See [docs/LINUX.md](docs/LINUX.md).

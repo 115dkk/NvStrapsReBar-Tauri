@@ -1,4 +1,5 @@
-//! How the application fits a Linux desktop: the file chooser and the window's title bar.
+//! How the application fits a Linux desktop: WebKit's rendering beside NVIDIA's driver, the
+//! file chooser and the window's title bar.
 
 use std::{cell::RefCell, os::unix::process::CommandExt, path::PathBuf, process::Command, rc::Rc};
 
@@ -16,6 +17,29 @@ const FILE_CHOOSER_INTERFACE: &str = "org.freedesktop.portal.FileChooser";
 const FILE_CHOOSER_VERSION_FOR_FOLDERS: u32 = 3;
 /// The portal starts on demand, so its first answer can take a moment.
 const PORTAL_ANSWER_TIMEOUT_MS: i32 = 1500;
+
+/// Keeps WebKitGTK off the rendering paths that fail beside NVIDIA's driver.
+///
+/// Every PC this app is for has an NVIDIA GPU, and with NVIDIA's own driver WebKitGTK is known
+/// to show a blank or flickering window under X11 and to lose its connection to the desktop at
+/// the first frame under Wayland compositors that insist on explicit sync (KWin, Hyprland). An
+/// environment variable avoids each failure, but none is right everywhere: turning the DMA-BUF
+/// renderer off, which Tauri's guide shows, cures X11 and leaves a transparent window under
+/// KWin on an RTX 2060 SUPER (WebKit bug 280210, comment 14). `webkit2gtk-nvidia-quirk` holds
+/// the table of which variable belongs to which session and is kept current with the reports;
+/// docs/LINUX.md repeats the table.
+///
+/// It sets at most one variable, which WebKit's processes inherit, and none when the boot GPU
+/// does not run NVIDIA's driver or when the user has set one of these variables already. With
+/// a variable set, a line on stderr says which.
+///
+/// This changes the environment, so `run` calls it before anything else, while the program
+/// still has one thread.
+pub(crate) fn avoid_nvidia_rendering_faults() {
+    webkit2gtk_nvidia_quirk::apply_workaround_with_options(
+        webkit2gtk_nvidia_quirk::ApplyWorkaroundOptions::default().verbose(true),
+    );
+}
 
 /// Lets file choosers be the desktop's own (the file manager's on GNOME and KDE).
 ///

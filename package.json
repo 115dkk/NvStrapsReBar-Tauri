@@ -28,6 +28,7 @@
     "build:linux-helper": "node scripts/build-linux-helper.mjs",
     "build:linux-packages": "node scripts/build-linux-packages.mjs",
     "check:linux-packages": "bash scripts/check-linux-packages.sh",
+    "test:linux-rendering": "bash scripts/test-linux-rendering.sh",
     "prepare:desktop": "rustup target add x86_64-unknown-uefi && npm run build:firmware && npm run build:linux-helper",
     "check:firmware": "cargo test -p nvstraps-ffs && npm run build:firmware",
     "test:qemu": "bash scripts/qemu-smoke.sh",
