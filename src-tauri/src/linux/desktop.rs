@@ -150,38 +150,43 @@ fn show_path_chooser(
     dialog.show();
 }
 
+/// The style class of the app's main window. The title bar rules below start from it, so they
+/// reach that window's title bar and no dialog's.
+const MAIN_WINDOW_CLASS: &str = "nvstraps-rebar-main";
+
 /// The colours of the app bar (`--bg`, `--ink` and `--muted` in `src/styles.css`).
 ///
-/// On Wayland the window library (tao) puts a header bar of its own inside the title bar, so
-/// the header bar is a descendant of the node with the `titlebar` class. A dialog's header bar
-/// carries that class itself and is not matched. The title is kept quiet: the app bar right
-/// below already shows the name.
+/// The rules name the window and any header bar under it, not the header bar's place in the
+/// window. Up to 1.1.9 they named the header bar tao built for Wayland (`.titlebar headerbar`).
+/// tao 0.37 builds none: GTK adds its own, which carries the `titlebar` class itself, so the
+/// rules matched nothing and 1.1.10 showed the desktop theme's title bar (issue #85). The title
+/// is kept quiet: the app bar right below already shows the name.
 const TITLE_BAR_CSS: &str = "
-.titlebar headerbar,
-.titlebar headerbar:backdrop {
+.nvstraps-rebar-main headerbar,
+.nvstraps-rebar-main headerbar:backdrop {
     background: #11161d;
     border: none;
     box-shadow: none;
 }
-.titlebar headerbar,
-.titlebar headerbar button.titlebutton {
+.nvstraps-rebar-main headerbar,
+.nvstraps-rebar-main headerbar button.titlebutton {
     color: #edf2f7;
 }
-.titlebar headerbar .title {
+.nvstraps-rebar-main headerbar .title {
     color: #a0adbb;
     font-weight: normal;
 }
-.titlebar headerbar:backdrop,
-.titlebar headerbar:backdrop button.titlebutton {
+.nvstraps-rebar-main headerbar:backdrop,
+.nvstraps-rebar-main headerbar:backdrop button.titlebutton {
     color: #a0adbb;
 }
 ";
 
 /// Gives the title bar the colour of the app bar below it.
 ///
-/// Where the window draws its own title bar (Wayland) the desktop theme painted it in its own
-/// colour, so the window looked like two unrelated strips. Where the window manager draws the
-/// title bar (X11) this changes nothing.
+/// Where the window draws its own title bar (Wayland desktops that leave it to the window,
+/// GNOME among them) the desktop theme painted it in its own colour, so the window looked like
+/// two unrelated strips. Where the desktop draws the title bar (X11) this changes nothing.
 pub(crate) fn blend_title_bar(window: &tauri::WebviewWindow) {
     let Ok(window) = window.gtk_window() else {
         return;
@@ -191,11 +196,67 @@ pub(crate) fn blend_title_bar(window: &tauri::WebviewWindow) {
     };
     let provider = gtk::CssProvider::new();
     match provider.load_from_data(TITLE_BAR_CSS.as_bytes()) {
-        Ok(()) => gtk::StyleContext::add_provider_for_screen(
-            &screen,
-            &provider,
-            gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
-        ),
+        Ok(()) => {
+            window.style_context().add_class(MAIN_WINDOW_CLASS);
+            gtk::StyleContext::add_provider_for_screen(
+                &screen,
+                &provider,
+                gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+            );
+        }
         Err(error) => eprintln!("NvStrapsReBar keeps the desktop's title bar colour: {error}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{MAIN_WINDOW_CLASS, TITLE_BAR_CSS};
+
+    /// The selectors of `TITLE_BAR_CSS`: the lines outside the declaration blocks.
+    fn title_bar_selectors() -> Vec<&'static str> {
+        let mut inside_block = false;
+        let mut selectors = Vec::new();
+        for line in TITLE_BAR_CSS.lines().map(str::trim) {
+            if line == "}" {
+                inside_block = false;
+            } else if !inside_block && !line.is_empty() {
+                inside_block = line.ends_with('{');
+                selectors.push(line.trim_end_matches(['{', ',']).trim_end());
+            }
+        }
+        selectors
+    }
+
+    #[test]
+    fn title_bar_rules_reach_only_the_main_window() {
+        let selectors = title_bar_selectors();
+        assert!(!selectors.is_empty());
+        let main_window_header_bar = format!(".{MAIN_WINDOW_CLASS} headerbar");
+        for selector in selectors {
+            let rest = selector
+                .strip_prefix(&main_window_header_bar)
+                .unwrap_or_else(|| panic!("`{selector}` would style other windows too"));
+            assert!(
+                rest.is_empty() || rest.starts_with([' ', ':']),
+                "`{selector}` names something other than a header bar"
+            );
+        }
+    }
+
+    #[test]
+    fn title_bar_uses_the_app_bar_colours() {
+        let styles = include_str!("../../../src/styles.css");
+        for (token, uses) in [("--bg", 1), ("--ink", 1), ("--muted", 2)] {
+            let declared = styles
+                .lines()
+                .find_map(|line| line.trim().strip_prefix(&format!("{token}: ")))
+                .unwrap_or_else(|| panic!("{token} is not declared in src/styles.css"))
+                .trim_end_matches(';');
+            assert_eq!(
+                TITLE_BAR_CSS.matches(declared).count(),
+                uses,
+                "{token} is {declared} in src/styles.css"
+            );
+        }
     }
 }
