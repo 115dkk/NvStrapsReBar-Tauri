@@ -28,9 +28,13 @@ mod simulated_machine;
 mod status;
 
 pub fn run() {
-    // First of all: on Linux this may start the program again (see the function).
+    // First of all, while the program has one thread: on Linux the first call sets an
+    // environment variable and the second may start the program again (see the functions).
     #[cfg(target_os = "linux")]
-    linux::desktop::prefer_desktop_file_chooser();
+    {
+        linux::desktop::avoid_nvidia_rendering_faults();
+        linux::desktop::prefer_desktop_file_chooser();
+    }
     #[cfg_attr(not(feature = "simulated-machine"), allow(unused_mut))]
     let mut context = tauri::generate_context!();
     #[cfg(feature = "simulated-machine")]

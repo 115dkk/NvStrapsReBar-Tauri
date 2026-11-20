@@ -41,6 +41,8 @@ thiserror = "2"
 # The version Tauri itself uses; `WebviewWindow::gtk_window` hands out its types.
 gtk = "0.18"
 nvstraps-linux-helper = { path = "../crates/nvstraps-linux-helper" }
+# Which WebKitGTK rendering setting NVIDIA's driver needs under which desktop session.
+webkit2gtk-nvidia-quirk = "2.3.0"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55.0"
