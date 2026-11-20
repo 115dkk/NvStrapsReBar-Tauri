@@ -220,9 +220,14 @@ installed from a `.deb` or `.rpm`.
   chooser gets no file type filter. On the Ubuntu 26.10 desktop of issue #63 it listed no file at
   all under a pattern filter, "*.*" included, and the cause was not found; BIOS files also have
   no fixed extension (MSI names them after the version, such as `E7B98IMS.1F0`).
-- **Title bar.** On Wayland the window draws its own title bar, in the desktop theme's colour.
-  The app gives it the colour of the app bar below. Where the window manager draws the title bar
-  (X11), nothing changes.
+- **Title bar.** On a Wayland desktop that leaves the title bar to the window, as GNOME does, GTK
+  draws it in the desktop theme's colour. The app gives it the colour of the app bar below: the
+  main window carries a style class of its own, and the colour rules apply to any header bar
+  inside that window, so a dialog keeps the desktop's colours. Where the desktop draws the title
+  bar (X11), nothing changes. Up to 1.1.9 the window library (tao) built the header bar on
+  Wayland and the rules named its place in the window. tao 0.37, which came with Tauri 2.12 in
+  1.1.10, builds none and GTK adds its own, so the rules matched nothing and 1.1.10 showed the
+  theme's title bar ([#85](https://github.com/115dkk/NvStrapsReBar-Tauri/issues/85)).
 - **Window size.** The window opens with the size, position and maximized state it was closed
   with. Wayland does not let a program place its own window, so there only the size and the
   maximized state come back. On Windows `tauri-plugin-window-state` keeps all three. On Linux it
@@ -289,6 +294,16 @@ system without systemd the app says so; restart by hand.
   the file to `false`. A window tiled to the left half of the screen was saved as not maximized,
   at 1000x700. Not shown: GNOME Shell with its extensions (Ubuntu adds a tiling extension of its
   own), and GNOME on X11.
+- **The title bar, in an Ubuntu 24.04 container** (GTK 3.24.41, WebKitGTK 2.52), with release
+  builds of 1.1.10 and of the source after it, under weston 13 with the Yaru-dark and the Adwaita
+  theme. 1.1.10 showed the theme's title bar above the app bar, as in the screenshot of issue
+  #85. The new build showed one colour from the top edge of the window down: `#11161d` in the
+  title bar and in the app bar, with no line between them. A plain GTK 3 window with the same
+  class and rules took the colour while a dialog of the same program kept the theme's header
+  bar. Under headless mutter 46, GNOME's window manager, a GTK 3 window gets the same header bar
+  from GTK as under weston (`headerbar.titlebar.default-decoration`, directly inside the window).
+  Not shown: GNOME Shell on the reporter's Ubuntu 26.10, the minimize and maximize buttons
+  (weston offers only the close button), and a desktop that draws the title bar itself.
 - **The rpm signature, on Fedora 45 in WSL.** The published 1.1.7 preview: `rpm -i` refused the
   `.rpm` until the key was imported from the same release (`rpm --import` with the release's
   address, and the imported key had the fingerprint above). After that `rpm --checksig` reported
