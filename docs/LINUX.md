@@ -209,6 +209,34 @@ installed from a `.deb` or `.rpm`.
 
 ## The desktop
 
+- **Rendering beside NVIDIA's driver.** WebKitGTK, which shows the app's window, has known
+  faults beside NVIDIA's own driver: a blank or flickering window under X11, and under Wayland
+  desktops that insist on explicit sync (KDE Plasma, Hyprland) the app loses its connection at
+  the first frame (`Error 71 (Protocol error) dispatching to Wayland display`). An environment
+  variable avoids each fault, and none is right for every session, so the app sets one at
+  startup according to the session. The table is the one the
+  [`webkit2gtk-nvidia-quirk`](https://crates.io/crates/webkit2gtk-nvidia-quirk) crate keeps
+  current with the reports:
+
+  | Session | Variable the app sets |
+  | --- | --- |
+  | X11 | `WEBKIT_DISABLE_DMABUF_RENDERER=1` |
+  | Wayland, Hyprland | `WEBKIT_DISABLE_DMABUF_RENDERER=1` |
+  | Wayland, KDE Plasma | `__NV_DISABLE_EXPLICIT_SYNC=1` |
+  | Wayland, another desktop, with NVIDIA's newer Wayland library (`egl-wayland2`, driver 560 or later) | none |
+  | Wayland, another desktop, without it | `__NV_DISABLE_EXPLICIT_SYNC=1` |
+
+  Nothing is set when the boot GPU does not run NVIDIA's driver (nouveau included). Nothing is
+  set either when `WEBKIT_DISABLE_DMABUF_RENDERER`, `__NV_DISABLE_EXPLICIT_SYNC`,
+  `WEBKIT_DISABLE_COMPOSITING_MODE` or `WEBKIT_DMABUF_RENDERER_FORCE_SHM` is set already, so
+  starting the app with one of them is how to choose yourself:
+  `WEBKIT_DISABLE_COMPOSITING_MODE=1 nvstraps-rebar` turns accelerated drawing off altogether.
+  `WEBKIT2GTK_NVIDIA_QUIRK_VERBOSE=debug nvstraps-rebar` prints what was found and chosen.
+  Tauri's guide lists the variables
+  ([Linux Graphics Issues](https://v2.tauri.app/develop/debug/linux-graphics/)). Its example
+  sets the first one for every session; the app does not, because that leaves a transparent
+  window under KDE Plasma on an RTX 2060 SUPER
+  ([WebKit bug 280210](https://bugs.webkit.org/show_bug.cgi?id=280210), comment 14).
 - **File chooser.** GTK shows the desktop's own file chooser (the file manager's on GNOME and
   KDE) only when it goes through xdg-desktop-portal, which it does outside a sandbox only if
   `GTK_USE_PORTAL=1` is set. With the variable set and no portal behind it, choosing a file shows
@@ -304,6 +332,18 @@ system without systemd the app says so; restart by hand.
   from GTK as under weston (`headerbar.titlebar.default-decoration`, directly inside the window).
   Not shown: GNOME Shell on the reporter's Ubuntu 26.10, the minimize and maximize buttons
   (weston offers only the close button), and a desktop that draws the title bar itself.
+- **The rendering variables, in an Ubuntu 24.04 container** (WebKitGTK 2.52, no GPU), with a
+  build of the source after 1.1.11. `scripts/test-linux-rendering.sh` gives the app a stand-in
+  GPU tree in a private mount namespace (a boot GPU with NVIDIA's vendor id, bound to a driver
+  named `nvidia`) and reads the environment of WebKit's web process. Eight sessions gave the
+  variable of the table above, including none on another GPU and none added to a variable the
+  user had set; the same script reports five failures on a build without the change. The Tauri
+  workflow's Linux job runs it on the installed package. With a file chooser portal answering,
+  the app started itself again and had both `GTK_USE_PORTAL=1` and the rendering variable in its
+  own environment and in the web process's. With each of the two variables the app showed its
+  first screen, under Xvfb and under weston 13, drawn in software. Not shown: an NVIDIA GPU or
+  NVIDIA's driver. That a variable cures a fault on a real PC rests on the reports the table was
+  made from; no such fault has been reported with this app.
 - **The rpm signature, on Fedora 45 in WSL.** The published 1.1.7 preview: `rpm -i` refused the
   `.rpm` until the key was imported from the same release (`rpm --import` with the release's
   address, and the imported key had the fingerprint above). After that `rpm --checksig` reported
