@@ -151,6 +151,8 @@ jobs:
   # that stand in for /sys and /proc. It then builds the .deb and .rpm, installs the .deb on the
   # runner and starts the application under a virtual display: the application only reads the
   # runner, and the root helper is started with no input, so no firmware variable is written.
+  # The installed application is then started once per desktop session on a stand-in NVIDIA GPU
+  # tree, to see which WebKit rendering variable it sets.
   # The packages are checked here and not uploaded.
   native-linux:
     name: Rust backend and Linux shell
@@ -193,6 +195,10 @@ jobs:
         run: npm run build:linux-packages
       - name: Check the packages, install the deb and start the application
         run: npm run check:linux-packages -- --install
+      - name: Check which rendering variable WebKit is given beside a stand-in NVIDIA driver
+        # The installed application on a GPU tree made for this run, inside a private mount
+        # namespace. No GPU is involved: it shows which variable each desktop session gets.
+        run: sudo bash scripts/test-linux-rendering.sh /usr/bin/nvstraps-rebar
       - name: Sign a copy of the rpm with a key made for this run and verify it
         # The release signs with the project key, which a pull request never sees. This
         # proves the same scripts on the image the release is built on.
